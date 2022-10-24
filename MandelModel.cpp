@@ -209,7 +209,7 @@ QString MandelModel::getTextInfoGen()
       state="Max"; break;
   }
 
-  return state+" iter="+QString::number(data_store->iter)+" near="+QString::number(data_store->near0iter)+
+  return state+" iter="+QString::number(data_store->iter)+" nearz="+QString::number(data_store->nearziter_0)+" near0="+QString::number(data_store->near0iter_1)+
       " fc="+mandDoubleToString(data->fc_c.re.toDouble())+
              mandDoubleToString(data->fc_c.im.toDouble())+"i";
 }
@@ -277,13 +277,18 @@ ShareableViewInfo MandelModel::getViewInfo()
   ShareableViewInfo result(precisionRecord->ntype);
   MandelMath::complex<MandelMath::number_a *>::Scratchpad spad(precisionRecord->ntype);
   //result.worker=orbit.worker;
-  result.period=precisionRecord->orbit.evaluator.currentData.store->near0iter;//evaluator.currentData.lookper_lastGuess;//orbit.pointData.period;
+  result.period=precisionRecord->orbit.evaluator.currentData.store->nearziter_0;//evaluator.currentData.lookper_lastGuess;//orbit.pointData.period;
   if (result.period<1)
     result.period=1;
   result.nth_fz=result.period;/*precisionRecord->orbit.evaluator.currentData.store->period;
   if (result.nth_fz<1)
     result.nth_fz=result.period;*/
   result.scale=precisionRecord->position.step_size;
+  if ((precisionRecord->orbit.evaluator.currentData.store->rstate==MandelPointStore::ResultState::stPeriod2) ||
+      (precisionRecord->orbit.evaluator.currentData.store->rstate==MandelPointStore::ResultState::stPeriod3))
+    result.juliaPeriod=precisionRecord->orbit.evaluator.currentData.store->period;
+  else
+    result.juliaPeriod=1<<MAX_EFFORT;
   /*orbit.worker->init_(&result.re_, &result.re_p);
   orbit.worker->init_(&result.im, &result.im_p);
   orbit.worker->init_(&result.root_re, &result.rre_p);
@@ -1069,7 +1074,7 @@ int MandelModel::writeToImage(ShareableImageWrapper image)
                 case 3: r=0x80; break;
                 default: r=0xe0;
               }*/
-              if (wtiStore->period>wtiStore->near0iter)
+              if (wtiStore->period>wtiStore->nearziter_0)
                 image.image->setPixel(x, y, 0xffff00ff); //seems to only happen by mistake, not in reality
               else
               {
@@ -1416,7 +1421,7 @@ int MandelModel::writeToImage(ShareableImageWrapper image)
             case MandelPointStore::ResultState::stOutside:
             case MandelPointStore::ResultState::stOutAngle:
             {
-              int ti=wtiStore->near0iter;
+              int ti=wtiStore->nearziter_0;
               if (ti>=0)
               {
                 int tj=0;
@@ -1458,7 +1463,7 @@ int MandelModel::writeToImage(ShareableImageWrapper image)
                 r=0xff;
               image.image->setPixel(x, y, 0xff000000+(r<<16));*/
 
-              int ti=wtiStore->near0iter;
+              int ti=wtiStore->nearziter_0;
               if (ti>0)
               {
                 int tj=0;

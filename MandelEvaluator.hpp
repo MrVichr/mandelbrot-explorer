@@ -55,7 +55,8 @@ struct MandelPointStore
   bool has_fc_r;
   int lookper_startiter, lookper_prevGuess, lookper_lastGuess;
   bool lookper_nearr_dist_touched; //check if equal but only once; in theory should only happen at dist=0
-  int near0iter;
+  int near0iter_1; //actual+1
+  int nearziter_0;
   int period;
   int surehand;
   int iter, newton_iter;
@@ -83,7 +84,8 @@ struct MandelPoint
     iiw_lookper_nearr=iiw__BASE+12,
     iiw_lookper_nearr_dist=iiw__BASE+14,
     iiw_lookper_totalFzmag=iiw__BASE+15,
-    iiw_near0f=iiw__BASE+16,
+    iiw_near0m=iiw__BASE+16,
+    iiw_nearzm=iiw__BASE+17,
     iiw_root=iiw__BASE+18,
     iiw_extangle=iiw__BASE+20,
     iiw__END=iiw__BASE+21
@@ -101,7 +103,8 @@ struct MandelPoint
   MandelMath::complex<BASE> lookper_nearr;
   MandelMath::number<BASE> lookper_nearr_dist;
   MandelMath::number<BASE> lookper_totalFzmag;
-  MandelMath::complex<BASE> near0f;
+  MandelMath::number<BASE> near0m;
+  MandelMath::number<BASE> nearzm;
   MandelMath::complex<BASE> root;
   MandelMath::number<BASE> extangle;
   MandelPoint &operator =(MandelPoint &src) = delete;
@@ -126,7 +129,7 @@ public:
   ShareableViewInfo(): c(new MandelMath::number<BASE>(), new MandelMath::number<BASE>()),
                        root(new MandelMath::number<BASE>(), new MandelMath::number<BASE>()),
                        nth_fz_limit(new MandelMath::number<BASE>()), scale(1), period(0), nth_fz(0) { }*/
-  ShareableViewInfo(MandelMath::NumberType ntype): c(ntype), root(ntype), nth_fz_limit(ntype), scale(1), period(0), nth_fz(0) { }
+  ShareableViewInfo(MandelMath::NumberType ntype): c(ntype), root(ntype), nth_fz_limit(ntype), scale(1), period(0), nth_fz(0), juliaPeriod(0) { }
   ShareableViewInfo(ShareableViewInfo &src);
   ShareableViewInfo(const ShareableViewInfo &src);
   ShareableViewInfo(ShareableViewInfo &&src); //important
@@ -139,6 +142,7 @@ public:
   double scale;
   int period;
   int nth_fz;
+  int juliaPeriod; //mouse point period, or 1<<MAX_EFFORT outside
 };
 Q_DECLARE_METATYPE(ShareableViewInfo);
 
@@ -283,11 +287,11 @@ protected:
 public:
   MandelEvaluatorThread(MandelEvaluator<MandelMath::number_a *> *owner);
   void syncMandel();
-  void syncJulia();
+  void syncJulia(int juliaPeriod);
   int syncNewton(int period, const MandelMath::complex<MandelMath::number_a *> *c, MandelMath::complex<MandelMath::number_a *> *r, const bool fastHoming);
 public slots:
   void doMandelThreaded(int epoch);
-  void doJuliaThreaded(int epoch);
+  void doJuliaThreaded(int epoch, int juliaPeriod);
   void doNewtonThreaded(int epoch);
 signals:
   void doneMandelThreaded(MandelEvaluatorThread *me);
@@ -371,7 +375,7 @@ public:
   typename MandelMath::complex<BASE>::Scratchpad tmp;
 
   void syncMandelSplit();
-  void syncJuliaSplit();
+  void syncJuliaSplit(int juliaPeriod);
   MandelLoopEvaluator<BASE> loope;
   //void startNewton(int period, const MandelMath::complex *c /*, currentData.f const *root, */);
   int newton(int period, const MandelMath::complex<BASE> *c, MandelMath::complex<BASE> *r, const bool fastHoming);
@@ -399,15 +403,15 @@ public:
 protected:
   struct Eval
   {
-    enum IndexIntoWorker
+    /*enum IndexIntoWorker
     {
       iiw_fz_mag=42,
       iiw_near0fmag=43,
-    };
-    static constexpr int LEN=4;
+    };*/
+    static constexpr int LEN=3;
     MandelMath::complex<BASE> fz_r;
     MandelMath::number<BASE> fz_mag;
-    MandelMath::number<BASE> near0fmag;
+    //MandelMath::number<BASE> near0fmag;
     Eval(MandelMath::NumberType ntype);
   } eval;
   struct Newt
@@ -535,9 +539,9 @@ protected:
   int periodCheck(int period, const MandelMath::complex<BASE> *c, const MandelMath::complex<BASE> *root_seed, bool exactMatch);
   int estimateInterior(int period, const MandelMath::complex<BASE> *c, const MandelMath::complex<BASE> *root);//, InteriorInfo *interior);
   void eval_until_bailout(const MandelMath::complex<BASE> *c);
-  void evaluate(bool julia);
+  void evaluate(int juliaPeriod);
   void doMandelThreadedSplit(int epoch);
-  void doJuliaThreadedSplit(int epoch);
+  void doJuliaThreadedSplit(int epoch, int juliaPeriod);
   void doNewtonThreadedSplit(int epoch);
   friend MandelEvaluatorThread;
 /*protected slots:

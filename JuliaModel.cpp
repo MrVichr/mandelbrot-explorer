@@ -153,9 +153,8 @@ QString JuliaModel::getTextInfoGen()
       state="Max"; break;
   }
 
-  return "Per="+QString::number(precisionRecord->params.period)+" "+state+" iter="+QString::number(data->store->iter)+
-        " mu="+QString::number(precisionRecord->orbit.first_mu_re, 'f', 3)+","+QString::number(precisionRecord->orbit.first_mu_im, 'f', 3)+
-        " mum="+QString::number(precisionRecord->orbit.first_mum_re, 'f', 3)+","+QString::number(precisionRecord->orbit.first_mum_im, 'f', 3);
+  return state+" iter="+QString::number(data_store->iter)+" nearz="+QString::number(data_store->nearziter_0)+" near0="+QString::number(data_store->near0iter_1)+
+      " fc="+data->fc_c.toString();
 }
 
 QString JuliaModel::getTextInfoSpec()
@@ -228,14 +227,12 @@ void JuliaModel::setParams(ShareableViewInfo viewInfo)
   {
     QWriteLocker locker(&threading_mutex);
     epoch=(epoch%2000000000)+1; //invalidate threads while transforming store
-    precisionRecord->params.period=viewInfo.period;
-    precisionRecord->params.nth_fz=viewInfo.nth_fz;
+    precisionRecord->params.period=viewInfo.juliaPeriod;
 
     //if (viewInfo.originalAllocator->worker->ntype()==precisionRecord->currentWorker->ntype())
     {
       precisionRecord->params.base.assign_across(&viewInfo.c);
       precisionRecord->params.root.assign_across(&viewInfo.root);
-      precisionRecord->params.nth_fz_limit.assign_across(&viewInfo.nth_fz_limit);
     }
     precisionRecord->orbit.evaluator.currentParams.c.assign_across(&precisionRecord->params.base);
     switch (precisionRecord->ntype)
@@ -605,7 +602,7 @@ void JuliaModel::startNewEpoch()
     precisionRecord->threads[t]->workIfEpoch=epoch;
   }
   _threadsWorking+=precisionRecord->threadCount;
-  emit triggerJuliaThreaded(epoch); //::invokeMethod cannot pass parameters, but ::connect can
+  emit triggerJuliaThreaded(epoch, precisionRecord->params.period); //::invokeMethod cannot pass parameters, but ::connect can
 #endif
 }
 
@@ -762,7 +759,7 @@ void JuliaModel::paintOrbit(ShareableImageWrapper image, int x, int y)
         precisionRecord->orbit.evaluator.currentParams.maxiter=1<<MAX_EFFORT; //dont't know->run fully
       else //stop at multiples of lookper, +1
         precisionRecord->orbit.evaluator.currentParams.maxiter=1+(precisionRecord->orbit.evaluator.currentData.store->iter/precisionRecord->orbit.evaluator.currentData.store->lookper_lastGuess+1)*precisionRecord->orbit.evaluator.currentData.store->lookper_lastGuess;
-      precisionRecord->orbit.evaluator.thread.syncJulia();
+      precisionRecord->orbit.evaluator.thread.syncJulia(precisionRecord->params.period);
 
       reimToPixel(&line_ex, &line_ey, &precisionRecord->orbit.evaluator.currentData.f, &tmp);
       if (line_ex>=-3 && line_ex<=10003 && line_ey>=-3 && line_ey<=10003)
@@ -952,7 +949,7 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
                 case 3: r=0x80; break;
                 default: r=0xe0;
               }*/
-              if (wtiStore->period>wtiStore->near0iter)
+              if (wtiStore->period!=precisionRecord->params.period)//if (wtiStore->period>wtiStore->nearziter_0)
                 image.image->setPixel(x, y, 0xffff00ff); //seems to only happen by mistake, not in reality
               else
               {
@@ -1298,7 +1295,7 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
             case MandelPointStore::ResultState::stOutside:
             case MandelPointStore::ResultState::stOutAngle:
             {
-              int ti=wtiStore->near0iter;
+              int ti=wtiStore->nearziter_0;
               if (ti>=0)
               {
                 int tj=0;
@@ -1340,7 +1337,7 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
                 r=0xff;
               image.image->setPixel(x, y, 0xff000000+(r<<16));*/
 
-              int ti=wtiStore->near0iter;
+              int ti=wtiStore->nearziter_0;
               if (ti>0)
               {
                 int tj=0;
@@ -1714,19 +1711,17 @@ void JuliaModel::selectedPrecisionChanged()
 }
 
 JuliaModel::Params::Params(MandelMath::NumberType ntype, const Params *source):
-  period(source?source->period:1), nth_fz(source?source->nth_fz:1), base(ntype), root(ntype), nth_fz_limit(ntype)
+  period(source?source->period:1), base(ntype), root(ntype)
 {
   if (source)
   {
     base.assign_across(&source->base);
     root.assign_across(&source->root);
-    nth_fz_limit.assign_across(&source->nth_fz_limit);
   }
   else
   {
     base.zero(0, 0);
     root.zero(0, 0);
-    nth_fz_limit.zero(1);
   }
 }
 

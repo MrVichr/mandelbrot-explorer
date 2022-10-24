@@ -42,12 +42,10 @@ public:
   Q_INVOKABLE QString getTextInfoSpec();
   struct Params
   {
-    static constexpr int LEN=5;
+    static constexpr int LEN=4;
     int period;
-    int nth_fz;
     MandelMath::complex<MandelMath::number_a *> base;
     MandelMath::complex<MandelMath::number_a *> root;
-    MandelMath::number<MandelMath::number_a *> nth_fz_limit;
     Params(MandelMath::NumberType ntype, const Params *source);
   };
 
@@ -110,7 +108,7 @@ signals:
   void selectedPaintStyleChanged();
   void selectedPrecisionChange();
   void extAngleZoomChange();
-  void triggerJuliaThreaded(int epoch);
+  void triggerJuliaThreaded(int epoch, int juliaPeriod);
 protected:
   //MandelMath::worker_multi::Allocator<MandelMath::worker_multi> *storeAllocator;
   //MandelMath::worker_multi *storeWorker; //pointStore
@@ -122,7 +120,7 @@ protected:
   int imageHeight;
   int nextGivenPointIndex;
   int effortBonus;
-  constexpr static int MAX_EFFORT=17;//22
+  constexpr static int MAX_EFFORT=22;
   QElapsedTimer timerWriteToImage;
 
   struct Position

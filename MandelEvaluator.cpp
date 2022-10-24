@@ -7,6 +7,7 @@
 #define USE_GCD_FOR_CHECKPERIOD 0
 #define CLEVER_FIX 0
 #define THREADED_DONE_GIVE_WORK 0
+//TODO: delete surehand
 #define SUREHAND_CHOICE 0 //0..old only, 1..surehand only, 2..both
   //1 tries newton fewer times
   //0 tries newton with smaller periods that are sometimes correct, thanks to restarts
@@ -82,7 +83,8 @@ void MandelPointStore::assign(const MandelPointStore *src)
   lookper_prevGuess=src->lookper_prevGuess;
   lookper_lastGuess=src->lookper_lastGuess;
   lookper_nearr_dist_touched=src->lookper_nearr_dist_touched;
-  near0iter=src->near0iter;
+  near0iter_1=src->near0iter_1;
+  nearziter_0=src->nearziter_0;
   newton_iter=src->newton_iter;
   period=src->period;
   surehand=src->surehand;
@@ -96,7 +98,7 @@ MandelPoint<BASE>::MandelPoint(MandelPointStore *store, MandelMath::NumberType n
   store(store), f(ntype), fc_c(ntype), fz_r(ntype), fz_c_mag(ntype),
   sure_fz_mag(ntype), sure_startf(ntype), lookper_startf_(ntype), lookper_nearr(ntype),
   lookper_nearr_dist(ntype), lookper_totalFzmag(ntype),
-  near0f(ntype), root(ntype), extangle(ntype)
+  near0m(ntype), nearzm(ntype), root(ntype), extangle(ntype)
 {
 }
 
@@ -132,7 +134,8 @@ void MandelPoint<BASE>::readFrom(void *storage, int index)
   lookper_totalFzmag.readFrom(storage, index+iiw_lookper_totalFzmag);
   //MandelMath::number_instance<WORKER_MULTI>(&lookper_nearr_dist).assign(src.lookper_nearr_dist.ptr);
   //MandelMath::number_instance<WORKER_MULTI>(&lookper_totalFzmag).assign(src.lookper_totalFzmag.ptr);
-  near0f.readFrom(storage, index+iiw_near0f);
+  near0m.readFrom(storage, index+iiw_near0m);
+  nearzm.readFrom(storage, index+iiw_nearzm);
   root.readFrom(storage, index+iiw_root);
   extangle.readFrom(storage, index+iiw_extangle);
 }
@@ -153,7 +156,8 @@ void MandelPoint<BASE>::writeTo(void *storage, int index)
   lookper_totalFzmag.writeTo(storage, index+iiw_lookper_totalFzmag);
   //MandelMath::number_instance<WORKER_MULTI>(&lookper_nearr_dist).assign(src.lookper_nearr_dist.ptr);
   //MandelMath::number_instance<WORKER_MULTI>(&lookper_totalFzmag).assign(src.lookper_totalFzmag.ptr);
-  near0f.writeTo(storage, index+iiw_near0f);
+  near0m.writeTo(storage, index+iiw_near0m);
+  nearzm.writeTo(storage, index+iiw_nearzm);
   root.writeTo(storage, index+iiw_root);
   extangle.writeTo(storage, index+iiw_extangle);
 }
@@ -162,6 +166,13 @@ template <typename BASE>
 void MandelPoint<BASE>::zero(const MandelMath::complex<BASE> *first_z)
 {
   f.assign_across(first_z);
+
+  root.im.assign(f.im); //don't have "tmp" here so do it the long way... for now
+  root.im.sqr();
+  near0m.assign(f.re);
+  near0m.sqr();
+  near0m.add(root.im);
+
   fc_c.zero(0, 0);
   fz_r.zero(1, 0);
   fz_c_mag.zero(1);
@@ -170,8 +181,13 @@ void MandelPoint<BASE>::zero(const MandelMath::complex<BASE> *first_z)
   store->lookper_prevGuess=0;
   store->lookper_lastGuess=0;
   //lookper resets at first iter
-  store->near0iter=1;
-  near0f.assign(&f);
+  store->near0iter_1=1;
+  store->nearziter_0=1;
+
+  //near0m.assign(f.getMag_tmp(tmp));
+
+  //nearzm_.assign(near0m_); //could start with infinity but we should eventually iterate closer than 0... I think
+  nearzm.zero(20);
   store->period=0;
   store->surehand=0;
   root.zero(0, 0);
@@ -197,7 +213,7 @@ void MandelPoint<BASE>::zero(const MandelMath::complex<BASE> *first_z)
 
 ShareableViewInfo::ShareableViewInfo(ShareableViewInfo &src): QObject(),
   c(src.c.re.ntype()), root(src.root.re.ntype()), nth_fz_limit(src.nth_fz_limit.ntype()),
-  scale(src.scale), period(src.period), nth_fz(src.nth_fz)
+  scale(src.scale), period(src.period), nth_fz(src.nth_fz), juliaPeriod(src.juliaPeriod)
 {
   c.assign(&src.c);
   root.assign(&src.root);
@@ -211,7 +227,7 @@ ShareableViewInfo::ShareableViewInfo(const ShareableViewInfo &src): ShareableVie
 
 ShareableViewInfo::ShareableViewInfo(ShareableViewInfo &&src): QObject(),
   c(src.c.re.ntype()), root(src.root.re.ntype()), nth_fz_limit(src.nth_fz_limit.ntype()),
-  scale(src.scale), period(src.period), nth_fz(src.nth_fz)
+  scale(src.scale), period(src.period), nth_fz(src.nth_fz), juliaPeriod(src.juliaPeriod)
 {
   c.assign(&src.c);
   root.assign(&src.root);
@@ -231,6 +247,7 @@ ShareableViewInfo &ShareableViewInfo::operator=(ShareableViewInfo &src)
   scale=src.scale;
   period=src.period;
   nth_fz=src.nth_fz;
+  juliaPeriod=src.juliaPeriod;
   return *this;
 }
 
@@ -1302,29 +1319,29 @@ void MandelEvaluatorThread::syncMandel()
   }
 }
 
-void MandelEvaluatorThread::syncJulia()
+void MandelEvaluatorThread::syncJulia(int juliaPeriod)
 {
   switch (owner->ntype)
   {
     case MandelMath::NumberType::typeEmpty:
       //(specific_cast<MandelEvaluator<MandelMath::number<MandelMath::number_a *>> *, MandelEvaluator<MandelMath::worker_multi> *>(owner))->syncComputeSplit();
-      owner->syncJuliaSplit();
+      owner->syncJuliaSplit(juliaPeriod);
       return;
     case MandelMath::NumberType::typeDouble:
-      (specific_cast<MandelEvaluator<double> *, MandelEvaluator<MandelMath::number_a *> *>(owner))->syncJuliaSplit();
+      (specific_cast<MandelEvaluator<double> *, MandelEvaluator<MandelMath::number_a *> *>(owner))->syncJuliaSplit(juliaPeriod);
       return;
 #if !NUMBER_DOUBLE_ONLY
     case MandelMath::NumberType::typeFloat128:
-      (specific_cast<MandelEvaluator<__float128> *, MandelEvaluator<MandelMath::number_a *> *>(owner))->syncJuliaSplit();
+      (specific_cast<MandelEvaluator<__float128> *, MandelEvaluator<MandelMath::number_a *> *>(owner))->syncJuliaSplit(juliaPeriod);
       return;
     case MandelMath::NumberType::typeDDouble:
-      (specific_cast<MandelEvaluator<MandelMath::dd_real> *, MandelEvaluator<MandelMath::number_a *> *>(owner))->syncJuliaSplit();
+      (specific_cast<MandelEvaluator<MandelMath::dd_real> *, MandelEvaluator<MandelMath::number_a *> *>(owner))->syncJuliaSplit(juliaPeriod);
       return;
     case MandelMath::NumberType::typeQDouble:
-      (specific_cast<MandelEvaluator<MandelMath::dq_real> *, MandelEvaluator<MandelMath::number_a *> *>(owner))->syncJuliaSplit();
+      (specific_cast<MandelEvaluator<MandelMath::dq_real> *, MandelEvaluator<MandelMath::number_a *> *>(owner))->syncJuliaSplit(juliaPeriod);
       return;
     case MandelMath::NumberType::typeReal642:
-      (specific_cast<MandelEvaluator<MandelMath::real642> *, MandelEvaluator<MandelMath::number_a *> *>(owner))->syncJuliaSplit();
+      (specific_cast<MandelEvaluator<MandelMath::real642> *, MandelEvaluator<MandelMath::number_a *> *>(owner))->syncJuliaSplit(juliaPeriod);
       return;
 #endif
   }
@@ -1415,39 +1432,39 @@ void MandelEvaluatorThread::doMandelThreaded(int epoch)
   }
 }
 
-void MandelEvaluatorThread::doJuliaThreaded(int epoch)
+void MandelEvaluatorThread::doJuliaThreaded(int epoch, int juliaPeriod)
 {
   //switch (((MandelEvaluator<worker_multi> *)(this))->currentWorker->ntype())
   switch (owner->ntype)
   {
     case MandelMath::NumberType::typeEmpty:
-      owner->doJuliaThreadedSplit(epoch);
+      owner->doJuliaThreadedSplit(epoch, juliaPeriod);
       return;
     case MandelMath::NumberType::typeDouble:
     {
       MandelEvaluator<double> *owner_access=specific_cast<MandelEvaluator<double> *, MandelEvaluator<MandelMath::number_a *> *>(owner);
-      owner_access->doJuliaThreadedSplit(epoch);
+      owner_access->doJuliaThreadedSplit(epoch, juliaPeriod);
     } return;
 #if !NUMBER_DOUBLE_ONLY
     case MandelMath::NumberType::typeFloat128:
     {
       MandelEvaluator<__float128> *owner_access=specific_cast<MandelEvaluator<__float128> *, MandelEvaluator<MandelMath::number_a *> *>(owner);
-      owner_access->doJuliaThreadedSplit(epoch);
+      owner_access->doJuliaThreadedSplit(epoch, juliaPeriod);
     } return;
     case MandelMath::NumberType::typeDDouble:
     {
       MandelEvaluator<MandelMath::dd_real> *owner_access=specific_cast<MandelEvaluator<MandelMath::dd_real> *, MandelEvaluator<MandelMath::number_a *> *>(owner);
-      owner_access->doJuliaThreadedSplit(epoch);
+      owner_access->doJuliaThreadedSplit(epoch, juliaPeriod);
     } return;
     case MandelMath::NumberType::typeQDouble:
     {
       MandelEvaluator<MandelMath::dq_real> *owner_access=specific_cast<MandelEvaluator<MandelMath::dq_real> *, MandelEvaluator<MandelMath::number_a *> *>(owner);
-      owner_access->doJuliaThreadedSplit(epoch);
+      owner_access->doJuliaThreadedSplit(epoch, juliaPeriod);
     } return;
     case MandelMath::NumberType::typeReal642:
     {
       MandelEvaluator<MandelMath::real642> *owner_access=specific_cast<MandelEvaluator<MandelMath::real642> *, MandelEvaluator<MandelMath::number_a *> *>(owner);
-      owner_access->doJuliaThreadedSplit(epoch);
+      owner_access->doJuliaThreadedSplit(epoch, juliaPeriod);
     } return;
 #endif
   }
@@ -1604,15 +1621,15 @@ template <class WORKER_MULTI>
 void MandelEvaluator<WORKER_MULTI>::syncMandelSplit()
 {
   //still called from paintOrbit()
-  evaluate(false);
+  evaluate(0);
   pointsComputed++;
 }
 
 template <class WORKER_MULTI>
-void MandelEvaluator<WORKER_MULTI>::syncJuliaSplit()
+void MandelEvaluator<WORKER_MULTI>::syncJuliaSplit(int juliaPeriod)
 {
   //still called from paintOrbit()
-  evaluate(true);
+  evaluate(juliaPeriod);
   pointsComputed++;
 }
 
@@ -1652,7 +1669,7 @@ void MandelEvaluator<BASE>::doMandelThreadedSplit(int epoch)
 #endif
       timeInvokePostTotal+=timeInvoke.nsecsElapsed();
       timeInner.start();
-      evaluate(false);
+      evaluate(0);
       timeInnerTotal+=timeInner.nsecsElapsed();
       timeOuter.start();
       threaded_errorcode=threaded.doneMandel(this, THREADED_DONE_GIVE_WORK);
@@ -1672,7 +1689,7 @@ void MandelEvaluator<BASE>::doMandelThreadedSplit(int epoch)
 }
 
 template <typename BASE>
-void MandelEvaluator<BASE>::doJuliaThreadedSplit(int epoch)
+void MandelEvaluator<BASE>::doJuliaThreadedSplit(int epoch, int juliaPeriod)
 {
   busyEpoch=epoch;
   timeThreaded.start();
@@ -1692,7 +1709,7 @@ void MandelEvaluator<BASE>::doJuliaThreadedSplit(int epoch)
 #endif
       timeInvokePostTotal+=timeInvoke.nsecsElapsed();
       timeInner.start();
-      evaluate(true);
+      evaluate(juliaPeriod);
       timeInnerTotal+=timeInner.nsecsElapsed();
       timeOuter.start();
       threaded_errorcode=threaded.doneJulia(this, THREADED_DONE_GIVE_WORK);
@@ -4397,21 +4414,47 @@ void MandelEvaluator<BASE>::eval_until_bailout(const MandelMath::complex<BASE> *
 }
 
 template <typename BASE>
-void MandelEvaluator<BASE>::evaluate(bool julia)
+void MandelEvaluator<BASE>::evaluate(int juliaPeriod)
 {
-  {
+  /*{
     eval.near0fmag.assign(*currentData.near0f.getMag_tmp(&tmp)); //TODO: update on changing near0f
-  }
+  }*/
 
   for (; (currentData.store->iter<currentParams.maxiter) &&
          (currentData.store->rstate==MandelPointStore::ResultState::stUnknown) &&
          this->workIfEpoch==this->busyEpoch;
        currentData.store->iter++)
   { //? near0iter gives cycle offset, near_first_z_iter gives period; for mandel near0iter+1=near_first_z_iter //not really ;also we know julia period in advance
-    if (currentData.store->iter%(3*currentData.store->near0iter) ==0)
+    // peri   1   2   3  jul   jul
+    // near0  1   2   3   1     2
+    // nearz  1   2   3   3     3
+    // test   0       0   0     0
+    // test   3       9  7,10  8,11
+    // test   6      18 16,19 17,20
+    // test  12      36 34,37 35,38
+    //no worky, can't really find period from nearz and near0
+    int rem;
+    int quo;
+    if (currentData.store->iter==0)
     {
-      int quot=currentData.store->iter/(3*currentData.store->near0iter);
-      if ((quot&(quot-1))==0) //also at iter==0  //TODO: maybe better 3*(2^k-1)*near not 3*(2^k)*near
+      rem=0;
+      quo=1;
+    }
+    else if (juliaPeriod>0)
+    {
+      int per=juliaPeriod;
+      rem=(currentData.store->iter-currentData.store->near0iter_1)%(3*per);
+      quo=(currentData.store->iter-currentData.store->near0iter_1)/(3*per);
+    }
+    else
+    {
+      int per=currentData.store->nearziter_0;
+      rem=(currentData.store->iter-currentData.store->near0iter_1)%(3*per);
+      quo=(currentData.store->iter-currentData.store->near0iter_1)/(3*per);
+    }
+    if (rem==0)
+    {
+      if ((quo&(quo-1))==0) //also at iter==0  //TODO: maybe better 3*(2^k-1)*near not 3*(2^k)*near
       { // //need k*iter for f' to start at the worst moment to reduce false positives; need k*iter-1 for good near0 -> switch to nearc
         currentData.store->lookper_startiter=currentData.store->iter;
         currentData.lookper_startf_.assign(&currentData.f);
@@ -4533,18 +4576,24 @@ void MandelEvaluator<BASE>::evaluate(bool julia)
     currentData.f.sqr(&tmp);
     currentData.f.add(&currentParams.c);
     //currentData.iter++;
-    const MandelMath::number<BASE> *f_mag3=currentData.f.getMag_tmp(&tmp);
 
-    if ((currentData.store->iter+2)%231==0)
-      nop();
-    if (!eval.near0fmag.isle(*f_mag3)) //f_mag<near0fmag
+    //from here, iter should be iter+1
+
+    const MandelMath::number<BASE> *f_mag3=currentData.f.getMag_tmp(&tmp);
+    if (!currentData.near0m.isle(*f_mag3)) //f_mag<near0m
     {
-      currentData.store->near0iter=currentData.store->iter+2;
-      currentData.near0f.assign(&currentData.f);
-      eval.near0fmag.assign(*f_mag3);
+      currentData.store->near0iter_1=currentData.store->iter+2;
+      currentData.near0m.assign(*f_mag3);
       currentData.sure_fz_mag.zero(1);
     };
+    const MandelMath::number<BASE> *f_distfirst=currentData.f.dist2_tmp(&currentParams.first_z, &tmp);
+    if (!currentData.nearzm.isle(*f_distfirst))
+    {
+      currentData.store->nearziter_0=currentData.store->iter+1;
+      currentData.nearzm.assign(*f_distfirst);
+    };
 
+    //lookper_nearr = "near(est) to lookper_startf"
     const MandelMath::number<BASE> *lpdiff=currentData.lookper_startf_.dist2_tmp(&currentData.f, &tmp);
     int new_guess_now_=0; //0..not, 1..maybe, 2..exact match
     switch (lpdiff->compare(currentData.lookper_nearr_dist)) //|f-r|<best
@@ -4573,13 +4622,13 @@ void MandelEvaluator<BASE>::evaluate(bool julia)
         }
         else if (lpdiff->is0())
         { //cycle from startf
-          int next_guess=MandelMath::gcd(currentData.store->iter+1-currentData.store->lookper_startiter, currentData.store->near0iter);
+          int next_guess=MandelMath::gcd(currentData.store->iter+1-currentData.store->lookper_startiter, currentData.store->nearziter_0);
           if (next_guess>currentData.store->lookper_lastGuess)
           {
             currentData.store->lookper_prevGuess=currentData.store->lookper_lastGuess;
           };
           currentData.store->lookper_lastGuess=next_guess;
-          new_guess_now_=1;
+          new_guess_now_=2;
         }
         else if (!currentData.store->lookper_nearr_dist_touched) //we need to stop increasing lastGuess and restart search
         {                                                   //and also retest period once after new lookper_start
@@ -4649,14 +4698,17 @@ void MandelEvaluator<BASE>::evaluate(bool julia)
       }
     };
 #endif
+    int jp=(juliaPeriod>0?juliaPeriod:currentData.store->nearziter_0);
 #if SUREHAND_CHOICE!=1
     if (//(currentData.store->lookper_lastGuess>0) &&
-        new_guess_now_>0 && //(currentData.store->lookper_lastGuess==(currentData.store->iter+1-currentData.store->lookper_startiter)) && //just found new guess
+        new_guess_now_>1 ||
+        (
+          new_guess_now_>0 && //(currentData.store->lookper_lastGuess==(currentData.store->iter+1-currentData.store->lookper_startiter)) && //just found new guess
 #if USE_GCD_FOR_CHECKPERIOD
 #else
-        (new_guess_now_>1 || (currentData.store->near0iter % currentData.store->lookper_lastGuess)==0) && //  period divides nearest, that's a fact
+          ((jp % currentData.store->lookper_lastGuess)==0) && //  period divides nearest, that's a fact
 #endif
-        ((currentData.store->iter>=3*currentData.store->near0iter)))  //speedup - don't check period too eagerly
+          (currentData.store->iter>=3*jp)))  //speedup - don't check period too eagerly
     {
 #if USE_GCD_FOR_CHECKPERIOD
       int testperiod=MandelMath::gcd(currentData.near0iter, currentData.lookper_lastGuess);//currentData.lookper_lastGuess
@@ -4670,13 +4722,18 @@ void MandelEvaluator<BASE>::evaluate(bool julia)
         nop();
       if (currentData.f.isequal(&currentData.lookper_startf_))
       { //exact match - misiurewicz or converged after too many steps or just a lucky hit
-        int testperiod2=currentData.store->iter+1-currentData.store->lookper_startiter;//currentData.store->lookper_lastGuess;
-        if (testperiod2!=currentData.store->lookper_lastGuess)
-          nop(); //at preperiodic, test=2 last=1 we want last=2 at 0+i but last=1 at -2
-        //testperiod=testperiod2; //gcd works but I want to debug periodCheck with large period
-        testperiod=MandelMath::gcd(testperiod2, currentData.store->near0iter);
-        if (testperiod<currentData.store->near0iter)
-          nop(); //happens a lot
+        if (juliaPeriod>0)
+          testperiod=juliaPeriod;
+        else
+        {
+          int testperiod2=currentData.store->iter+1-currentData.store->lookper_startiter;//currentData.store->lookper_lastGuess;
+          if (testperiod2!=currentData.store->lookper_lastGuess)
+            nop(); //at preperiodic, test=2 last=1 we want last=2 at 0+i but last=1 at -2
+          //testperiod=testperiod2; //gcd works but I want to debug periodCheck with large period
+          testperiod=MandelMath::gcd(testperiod2, currentData.store->nearziter_0);
+          if (testperiod<currentData.store->nearziter_0)
+            nop(); //happens a lot
+        }
         foundperiod=periodCheck(testperiod, &currentParams.c, &currentData.lookper_nearr, true);
         if (foundperiod<0) //exact match but repelling
           foundperiod=testperiod;
@@ -4736,7 +4793,7 @@ void MandelEvaluator<BASE>::evaluate(bool julia)
   {
     if (currentData.store->iter>10000)
       currentData.extangle.zero(ExtAngle::SPECIAL_VALUE_DEEP);
-    else if (julia)
+    else if (juliaPeriod>0)
       extangle.computeDynamic(&currentData.extangle, currentData.store->iter, &currentParams.c, &currentParams.first_z, &tmp);
     else
       extangle.compute3(&currentData.extangle, currentData.store->iter, &currentParams.c, &tmp);
@@ -4765,7 +4822,7 @@ MandelEvaluator<BASE>::NewtRes::NewtRes(MandelMath::NumberType ntype):
 
 template<typename BASE>
 MandelEvaluator<BASE>::Eval::Eval(MandelMath::NumberType ntype):
-  fz_r(ntype), fz_mag(ntype), near0fmag(ntype)
+  fz_r(ntype), fz_mag(ntype)
 {
   //working_assert(self_allocator.checkFill());
 }
