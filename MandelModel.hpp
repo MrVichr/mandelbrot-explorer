@@ -45,6 +45,7 @@ public:
   Q_INVOKABLE QString getTextInfoSpec();
   ShareableViewInfo getViewInfo();
   Q_PROPERTY(ShareableViewInfo viewInfo READ getViewInfo CONSTANT)// WRITE setViewInfo NOTIFY viewInfoChanged)
+  Q_INVOKABLE ShareableViewInfo makeViewInfo(const QVariantMap &params);
 
   enum paintStyle
   {

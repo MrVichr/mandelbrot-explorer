@@ -4406,6 +4406,15 @@ void MandelEvaluator<BASE>::eval_until_bailout(const MandelMath::complex<BASE> *
       currentData.store->rstate=MandelPointStore::ResultState::stBoundary;
       return;
     };
+    //fz_c_mag:=4*fz_c_mag*f.mag
+    currentData.fz_c_mag.mul(*currentData.f.getMag_tmp(&tmp));
+    currentData.fz_c_mag.lshift(2);
+    double fz_c_mag=currentData.fz_c_mag.toDouble();
+    if (fz_c_mag>LARGE_FLOAT2)
+    {
+      currentData.store->rstate=MandelPointStore::ResultState::stDiverge;
+      return;
+    };
     //f:=f^2+c
     currentData.f.sqr(&tmp);
     currentData.f.add(c);
@@ -4480,6 +4489,14 @@ void MandelEvaluator<BASE>::evaluate(int juliaPeriod)
         //currentWorker->zero(&currentData.exterior_hits, 0);
         currentData.store->exterior_avoids=0;
         currentData.store->exterior_hits=0;
+      }
+      else if (juliaPeriod>0)
+      { //from https://en.wikipedia.org/wiki/Julia_set#Using_DEM/J
+        double fm=currentData.f.getMag_double();
+        double fcm=currentData.fz_c_mag.toDouble();
+        double x=log(fm);//should be /2 but does not seem right
+        currentData.store->exterior_hits=x*sqrt(fm/fcm);
+        currentData.store->exterior_avoids=currentData.store->exterior_hits*0.25;
       }
       else
       {

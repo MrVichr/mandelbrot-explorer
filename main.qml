@@ -381,7 +381,8 @@ Window {
                 onTriggered: { laguerreModel.setParams(mandelModel.viewInfo); juliaModel.setParams(mandelModel.viewInfo); }
             }
             Menu {
-                title: "Presets..."
+                title: "Presets (M)..."
+                visible:rbuttonViewMand.checked
                 Repeater {
                     model: [
                         {viewRe: -0.5, viewIm: 0, viewZoom: 1/128, caption: 'Main view'},
@@ -408,6 +409,20 @@ Window {
                     MenuItem {
                         text: modelData.caption
                         onTriggered: mandelModel.setView_double(modelData.viewRe, modelData.viewIm, modelData.viewZoom);
+                    }
+                }
+            }
+            Menu {
+                title: "Presets (J)..."
+                visible:rbuttonViewJulia.checked
+                Repeater {
+                    model: [
+                        {viewRe: -0.5, viewIm: 0, viewZoom: 1/128, cRe: 0, cIm: 0, period: 1, caption: 'Main view'},
+                        {viewRe: -0.7342796903103590, viewIm: 0.1835422439035028, viewZoom: 1/4294967296.0, cRe: -0.7342796875163913, cIm: 0.1835422653239220, period: 1156, caption: 'Noisy zoom'},
+                    ]
+                    MenuItem {
+                        text: modelData.caption
+                        onTriggered: juliaModel.setParams(mandelModel.makeViewInfo(modelData));
                     }
                 }
             }

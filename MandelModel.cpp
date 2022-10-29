@@ -308,6 +308,19 @@ ShareableViewInfo MandelModel::getViewInfo()
   return result;
 }
 
+ShareableViewInfo MandelModel::makeViewInfo(const QVariantMap &params)
+{
+  ShareableViewInfo result(precisionRecord->ntype);
+  result.scale=params.value("viewZoom", 0.0).toDouble();
+  result.c.zero(params.value("cRe", 0.0).toDouble(), params.value("cIm", 0.0).toDouble());
+  result.root.zero(0, 0);
+  result.juliaPeriod=params.value("period", 1<<MAX_EFFORT).toInt();
+  result.nth_fz=result.juliaPeriod;
+  precisionRecord->lagu_c.zero(params.value("cRe", 0.0).toDouble(), params.value("cIm", 0.0).toDouble());
+  precisionRecord->lagu_r.zero(0,0);
+  return result;
+}
+
 class PixelPositionTransformer
 {
 public:
@@ -1137,6 +1150,10 @@ int MandelModel::writeToImage(ShareableImageWrapper image)
               double re=precisionRecord->wtiPoint.f.re.toDouble();
               double im=precisionRecord->wtiPoint.f.im.toDouble();
               double iter=wtiStore->iter+6-log2(log2(re*re+im*im)); //+6 to match integer coloring
+
+              //iter=sqrt(iter);
+              iter=10*(log(1+iter/10));
+
               iter=iter/12;
               iter=(iter-floor(iter))*6;
               int iter_phase=iter;
@@ -1211,18 +1228,34 @@ int MandelModel::writeToImage(ShareableImageWrapper image)
             {
               double tf;
               if ((wtiStore->exterior_avoids>10000) || (wtiStore->exterior_avoids<=0))
-                tf=0;
-              else if (wtiStore->exterior_avoids>=1)
+                image.image->setPixel(x, y, 0xff9f9f9f);
+              else if (wtiStore->exterior_avoids>=1) //10000..1 -> -9999..0
+              {
                 tf=(1-wtiStore->exterior_avoids)*1;
-              else
+                int g=0x9f+qRound(0x60*sin(tf*10)); //green fastest
+                int b=0x9f+qRound(0x60*sin(tf/10)); //blue slowest
+                int r=0x9f+qRound(0x60*sin(tf)); //red middle
+                if ((r<0) || (r>255) || (g<0) || (g>255) || (b<0) || (b>255))
+                  image.image->setPixel(x, y, 0xffffffff);
+                else
+                  image.image->setPixel(x, y, 0xff000000+(r<<16)+(g<<8)+(b));
+              }
+              else //1..0 -> 0..inf
+              {
                 tf=-log(wtiStore->exterior_avoids);//sqrt(1-log(wtiStore->exterior_avoids))*2-2;
-              int r=0x9f+qRound(0x60*sin(tf*2.828)); //red middle
-              int g=0x9f+qRound(0x60*sin(tf*6.928)); //green fastest
-              int b=0x9f+qRound(0x60*sin(tf)); //blue slowest
-              if ((r<0) || (r>255) || (g<0) || (g>255) || (b<0) || (b>255))
-                image.image->setPixel(x, y, 0xffffffff);
-              else
-                image.image->setPixel(x, y, 0xff000000+(r<<16)+(g<<8)+(b));
+                //tf=10*(log(1+tf/10));
+                tf=(log(1+tf));
+                int g=0x9f+qRound(0x60*sin(tf*10));
+                int b=0x9f+qRound(0x60*sin(tf/10));
+                //tf=(log(1+tf));
+                int r=0x9f+qRound(0x60*sin(tf));
+                //tf=(log(1+tf));
+                //int b=0x9f+qRound(0x60*sin(tf));
+                if ((r<0) || (r>255) || (g<0) || (g>255) || (b<0) || (b>255))
+                  image.image->setPixel(x, y, 0xffffffff);
+                else
+                  image.image->setPixel(x, y, 0xff000000+(r<<16)+(g<<8)+(b));
+              }
             } break;
             case MandelPointStore::ResultState::stBoundary:
             {

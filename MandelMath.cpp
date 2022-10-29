@@ -709,7 +709,10 @@ void number<double>::min(const number_a &other)
 template<>
 QString number<double>::toString() const
 {
-  return QString::number(store, 'f', 16);
+  if (store<-1e6 || store>1e6)
+    return QString::number(store, 'g', 10);
+  else
+    return QString::number(store, 'f', 16);
 }
 
 template<>
