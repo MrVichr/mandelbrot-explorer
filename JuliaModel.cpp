@@ -127,6 +127,7 @@ QString JuliaModel::getTextInfoGen()
   MandelPoint<MandelMath::number_a *> *data=&precisionRecord->wtiPoint;
 
   QString state;
+  QString fc_fz;
   switch (data_store->rstate)
   {
     case MandelPointStore::ResultState::stUnknown:
@@ -134,27 +135,41 @@ QString JuliaModel::getTextInfoGen()
         state="Unk";
       else
         state="Working...";
+      fc_fz=" fc="+data->fc_c.toString();
       break;
     case MandelPointStore::ResultState::stOutside:
-      state="Out"; break;
+      state="Out"; fc_fz=" fc="+data->fc_c.toString(); break;
     case MandelPointStore::ResultState::stOutAngle:
-      state="OutA"; break;
+      state="OutA"; fc_fz=" fc="+data->fc_c.toString(); break;
     case MandelPointStore::ResultState::stBoundary:
-      state="Bound"; break;
+      state="Bound"; fc_fz=" fc="+data->fc_c.toString(); break;
     case MandelPointStore::ResultState::stDiverge:
-      state="Diver"; break;
+      state="Diver"; fc_fz=" fc="+data->fc_c.toString(); break;
     case MandelPointStore::ResultState::stMisiur:
-      state="Misiur"; break;
+      state="Misiur"; fc_fz=" fc="+data->fc_c.toString(); break;
     case MandelPointStore::ResultState::stPeriod2:
-      state="Per2"; break;
+      state="Per2";
+      if (_selectedPaintStyle==paintStyleFZ)
+        fc_fz=" fz="+data->fz_r.toString();
+      else
+        fc_fz=" fc="+data->fc_c.toString();
+      break;
     case MandelPointStore::ResultState::stPeriod3:
-      state="Per3"; break;
+      state="Per3";
+      if (_selectedPaintStyle==paintStyleFZ)
+        fc_fz=" fz="+data->fz_r.toString();
+      else
+        fc_fz=" fc="+data->fc_c.toString();
+      break;
     case MandelPointStore::ResultState::stMaxIter:
-      state="Max"; break;
+      state="Max"; fc_fz=" fc="+data->fc_c.toString(); break;
   }
 
-  return state+" iter="+QString::number(data_store->iter)+" nearz="+QString::number(data_store->nearziter_0)+" near0="+QString::number(data_store->near0iter_1)+
-      " fc="+data->fc_c.toString();
+  return state+" iter="+QString::number(data_store->iter)+
+               " nearz="+QString::number(data_store->nearziter_0)+"("+QString::number(data_store->nearziter_0%precisionRecord->params.period)+")"+
+               " near0="+QString::number(data_store->near0iter_1)+"("+QString::number(data_store->near0iter_1%precisionRecord->params.period)+")"+
+               " ("+QString::number((data_store->near0iter_1-data_store->nearziter_0))+")"+
+      fc_fz;
 }
 
 QString JuliaModel::getTextInfoSpec()
@@ -949,7 +964,7 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
                 case 3: r=0x80; break;
                 default: r=0xe0;
               }*/
-              if (wtiStore->period!=precisionRecord->params.period)//if (wtiStore->period>wtiStore->nearziter_0)
+              /*if (wtiStore->period!=precisionRecord->params.period)//if (wtiStore->period>wtiStore->nearziter_0)
                 image.image->setPixel(x, y, 0xffff00ff); //seems to only happen by mistake, not in reality
               else
               {
@@ -959,7 +974,10 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
                 int rl=0x73516240>>((index&0x70)>>2); //reverse bits 4..6
                 rh=0x80 | ((rh&0x07)<<4) | (index&0x08) | (rl&0x07);
                 image.image->setPixel(x, y, 0xff000000+(rh<<16));
-              }
+              }*/
+              double iterx=std::log(wtiStore->iter+1);
+              int r=(iterx-floor(iterx))*256;
+              image.image->setPixel(x, y, 0xff000000+(r<<16));
             } break;
             case MandelPointStore::ResultState::stMaxIter:
             {
@@ -1046,7 +1064,9 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
             case MandelPointStore::ResultState::stPeriod2:
             case MandelPointStore::ResultState::stPeriod3:
             {
-              int index=periodToIndex(wtiStore->period);
+              //ok but shouldn't use raw iter int index=periodToIndex(wtiStore->iter % wtiStore->period);
+              //ok int index=periodToIndex(wtiStore->nearziter_0 % wtiStore->period);
+              int index=periodToIndex(wtiStore->near0iter_1 % wtiStore->period);//also ok?
               /*if (wtiStore->surehand==0 || wtiStore->surehand%wtiStore->period!=0)
               {
                 image.image->setPixel(x, y, 0xffff0080);
@@ -1086,11 +1106,11 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
             case MandelPointStore::ResultState::stOutAngle:
             {
               double tf;
-              if ((wtiStore->exterior_avoids>10000) || (wtiStore->exterior_avoids<=0))
+              if ((wtiStore->exterior_hits>10000) || (wtiStore->exterior_hits<=0))
                 image.image->setPixel(x, y, 0xff9f9f9f);
-              else if (wtiStore->exterior_avoids>=1) //10000..1 -> -9999..0
+              else if (wtiStore->exterior_hits>=1) //10000..1 -> -9999..0
               {
-                tf=(1-wtiStore->exterior_avoids)*1;
+                tf=(1-wtiStore->exterior_hits)*1;
                 int g=0x9f+qRound(0x60*sin(tf*10)); //green fastest
                 int b=0x9f+qRound(0x60*sin(tf/10)); //blue slowest
                 int r=0x9f+qRound(0x60*sin(tf)); //red middle
@@ -1101,7 +1121,7 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
               }
               else //1..0 -> 0..inf
               {
-                tf=-log(wtiStore->exterior_avoids);//sqrt(1-log(wtiStore->exterior_avoids))*2-2;
+                tf=-log(wtiStore->exterior_hits);//sqrt(1-log(wtiStore->exterior_avoids))*2-2;
                 //tf=10*(log(1+tf/10));
                 tf=(log(1+tf));
                 int g=0x9f+qRound(0x60*sin(tf*10));
@@ -1312,7 +1332,8 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
             case MandelPointStore::ResultState::stOutside:
             case MandelPointStore::ResultState::stOutAngle:
             {
-              int ti=wtiStore->nearziter_0;
+              //int ti=wtiStore->nearziter_0;
+              int ti=wtiStore->near0iter_1;
               if (ti>=0)
               {
                 int tj=0;
@@ -1354,7 +1375,8 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
                 r=0xff;
               image.image->setPixel(x, y, 0xff000000+(r<<16));*/
 
-              int ti=wtiStore->nearziter_0;
+              //int ti=wtiStore->nearziter_0;
+              int ti=wtiStore->near0iter_1;
               if (ti>0)
               {
                 int tj=0;
@@ -1414,10 +1436,8 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
             {
               precisionRecord->wtiPoint.readFrom(precisionRecord->points, (y*imageWidth+x)*MandelPoint<MandelMath::number_a *>::LEN);
               double re=precisionRecord->wtiPoint.fz_r.re.toDouble();
-              double im=precisionRecord->wtiPoint.fz_r.im.toDouble();
+              double im=precisionRecord->wtiPoint.fz_r.im.toDouble(); //fz_r
               double mag=sqrt(MandelMath::sqr_double(re)+MandelMath::sqr_double(im));
-              if (mag<0) mag=0;
-              else if (mag>1) mag=1;
               /*double mag2=mag*127.49+128;
               double phi=std::atan2(position.worker->toDouble(&data->fz_r_im), position.worker->toDouble(&data->fz_r_re))/(2*M_PI);
               if (phi<0) phi+=1;
@@ -1429,7 +1449,7 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
               //int b=mag==0?128:qRound(im/mag*127.49+128);
               int b=mag==0?128:qRound(im/mag*127.49+256)%256;
               int r=0;
-              mag=-log(1-mag)/log(2);
+              mag=log(1+mag)/log(2);
               mag=mag-floor(mag);
               if (mag<0.2)
                 r=128;

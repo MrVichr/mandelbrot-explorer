@@ -236,7 +236,7 @@ public:
              int period, const MandelMath::complex<BASE> *c); //->f, f_c, f_cc
   //eval F_c(z) -z if minusZ
   bool eval2(typename MandelMath::complex<BASE>::Scratchpad *tmp,
-             int period, const MandelMath::complex<BASE> *c, const MandelMath::complex<BASE> *z, bool minusZ);     //->f, f_z, f_zz, f_c, f_zc, f_cc
+             int period, const MandelMath::complex<BASE> *c, const MandelMath::complex<BASE> *z, bool minusZ, bool doInit=true);     //->f, f_z, f_zz, f_c, f_zc, f_cc
   bool eval2_mag(typename MandelMath::complex<BASE>::Scratchpad *tmp,
                  int period, const MandelMath::complex<BASE> *c, const MandelMath::complex<BASE> *z); //->f, f_z, f_zz, f_c, f_zc, f_z_mag
   bool eval_zz(typename MandelMath::complex<BASE>::Scratchpad *tmp,
@@ -245,9 +245,7 @@ public:
                 int period, const MandelMath::complex<BASE> *c, const MandelMath::complex<BASE> *z);  //->f, f_z, f_zz, f_c, f_zc, f_cc, f_zzc
   bool eval_multi(typename MandelMath::complex<BASE>::Scratchpad *tmp,
                   int period, const MandelMath::complex<BASE> *c, const MandelMath::complex<BASE> *z, const MandelMath::complex<BASE> *f_z_target, double dist_tolerance); //->f, f_z, f_zz, multi, first_multi
-  bool eval_ext_mand(typename MandelMath::complex<BASE>::Scratchpad *tmp,
-                    const MandelMath::complex<BASE> *c, int iter); //
-  bool eval_ext_mandZ(typename MandelMath::complex<BASE>::Scratchpad *tmp,
+  bool eval_ext_mandMJ(typename MandelMath::complex<BASE>::Scratchpad *tmp, double mandel,
                     const MandelMath::complex<BASE> *c, const MandelMath::complex<BASE> *z, int iter); //
 
   //inputs
@@ -449,6 +447,8 @@ protected:
     MandelMath::number<BASE> inte_abs;
     MandelMath::complex<BASE> fz;
     MandelMath::number<BASE> fz_mag;
+    MandelMath::complex<BASE> alpha;
+    MandelMath::complex<BASE> alphak;
     InteriorInfo(MandelMath::NumberType ntype);
   } interior;
 public:
@@ -488,7 +488,6 @@ public:
   } bulb;
   struct ExtAngle
   {
-    static constexpr int MAX_LADDER=50;
     static constexpr double SAFE_RADIUS=6;
     using number=MandelMath::number<BASE>;
     using complex=MandelMath::complex<BASE>;
@@ -498,7 +497,6 @@ public:
     MandelMath::NumberType ntype;
     MandelLoopEvaluator<BASE> *loope;
     LaguerreStep<BASE> *lagus;
-    BASE *ladder;
     MandelMath::complex<BASE> z;
     MandelMath::complex<BASE> r_;
     MandelMath::number<BASE> angleC;
@@ -518,11 +516,7 @@ public:
     } dbg;
     ExtAngle(MandelMath::NumberType ntype, MandelLoopEvaluator<BASE> *loope, LaguerreStep<BASE> *lagus, MandelEvaluator<BASE> *owner);
     ~ExtAngle();
-    void compute(number *result, int iter, const complex *c, typename complex::Scratchpad *tmp);
-    void preciseAngle(const complex *c, complex *z, number *result, typename complex::Scratchpad *tmp);
-    void compute2_(number *result, int iter, const complex *c, typename complex::Scratchpad *tmp);
-    void compute3(number *result, int iter, const complex *c, typename complex::Scratchpad *tmp);
-    void computeDynamic(number *result, int iter, const complex *c, const complex *z, typename complex::Scratchpad *tmp);
+    void computeMJ(number *result, bool mandel, int iter, const complex *c, const complex *z, typename complex::Scratchpad *tmp);
   } extangle;
   static constexpr size_t LEN=ComputeParams::LEN+MandelPoint<BASE>::LEN+LaguerrePoint<BASE>::LEN+NewtRes::LEN+Eval::LEN+Newt::LEN+InteriorInfo::LEN+Bulb::LEN;
 public:

@@ -173,7 +173,7 @@ void MandelPoint<BASE>::zero(const MandelMath::complex<BASE> *first_z)
   near0m.sqr();
   near0m.add(root.im);
 
-  fc_c.zero(0, 0);
+  fc_c.zero(1, 0);
   fz_r.zero(1, 0);
   fz_c_mag.zero(1);
   sure_fz_mag.zero(1);
@@ -788,14 +788,17 @@ bool MandelLoopEvaluator<BASE>::evalg(typename MandelMath::complex<BASE>::Scratc
  */
 template <typename BASE>
 bool MandelLoopEvaluator<BASE>::eval2(typename MandelMath::complex<BASE>::Scratchpad *tmp,
-                                      int period, const MandelMath::complex<BASE> *c, const MandelMath::complex<BASE> *z, bool minusZ)
+                                      int period, const MandelMath::complex<BASE> *c, const MandelMath::complex<BASE> *z, bool minusZ, bool doInit)
 {
-  f.assign(z);
-  f_z.zero(1, 0);
-  f_zz.zero(0, 0);
-  f_c.zero(0, 0);
-  f_zc.zero(0, 0);
-  f_cc.zero(0, 0);
+  if (doInit)
+  {
+    f.assign(z);
+    f_z.zero(1, 0);
+    f_zz.zero(0, 0);
+    f_c.zero(0, 0);
+    f_zc.zero(0, 0);
+    f_cc.zero(0, 0);
+  };
   for (int i=0; i<period; i++)
   {
     double m_sum=f.getMag_double()+
@@ -1221,9 +1224,9 @@ bool MandelLoopEvaluator<BASE>::eval_multi(typename MandelMath::complex<BASE>::S
 }
 
 template<typename BASE>
-bool MandelLoopEvaluator<BASE>::eval_ext_mand(typename MandelMath::complex<BASE>::Scratchpad *tmp, const MandelMath::complex<BASE> *c, int iter)
-{
-  f.assign(c);
+bool MandelLoopEvaluator<BASE>::eval_ext_mandMJ(typename MandelMath::complex<BASE>::Scratchpad *tmp, double mandel, const MandelMath::complex<BASE> *c, const MandelMath::complex<BASE> *z, int iter)
+{ //mandel=1.0 -> d/dc f_c(c) |c, mandel=0.0 -> d/dz f_c(z) |z
+  f.assign(z);
   f_c.zero(1, 0);
   f_cc.zero(0, 0);
   //also using s2
@@ -1235,41 +1238,10 @@ bool MandelLoopEvaluator<BASE>::eval_ext_mand(typename MandelMath::complex<BASE>
     s2.sqr(tmp);
     f_cc.add(&s2);
     f_cc.lshift(1);
-    //g_c=2*g_c*g+1
+    //g_c=2*g_c*g for Julia, g_c=2*g_c*g+1 for Mandelbrot
     f_c.mul(&f, tmp);
     f_c.lshift(1);
-    //g=g^2+c
-    f.sqr(tmp);
-    f_c.re.add_double(1);
-    f.add(c);
-    double f_mag=f.getMag_double();
-    double allmag=f_mag+
-                  f_c.getMag_double()+
-                  f_cc.getMag_double();
-    if (allmag>1e130) //goes pretty high
-      return false;
-  }
-  return true;
-}
-
-template<typename BASE>
-bool MandelLoopEvaluator<BASE>::eval_ext_mandZ(typename MandelMath::complex<BASE>::Scratchpad *tmp, const MandelMath::complex<BASE> *c, const MandelMath::complex<BASE> *z, int iter)
-{
-  f.assign(z);
-  f_c.zero(1, 0); //f_z really but will be renamed later
-  f_cc.zero(0, 0); //same f_zz
-  //also using s2
-  for (int i=0; i<iter; i++)
-  {
-    //g_cc=2*(g_cc*g + g_c*g_c)
-    f_cc.mul(&f, tmp);
-    s2.assign(&f_c);
-    s2.sqr(tmp);
-    f_cc.add(&s2);
-    f_cc.lshift(1);
-    //g_c=2*g_c*g
-    f_c.mul(&f, tmp);
-    f_c.lshift(1);
+    f_c.re.add_double(mandel);
     //g=g^2+c
     f.sqr(tmp);
     f.add(c);
@@ -3211,6 +3183,40 @@ int MandelEvaluator<BASE>::newton(int period, const MandelMath::complex<BASE> *c
       ostro-m: sqrt(m)/sqrt(H)
         notice that my lagu-m for n->inf becomes ostrowski-m
 
+    CLAM formula z1=z0−(N*f/f')*(1−Q^(m/N))/(1−Q), where Q=[N*(1−f*f''/f'^2)−1]/(N/m −1)
+        the formula has never been found to fail for general polynomials
+        https://link.springer.com/chapter/10.1007/3-540-62598-4_83?noAccess=true
+        Tien Chi Chen: Convergence in iterative polynomial root-finding
+        z0−(N*f/f')*(1−Q^(m/N))*(1/m−1/N)/[1/m-(1−f*f''/f'^2)]   Q=[N*(1−f*f''/f'^2)−1]/(N/m −1)
+        1-f''*f/f'^2 = 1/M
+           z0−(n*f/f')*(1/m−1/n)/(1/m-1/M)*(1−Q^(m/n))   Q=[1/M−1/n]/(1/m−1/n)
+      lagu z0-f/f'/(1/n +- sqrt( (1/m-1/n)*(1/M-1/n) ))
+      lagu z0-n*f/f'/(1 +- sqrt( n^2*(1/m-1/n)^2*(1/M-1/n)/(1/m-1/n) ))
+      lagu z0-(n*f/f')/(1 +- n*(1/m-1/n)*sqrt( Q ))
+      clam z0−(n*f/f')*(1/m−1/n)*(1/(1/m-1/M)−(Q/(1/m-1/M)^(n/m))^(m/n))   Q=(1/M−1/n)/(1/m−1/n)  M=k*m  1/m-1/M=1/m-1/k/m=1/m*(1-1/k)   Q=(1/k-1)*(1/m)/(1/m−1/n)+1=(1/M-1/m)/(1/m−1/n)+1
+      clam z0−(n*f/f')*(1/m−1/n)/(1/m-1/M)*(1−(Q)^(m/n))   Q=1-(1/m-1/M)/(1/m−1/n)   Q=1-q
+      clam z0−(n*f/f')*(1−(1-q)^(m/n))/q    q=(1/m-1/M)/(1/m−1/n)
+             C[q]=(1−(1-q)^(m/n))/q   C[0]~m/n C[1]~infinity  C[q]~m/n+1/2*m/n*(1-m/n)*q+1/6*m/n*(1-m/n)*(2-m/n)*q^2+...
+             C[q]~m/n*-log(1-q)/q for small m/n  (untested)
+      clam z0−(n*f/f')*(1−(1-q)^(m/n))/q    q=(1/m-1/M)/(1/m−1/n)
+          clam z0−(m*f/f')*(1−(1-q)^a)/q/a             a=m/n
+      lagu z0-(n*f/f')/(1 +- n*(1/m-1/n)*sqrt( 1-q ))
+          lagu z0-(m*f/f')/(a +- (1-a)*sqrt( 1-q ))    a=m/n
+          clam and lagu same for a=0.5 and a=1
+          plot [(1−(1-x)^a)/x/a; 1/(a + (1-a)*sqrt( 1-x ))] for a=0.25 for x from 0 to 1
+            similar but not the same, very similar for 0<=q<=0.5
+      clam for small q: ~z0−(n*f/f')*m/n=z0−m*f/f'
+      lagu for small q: ~z0-(f/f')/(1/m)=z0-m*f/f'
+      clam z0−(m*f/f')*(1+1/2*(1-m/n)*q+1/6*(1-m/n)*(2-m/n)*q^2+1/24*(1-m/n)*(2-m/n)*(3-m/n)*q^3)
+      lagu z0-(m*f/f')/(1+(1-m/n)*( - q/2 - q^2/8 - q^3/16 ))
+         1/(1+(1-a)*(sqrt(1-x)-1))=1+1/2 (1 - a) x + 1/8 (2 a^2 - 5 a + 3) x^2 + 1/16 (-2 a^3 + 8 a^2 - 11 a + 5) x^3 + ...
+      lagu z0-(m*f/f')*(1+1/2*(1-m/n)*q+1/8*(2*(m/n)^2-5*m/n+3)*q^2 + 1/16 (-2 a^3 + 8 a^2 - 11 a + 5) x^3 + ...)
+         (1-m/n)*(2-m/n)=(m/n)^2-3*m/n/2+2  1/8*6/8*8/6=1/6*6/8
+      lagu z0-(m*f/f')*(1+1/2*(1-m/n)*q+1/6*(6/4*(m/n)^2-15/4*m/n+9/4)*q^2 + 1/16 (-2 a^3 + 8 a^2 - 11 a + 5) x^3 + ...)
+
+
+
+
 
     ----- how to find m ----
     simple: f=x^m
@@ -4492,14 +4498,55 @@ void MandelEvaluator<BASE>::evaluate(int juliaPeriod)
       }
       else if (juliaPeriod>0)
       { //from https://en.wikipedia.org/wiki/Julia_set#Using_DEM/J
+        //phi(z)=log(f)/2^iter
+        //phi'(z)=f'/f/2^iter
+        //dist=phi(z)/phi'(z)=log(f)*f/f'
         double fm=currentData.f.getMag_double();
         double fcm=currentData.fz_c_mag.toDouble();
-        double x=log(fm);//should be /2 but does not seem right
+        double x=std::log(fm);//should be /2 but does not seem right
+        //currentData.store->exterior_hits=x*sqrt(fm/fcm);
+        //currentData.store->exterior_avoids=currentData.store->exterior_hits*0.25;
+        //from https://www.evl.uic.edu/hypercomplex/html/book/book.pdf par 3.3
+        //sinh(phi(z))/2/exp(phi(z))/phi'(z) <= dist <= 2*sinh(phi(z))/phi'(z)
+        //(  1-exp(-phi(z))/exp(phi(z))  )/4/phi'(z)
+        //(  1-1/exp(log(f)/2^iter)^2  )/4/f'*f*2^iter
+        //supposed to simplify to
+        //1/(f^(1/2^iter))*(1/2)*f/f'*log(f) <= dist <= f/f'*log(f)
+        // 1/f^(1/2^iter)=exp(-log(f)/2^iter)
+
+        //G=ln(f)/(2^iter)   G'=f'/f/(2^iter)
+        /*currentData.store->exterior_hits=x*sqrt(fm/fcm)/2;
+        if (currentDataStore.iter<30)
+          x=ldexp(x, -currentDataStore.iter);
+        else
+          x=0;
+        currentData.store->exterior_avoids=currentData.store->exterior_hits*0.5*std::exp(-x);*/
         currentData.store->exterior_hits=x*sqrt(fm/fcm);
         currentData.store->exterior_avoids=currentData.store->exterior_hits*0.25;
+        if (currentData.store->iter>71)
+        { }
+        else
+        {
+          double G=ldexp(x, -1-currentData.store->iter);
+          if (currentData.store->iter>26)
+          {
+            currentData.store->exterior_hits+=G*G/6*currentData.store->exterior_hits;
+            currentData.store->exterior_avoids+=G*(G*2/3-1)*currentData.store->exterior_avoids;
+          }
+          else
+          {
+            //double ex=exp(x);
+            //currentData.store->exterior_hits*=(ex-1/ex)/x/2;
+            //currentData.store->exterior_avoids*=(1-1/(ex*ex))/x/2;
+            //(exp(x*(2^-iter))-1/exp(x*(2^-iter)))/x*2^iter   (exp(a)-1/exp(a))/a~(1+a-1+a)/a=2
+            currentData.store->exterior_hits=ldexp((exp(G)-1/exp(G))*sqrt(fm/fcm), currentData.store->iter);
+            currentData.store->exterior_avoids=ldexp((1-1/exp(2*G))*sqrt(fm/fcm), currentData.store->iter-2);
+          }
+        }
       }
       else
       {
+        // !! but that's for Julia not Mandelbrot - will try fc[c] instead of fc[z]
         //https://www.evl.uic.edu/hypercomplex/html/book/book.pdf p17, p29
         //G=ln(sqrt(f_mag))/2^iter   G'=sqrt(fc_c_mag)/(2^iter*sqrt(f_mag))       sinh(G)=(exp(G)-exp(-G))/2
         //sinh(G)/(2*exp(G)*G') < exterior < 2*sinh(G)/G'
@@ -4522,6 +4569,25 @@ void MandelEvaluator<BASE>::evaluate(int juliaPeriod)
         //  C = 1 - x + (2 x^2)/3 - x^3/3 + (2 x^4)/15 - (2 x^5)/45 + O(x^6)
         //  assuming f_mag<10000^2, approx up to x^2 should be accurate to 1e-20 with iter>26
         //  1 should be accurate to 1e-20 with iter>71
+
+        //again sinh(G)/(2*exp(G)*G') < exterior < 2*sinh(G)/G'   G=ln(f)/2^iter   G'=f'/(2^iter*f)       sinh(G)=(exp(G)-exp(-G))/2
+        // (exp(ln(f)/2^iter)-exp(-ln(f)/2^iter))/2/(2*exp(ln(f)/2^iter)*f'/(2^iter*f)) < exterior < (exp(G)-exp(-G))/f'*(2^iter*f)
+        // X=ln(f)/2^iter (=G)   E=2*ln(f)*f/f'
+        // (1-1/exp(X)^2)*(2^iter)*f/f'/4 < exterior < (exp(G)-exp(-G))/f'*(2^iter*f)
+        // (1-1/exp(X)^2)/X/2*E/4 < exterior < (exp(X)-exp(-X))/X/2*E
+
+        //f0(z)=phi(fc(antiphi(z)))    z=phi(fc(antiphi(u)))
+        //f0(f0(u))=phi(fc(fc(antiphi(u))))    u=phi(fc(antiphi(v)))
+        //f0(f0(f0(v)))=phi(fc(fc(fc(antiphi(v)))))  phi(large)=large
+        //f0(f0(f0(v)))=fc(fc(fc(antiphi(v))))    v=phi(w)
+        //f0(f0(f0(phi(w))))=fc(fc(fc(w)))
+        //phi(w)^(2^iter)=fc(fc(fc(w)))
+        //phi(w)=fc(fc(fc(w)))/(2^iter)
+        //G(w)=ln(phi(w))=ln(fc(fc(fc(w))))/(2^iter)
+        //G=ln(f)/(2^iter)   G'=f'/f/(2^iter)
+        //sinh(G)/(2*exp(G)*G') < exterior < 2*sinh(G)/G'
+        //approx RHS: exp(G)/G'=exp(ln(f)/(2^iter))/f'*f*2^iter
+        //(1-1/exp(G)^2)*f/f'*(2^iter)/4 < exterior < (exp(G)-exp(-G))/f'*f*(2^iter)
         double fm=currentData.f.getMag_double();
         double fcm=currentData.fc_c.getMag_double();
         double x=log(fm);
@@ -4531,17 +4597,19 @@ void MandelEvaluator<BASE>::evaluate(int juliaPeriod)
         { }
         else
         {
-          x=ldexp(x, -1-currentData.store->iter);
+          double G=ldexp(x, -1-currentData.store->iter);
           if (currentData.store->iter>26)
           {
-            currentData.store->exterior_hits+=x*x/6*currentData.store->exterior_hits;
-            currentData.store->exterior_avoids+=x*(x*2/3-1)*currentData.store->exterior_avoids;
+            currentData.store->exterior_hits+=G*G/6*currentData.store->exterior_hits;
+            currentData.store->exterior_avoids+=G*(G*2/3-1)*currentData.store->exterior_avoids;
           }
           else
           {
-            double ex=exp(x);
-            currentData.store->exterior_hits*=(ex-1/ex)/x/2;
-            currentData.store->exterior_avoids*=(1-1/(ex*ex))/x/2;
+            //double ex=exp(x);
+            //currentData.store->exterior_hits*=(ex-1/ex)/x/2;
+            //currentData.store->exterior_avoids*=(1-1/(ex*ex))/x/2;
+            currentData.store->exterior_hits=ldexp((exp(G)-1/exp(G))*sqrt(fm/fcm), currentData.store->iter);
+            currentData.store->exterior_avoids=ldexp((1-1/exp(2*G))*sqrt(fm/fcm), currentData.store->iter-2);
           }
         }
       }
@@ -4774,7 +4842,115 @@ void MandelEvaluator<BASE>::evaluate(int juliaPeriod)
         currentData.store->rstate=MandelPointStore::ResultState::stPeriod2;
         currentData.store->period=foundperiod;
         currentData.store->newton_iter=newtres.cyclesNeeded;
-        currentData.store->period=estimateInterior(foundperiod, &currentParams.c, &currentData.root);
+        if (juliaPeriod>0)
+        {
+          /*
+          loope.eval_zz(&tmp, juliaPeriod, &currentParams.c, &currentParams.first_z, false, true); //this is the same for all points...
+          interior.inte_abs.assign(*loope.f_z.getMag_tmp(&tmp));
+          interior.inte_abs.sqrt();
+          interior.fz.assign(&loope.f_z); //later moved to currentData.fz_r
+          //interior.inte_abs.chs();
+          //interior.inte_abs.add_double(1);
+          loope.eval_zz(&tmp, juliaPeriod, &currentParams.c, &currentData.root, false, true); //this is the same for all points...
+          interior.fz_mag.assign(*loope.f_zz.getMag_tmp(&tmp));
+          interior.fz_mag.recip();
+          interior.inte_abs.mul(interior.fz_mag);
+          //currentData.store->period=estimateInterior(foundperiod, &currentParams.c, &currentData.root);
+          */
+          //find the root we will converge to
+          loope.eval_zz(&tmp, (currentData.store->nearziter_0+juliaPeriod-1)%juliaPeriod, &currentParams.c, &currentData.root, false, true);
+          interior.inte.assign(&loope.f);
+          //alpha=f'^period[r0]
+          loope.eval_zz(&tmp, juliaPeriod, &currentParams.c, &currentData.root, false, true); //this is the same for all points...
+          interior.alpha.assign(&loope.f_z);
+          interior.alpha.recip(&tmp);
+          interior.alphak.zero(1.0, 0);
+          //and let's go
+          loope.eval_zz(&tmp, 0, &currentParams.c, &currentParams.first_z, false, true);
+          double stop_at=interior.alpha.getMag_double()*loope.f.re.eps234();
+          for (int i=0; i<currentData.store->iter*100/juliaPeriod; i++)
+          {
+            //if ((currentData.store->iter*10-i)%juliaPeriod==0)
+            {
+              if (interior.inte.dist2_double(&loope.f, &tmp)<stop_at)
+                break;
+            };
+            // //new_de = old_de*(1-d/(z0+d)/2)    z0=root d=f-root
+            //new_de = old_de*(1-(z0-r0)/z0/2)
+            /*bulb.t1.assign(&loope.f);
+            bulb.t1.sub(&currentData.fz_r);
+            bulb.t2.assign(&loope.f);
+            bulb.t2.recip(&tmp);
+            bulb.t2.mul(&bulb.t1, &tmp);
+            bulb.t2.lshift(-1);
+            bulb.t2.chs();
+            bulb.t2.re.add_double(1);
+            interior.inte.mul(&bulb.t2, &tmp);
+            //advance root
+            currentData.fz_r.sqr(&tmp);
+            currentData.fz_r.add(&currentParams.c);*/
+            //advance f
+            //loope.f.sqr(&tmp);
+            //loope.f.add(&currentParams.c);
+            loope.eval_zz(&tmp, juliaPeriod, &currentParams.c, &currentData.root, false, false);
+            interior.alphak.mul(&interior.alpha, &tmp);
+            //what would be the effect on f_zz if I multiplied f_z by alpha?
+          }
+          /*
+          in summary
+            P=1+(f-r)*alpha^k   could use 2*P
+            G=-1/P*f'*alpha^k
+            Q=alpha^k*(2*f''*P - 3*alpha^k*f'^2)/P^2   QQ=alpha^k*(2*f''*P - 3*alpha^k*f'^2)=2*f''*P*alpha^k - 3*(alpha^k*f')^2
+            d.e.=-2/(G+-sqrt(Q)) = 2*P/(f'*alpha^k+-sqrt(QQ))
+          */
+          interior.inte.rsub(&loope.f);
+          interior.inte.mul(&interior.alphak, &tmp); //
+        interior.fz.assign(&interior.inte); //(f-r)*alpha^k for painting
+          bulb.t3.assign(&interior.inte);
+          bulb.t3.sign(&tmp); //b
+          interior.inte.add(&bulb.t3); //P
+          bulb.t3.assign(&loope.f_z);
+          bulb.t3.mul(&interior.alphak, &tmp); //alpha^k*f'
+          bulb.t1.assign(&loope.f_zz);
+          bulb.t1.lshift(1);
+          bulb.t1.mul(&interior.alphak, &tmp); //
+        //interior.fz.assign(&bulb.t1); //2*f''*alpha^k for painting
+          bulb.t1.mul(&interior.inte, &tmp); //2*f''*P*alpha^k
+          bulb.t2.assign(&bulb.t3);
+          bulb.t2.sqr(&tmp);
+          bulb.t2.mul_double(3); //3*(alpha^k*f')^2
+          bulb.t1.sub(&bulb.t2); //QQ
+          bulb.t1.sqrt(&tmp);
+          if (bulb.t1.mulreT_tmp(&bulb.t3, &tmp)->toDouble()<0)      //!!!!!!!!!! check
+            bulb.t1.chs();
+          bulb.t1.add(&bulb.t3);
+          bulb.t1.recip(&tmp);
+          interior.inte.mul(&bulb.t1, &tmp);
+          interior.inte.lshift(1);
+          interior.inte_abs.assign(*interior.inte.getMag_tmp(&tmp));
+          interior.inte_abs.sqrt();
+
+          //for painting
+          //(f-r)*alpha^k above
+          //interior.fz.assign(&bulb.t3); //f'*alpha^k
+          //2*f''*alpha^k above
+          //interior.fz.assign(&interior.inte); //complex distance estimate
+
+
+
+          //interior.inte_abs.recip();
+          //de=1/(f''[r0]/f'[r0]-f'[z0]/(z2-r2))
+          /*interior.inte.recip(&tmp);
+          loope.eval_zz(&tmp, currentData.store->iter+10, &currentParams.c, &currentData.root, false, true);
+          loope.f_z.recip(&tmp);
+          loope.f_zz.mul(&loope.f_z, &tmp);
+          interior.inte.rsub(&loope.f_zz);
+          interior.inte.recip(&tmp);
+          interior.inte_abs.assign(*interior.inte.getMag_tmp(&tmp));
+          interior.inte_abs.sqrt();*/
+        }
+        else
+          currentData.store->period=estimateInterior(foundperiod, &currentParams.c, &currentData.root);
         if (interior.inte_abs.isl0())
           currentData.store->rstate=MandelPointStore::ResultState::stMisiur;
         else
@@ -4811,12 +4987,12 @@ void MandelEvaluator<BASE>::evaluate(int juliaPeriod)
     if (currentData.store->iter>10000)
       currentData.extangle.zero(ExtAngle::SPECIAL_VALUE_DEEP);
     else if (juliaPeriod>0)
-      extangle.computeDynamic(&currentData.extangle, currentData.store->iter, &currentParams.c, &currentParams.first_z, &tmp);
+      extangle.computeMJ(&currentData.extangle, false, currentData.store->iter, &currentParams.c, &currentParams.first_z, &tmp);
     else
-      extangle.compute3(&currentData.extangle, currentData.store->iter, &currentParams.c, &tmp);
+      extangle.computeMJ(&currentData.extangle, true, currentData.store->iter, &currentParams.c, &currentParams.first_z, &tmp);
+      //extangle.compute3(&currentData.extangle, currentData.store->iter, &currentParams.c, &tmp);
     currentData.store->rstate=MandelPointStore::ResultState::stOutAngle;
   };
-
 }
 
 
@@ -4856,7 +5032,7 @@ MandelEvaluator<BASE>::Newt::Newt(MandelMath::NumberType ntype):
 
 template<typename BASE>
 MandelEvaluator<BASE>::InteriorInfo::InteriorInfo(MandelMath::NumberType ntype):
-  inte(ntype), inte_abs(ntype), fz(ntype), fz_mag(ntype)
+  inte(ntype), inte_abs(ntype), fz(ntype), fz_mag(ntype), alpha(ntype), alphak(ntype)
 {
   //working_assert(self_allocator.checkFill());
 }
@@ -4867,7 +5043,6 @@ MandelEvaluator<BASE>::ExtAngle::ExtAngle(MandelMath::NumberType ntype, MandelLo
   z(ntype), r_(ntype), angleC(ntype), angle(ntype), x(ntype), target(ntype),
   dldlz(ntype), d2ldlz2(ntype), dbg(ntype)
 {
-  ladder=MandelMath::number<BASE>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, 2*MAX_LADDER);
 }
 
 template<>
@@ -4882,19 +5057,14 @@ MandelEvaluator<MandelMath::number_a *>::ExtAngle::ExtAngle(MandelMath::NumberTy
       dbgPoint();
       goto lolwut;
     case MandelMath::NumberType::typeDouble: lolwut:
-      ladder=(MandelMath::number_a **)MandelMath::number<double>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, 2*MAX_LADDER);
       break;
     case MandelMath::NumberType::typeFloat128:
-      ladder=(MandelMath::number_a **)MandelMath::number<__float128>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, 2*MAX_LADDER);
       break;
     case MandelMath::NumberType::typeDDouble:
-      ladder=(MandelMath::number_a **)MandelMath::number<MandelMath::dd_real>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, 2*MAX_LADDER);
       break;
     case MandelMath::NumberType::typeQDouble:
-      ladder=(MandelMath::number_a **)MandelMath::number<MandelMath::dq_real>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, 2*MAX_LADDER);
       break;
     case MandelMath::NumberType::typeReal642:
-      ladder=(MandelMath::number_a **)MandelMath::number<MandelMath::real642>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, 2*MAX_LADDER);
       break;
   }
 }
@@ -4902,7 +5072,6 @@ MandelEvaluator<MandelMath::number_a *>::ExtAngle::ExtAngle(MandelMath::NumberTy
 template<class BASE>
 MandelEvaluator<BASE>::ExtAngle::~ExtAngle()
 {
-  delete[] ladder;
   loope=nullptr;
 }
 
@@ -4916,321 +5085,23 @@ MandelEvaluator<MandelMath::number_a *>::ExtAngle::~ExtAngle()
       break;
     case MandelMath::NumberType::typeDouble:
     {
-      double *typed=(double *)ladder;
-      delete[] typed;
     } break;
     case MandelMath::NumberType::typeFloat128:
     {
-      __float128 *typed=(__float128 *)ladder;
-      delete[] typed;
     } break;
     case MandelMath::NumberType::typeDDouble:
     {
-      MandelMath::dd_real *typed=(MandelMath::dd_real *)ladder;
-      delete[] typed;
     } break;
     case MandelMath::NumberType::typeQDouble:
     {
-      MandelMath::dq_real *typed=(MandelMath::dq_real *)ladder;
-      delete[] typed;
     } break;
     case MandelMath::NumberType::typeReal642:
     {
-      MandelMath::real642 *typed=(MandelMath::real642 *)ladder;
-      delete[] typed;
     } break;
   }
-  ladder=nullptr;
 }
 
-template<class BASE>
-void MandelEvaluator<BASE>::ExtAngle::compute(MandelMath::number<BASE> *result, int iter, const MandelMath::complex<BASE> *c, typename MandelMath::complex<BASE>::Scratchpad *tmp)
-{
-  if (iter>MAX_LADDER)
-    iter=MAX_LADDER;
-  z.assign(c);
-  int ladder_len=MAX_LADDER;
-  for (int i=0; i<MAX_LADDER; i++)
-  {
-    z.writeTo(ladder, i*2);
-    z.sqr(tmp);
-    z.add(c);
-    double d2=z.getMag_double();
-    if (d2>SAFE_RADIUS*SAFE_RADIUS)
-    {
-      ladder_len=i+1;
-      break;
-    };
-  };
-
-  //fixed point of z^2+c: z^2-z+c=0
-  //z=(1+-sqrt(1-4c))/2 = 0.5+-sqrt(0.25-c)  choosing the root with same .im as c
-  r_.zero(0.25, 0);
-  r_.sub(c);
-  r_.sqrt(tmp);
-  if ((r_.im.isl0() && c->im.isl0()) ||
-      (!r_.im.isle0() && !c->im.isle0()))
-  {
-  }
-  else
-  {
-    r_.chs();
-  }
-  r_.re.add_double(0.5);
-  z.readFrom(ladder, (ladder_len-1)*2);
-  z.arctan2(&angleC, tmp);
-  int pow2=-1;
-  for (int i=0; i<80; i++) //TODO: log2(c->re.eps())
-  {
-    z.sqr(tmp);
-    x.assign(&z);
-    z.add(c);
-    //x.assign(&z);
-    //x.sub(c);
-    x.recip(tmp);
-    x.mul(&z, tmp); //z/(z-c)
-    x.arctan2(&angle, tmp);
-      //this improvement is taken from Wolf Jung,
-      //  source codes of Mandel 5.0
-      //  http://www.mndynamics.com/indexp.html
-      /*if (MAX_LADDER>1) and //don't do it if using "naive" estimate
-         (((cn.im*c.re - cn.re*c.im)*(r.im*c.re - r.re*c.im)) > 0) and
-         (((cn.im*r.re - cn.re*r.im)*(c.im*r.re - c.re*r.im)) > 0) and
-         ((((c.im-cn.im)*(c.re-r.re) - (c.re-cn.re)*(c.im-r.im))*(c.re*r.im - c.im*r.re)) > 0) then
-        begin
-          //actually it means cn is in the triangle 0-c-r
-          if (ap>0) then
-            ap:=ap-2*Pi
-          else
-            ap:=ap+2*Pi;
-        end;*/
-    angle.lshift(pow2);
-    angleC.add(angle);
-    pow2--;
-    if (x.im.is0() || (z.getMag_double()>LARGE_FLOAT2))
-      break;
-  };
-  while (angleC.reduceAngle()) ;
-
-  for (int i=ladder_len-2; i>=0; i--)
-  {
-    for (int j=i+1; j<ladder_len-1; j++)
-    { //build a chain
-//          if (divider[j].re*divider[j].re+divider[j].im*divider[j].im)<0.1 then
-      x.readFrom(ladder, 2*(j+1));
-      r_.readFrom(ladder, 2*(j-1));
-      x.sub(c);
-      x.sqrt(tmp);
-      double d1=r_.dist2_double(&x, tmp);
-      x.chs();
-      double d2=r_.dist2_double(&x, tmp);
-      if (d1<d2)
-        x.chs();
-      x.writeTo(ladder, 2*j);
-    };
-    x.readFrom(ladder, 2*(ladder_len-2));
-    //don't need full accuracy here r.cossin(angleC, tmp);
-    //r.mul_double(SAFE_RADIUS);
-    angleC.lshift(-1);
-    r_.zero(cos(angleC.toDouble())*SAFE_RADIUS, sin(angleC.toDouble())*SAFE_RADIUS);
-    double d1=x.dist2_double(&r_, tmp);
-    r_.chs();
-    double d2=x.dist2_double(&r_, tmp);
-    if (d1<d2)
-      r_.chs();
-    else
-    {
-      if (angleC.isl0()) //stay in -pi<=x<pi
-        angleC.add_pi(1);
-      else
-        angleC.add_pi(-1);
-    }
-    r_.writeTo(ladder, 2*(ladder_len-1));
-  };
-  result->assign(angleC);
-  //279/1023 (=3/11), 280/1023
-}
-
-template <class BASE>
-void MandelEvaluator<BASE>::ExtAngle::preciseAngle(const complex *c, complex *z, number *result, typename complex::Scratchpad *tmp)
-{
-  /*z.arctan2(&angleC, tmp);
-  int pow2=-1;
-  for (int i=0; i<80; i++) //TODO: log2(c->re.eps())
-  {
-    z.sqr(tmp);
-    x.assign(&z);
-    z.add(c);
-    x.recip(tmp);
-    x.mul(&z, tmp); //(z^2+c)/(z^2)
-    x.arctan2(&angle, tmp);
-    angle.lshift(pow2);
-    angleC.add(angle);
-    pow2--;
-    if (x.im.is0() || (z.getMag_double()>LARGE_FLOAT2))
-      break;
-  };*/
-
-  //same but trading storage+sqrt for arctan2
-  z->writeTo(ladder, 0*2);
-  for (int i=1; i<=6; i++) //starting at |f|=6, worst case to reach |f|>2^112 is 6 iterations
-  {
-    z->sqr(tmp);
-    z->writeTo(ladder, i*2);
-    z->add(c);
-  }
-  r_.zero(1, 0);
-  for (int i=6; i>=1; i--)
-  {
-    x.readFrom(ladder, i*2);
-    x.recip(tmp);
-    x.mul(c, tmp);
-    x.re.add_double(1);
-    r_.mul(&x, tmp);
-    r_.sqrt(tmp);
-  }
-  x.readFrom(ladder, 0*2);
-  r_.mul(&x, tmp);
-  r_.arctan2(result, tmp);
-}
-
-template<class BASE>
-void MandelEvaluator<BASE>::ExtAngle::compute2_(MandelMath::number<BASE> *result, int iter, const MandelMath::complex<BASE> *c, typename MandelMath::complex<BASE>::Scratchpad *tmp)
-{
-  //we should have iter such that |f_c^iter(c)|>10000
-  {
-    int more_pwr=int(-std::log(result->eps2())/std::log(1e8));
-    more_pwr|=more_pwr>>1;
-    more_pwr|=more_pwr>>2;
-    more_pwr|=more_pwr>>4;
-    more_pwr|=more_pwr>>8; //more_pwr should be < 2^6, we're good up to 2^15
-    int more_bits=MandelMath::ctz16(more_pwr+1);
-    iter+=more_bits;
-  }
-  z.assign(c);
-  angleC.zero(0);
-  angle.zero(0);
-  bool veryfirst=true;
-  constexpr int ANGLE_ZOOM=2;
-  for (; iter>=1+ANGLE_ZOOM; iter--)
-  {
-    bool x_im_neg=false;
-    for (int i=0; i<10; i++)
-    {
-      if (!loope->eval_ext_mand(tmp, &z, iter-1))
-      {
-        result->zero(angleC.toDouble()+2*M_PI*angle.toDouble());
-        return;
-      };
-      if (veryfirst)
-      {
-        veryfirst=false;
-        target.assign(&loope->f);
-        target.sqr(tmp);
-        target.add(&z);
-        target.arctan2(&angleC, tmp);
-      };
-      //here do some magic with f and f_c -> deltac (stored in r)
-      /*x.assign(&target);
-      x.sub(&loope->f);
-      r.assign(&loope->f_c);
-      r.recip(tmp);
-      r.mul(&x, tmp);
-      z.add(&r); //z+=(target-f)/f_c*/
-
-      //in log-log space: ln(z)+=(ln(target)-ln(f))/ dlog/dlogz f
-      //dlog/dlogz f=z f'/f
-      //z*=exp( ln(target/f)/ (z f'/f) ) = exp( ln(target/f)*f/(z f') )
-      x.assign(&loope->f);
-      x.recip(tmp);
-      x.mul(&target, tmp);
-      if (i==0)
-      {
-        x_im_neg=x.im.isle0();
-        if (x.re.isl0())
-        {
-          if (x_im_neg)
-          {
-            angle.add_double(-2);
-          }
-          else
-            angle.add_double(2);
-        };
-        angleC.lshift(-1);
-        angle.lshift(-1);
-      };
-      /*if (i>0 && x.re.isl0())
-      {
-        x.ln_approx();
-        if (x_im_neg && x.im.isl0())
-          x.im.add_pi(2);
-        else if (!x_im_neg && !x.im.isl0())
-          x.im.add_pi(-2);
-      }
-      else*/
-        x.ln_approx();
-
-      //solve Bz=C  B=z f_c/f  C=x  -> x f/(z f_c)
-      /*dldlz.assign(&loope->f_c);
-      dldlz.mul(&z, tmp);
-      dldlz.recip(tmp);
-      dldlz.mul(&loope->f, tmp); //f/(z f') = 1/(dlog/dlog z f(z))
-      //x.mul(&dldlz, tmp);*/
-
-      //find root of function where
-      // //f''=z^2 f_cc / f     f'=z f_c/f   f=x
-      // //  A=z^2 f_cc         B=z f_c      C=x*f
-      //f''=z^2 f'^2/f^2 (f''*f/f'^2 - 1) + z f'/f     f'=z f'/f   f=x
-      dldlz.assign(&loope->f);
-      dldlz.recip(tmp);
-      dldlz.mul(&z, tmp); // z/f
-      dldlz.mul(&loope->f_c, tmp); // z f'/f
-      d2ldlz2.assign(&loope->f_cc);
-      d2ldlz2.mul(&loope->f, tmp);
-      r_.assign(&loope->f_c);
-      r_.sqr(tmp);
-      r_.recip(tmp);
-      d2ldlz2.mul(&r_, tmp);
-      d2ldlz2.re.add_double(-1.0);
-      d2ldlz2.mul(&dldlz, tmp);
-      d2ldlz2.re.add_double(1.0);
-      d2ldlz2.mul(&dldlz, tmp);
-      //d2ldlz2.zero(0, 0);
-      x.chs(); //we need step x, not ...+x=0
-      lagus->eval(tmp, 1e4, &x, &dldlz, &d2ldlz2);
-      x.assign(&lagus->step);
-      x.chs(); //lagu produces value to be .sub()-ed
-
-      bool brake=false;//(x.re.toDouble()<x.re.eps234()); //we need eps() but don't have it implemented
-      x.exp_approx();
-      z.mul(&x, tmp);
-      if (brake)
-        break;
-    }
-    if (owner->workIfEpoch<0)
-    {
-      result->zero(0);
-      return;
-    };
-  }
-  if (veryfirst)
-  {
-    /*veryfirst=false;
-    c->arctan2(&angleC, tmp);
-    angleC.lshift(ANGLE_ZOOM);*/
-    if (!loope->eval_ext_mand(tmp, c, ANGLE_ZOOM))
-    {
-      c->arctan2(&angleC, tmp);
-      angleC.lshift(ANGLE_ZOOM);
-    }
-    else
-      loope->f.arctan2(&angleC, tmp);
-  };
-  result->assign(angleC);
-  result->add_pi(-angle.toDouble());
-  //result->add(angle); //*2*pi
-}
-
+#if 0
 template<class BASE>
 void MandelEvaluator<BASE>::ExtAngle::compute3(MandelMath::number<BASE> *result, int iter, const MandelMath::complex<BASE> *c, typename MandelMath::complex<BASE>::Scratchpad *tmp)
 {
@@ -5532,9 +5403,10 @@ z, fill ? by making each quadrant uniform
   result->add_pi(angle.toDouble());
   //result->add(angle); //*2*pi
 }
+#endif
 
 template<class BASE>
-void MandelEvaluator<BASE>::ExtAngle::computeDynamic(MandelMath::number<BASE> *result, int iter, const MandelMath::complex<BASE> *c, const MandelMath::complex<BASE> *zz, typename MandelMath::complex<BASE>::Scratchpad *tmp)
+void MandelEvaluator<BASE>::ExtAngle::computeMJ(MandelMath::number<BASE> *result, bool mandel, int iter, const MandelMath::complex<BASE> *c, const MandelMath::complex<BASE> *zz, typename MandelMath::complex<BASE>::Scratchpad *tmp)
 {
   //on input, we should have iter such that |f_c^iter(c)|>10000
   //need to limit step to less than ~ exp(pi) to eliminate skips; exp(pi)~23 so we need radius~sqrt(sqrt(10000))
@@ -5549,6 +5421,7 @@ void MandelEvaluator<BASE>::ExtAngle::computeDynamic(MandelMath::number<BASE> *r
   //  iter=61;
 
   z.assign(zz);
+  //life would be easier with: if (mandel) c=&z;
   angleC.zero(0);
   angle.zero(0);
   bool veryfirst=true;
@@ -5559,7 +5432,7 @@ void MandelEvaluator<BASE>::ExtAngle::computeDynamic(MandelMath::number<BASE> *r
   {
     for (int i=0; i<10; i++)
     {
-      if (!loope->eval_ext_mandZ(tmp, c, &z, iter-1))
+      if (!loope->eval_ext_mandMJ(tmp, mandel?1.0:0.0, mandel?&z:c, &z, iter-1))
       {
         result->zero(SPECIAL_VALUE_EDGE);
         return;
@@ -5596,9 +5469,9 @@ z, fill ? by making each quadrant uniform
             x.assign(&r_);
             if (r_.isNegative()) way|=0x01; //.im<0 is not enough to tell -3 from +3
             r_.sqr(tmp);
-            if (r_.im.isl0()) way|=0x04;
+            if (r_.isNegative()) way|=0x04; //.im.isl0 creates thin strips in Julia with c=0
             target.assign(&r_);
-            r_.add(c);
+            r_.add(mandel?&z:c);
             if (r_.isNegative()) way|=0x08;
             if (r_.ccw_tmp(&target, tmp)->isl0()) way|=0x02;
             double step=0;
@@ -5661,8 +5534,8 @@ z, fill ? by making each quadrant uniform
           int way=0;
           if (target.isNegative()) way|=0x08; //negative() needed over im<0 during forward iteration
           r_.assign(&target);
-          target.sub(c);
-          if (target.im.isl0()) way|=0x04;
+          target.sub(mandel?&z:c);
+          if (target.isNegative()) way|=0x04; //.im.isl0 creates thin strips in Julia with c=0
           //r_.recip(tmp);
           //r_.mul(&target, tmp);
           //if (r_.im.isl0()) way|=0x02;
@@ -5821,7 +5694,7 @@ z, fill ? by making each quadrant uniform
     /*veryfirst=false;
     c->arctan2(&angleC, tmp);
     angleC.lshift(ANGLE_ZOOM);*/
-    if (!loope->eval_ext_mandZ(tmp, c, &z, ANGLE_ZOOM))
+    if (!loope->eval_ext_mandMJ(tmp, mandel?1.0:0.0, mandel?&z:c, &z, ANGLE_ZOOM))
     {
       z.arctan2(&angleC, tmp);
       angleC.lshift(ANGLE_ZOOM);

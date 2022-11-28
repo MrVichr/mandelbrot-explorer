@@ -2779,7 +2779,10 @@ void complex<BASE>::cossin(number<BASE> &angle, Scratchpad *tmp)
 template<typename BASE>
 void complex<BASE>::arctan2(number<BASE> *result, Scratchpad *tmp) const
 {
-  result->zero(std::atan2(im.toDouble(), re.toDouble()));
+  if (im.is0() && re.isl0())
+    result->zero(std::atan2(-0, 1));
+  else
+    result->zero(std::atan2(im.toDouble(), re.toDouble()));
   (void)tmp;
 }
 
@@ -2854,7 +2857,6 @@ const number<BASE> *complex<BASE>::ccw_tmp(const complex *other, Scratchpad *tmp
   tmp->tmp2.mul(other->re);
   tmp->tmp1.sub(tmp->tmp2); //re*o.im-im*o.re
   return &tmp->tmp1;
-
 }
 
 template<typename BASE>

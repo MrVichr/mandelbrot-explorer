@@ -313,11 +313,40 @@ ShareableViewInfo MandelModel::makeViewInfo(const QVariantMap &params)
   ShareableViewInfo result(precisionRecord->ntype);
   result.scale=params.value("viewZoom", 0.0).toDouble();
   result.c.zero(params.value("cRe", 0.0).toDouble(), params.value("cIm", 0.0).toDouble());
-  result.root.zero(0, 0);
+  //have to be correct result.root.zero(0, 0);
   result.juliaPeriod=params.value("period", 1<<MAX_EFFORT).toInt();
   result.nth_fz=result.juliaPeriod;
   precisionRecord->lagu_c.zero(params.value("cRe", 0.0).toDouble(), params.value("cIm", 0.0).toDouble());
   precisionRecord->lagu_r.zero(0,0);
+
+  //compute the root
+  precisionRecord->orbit.evaluator.currentParams.first_z.assign(&result.c);
+  precisionRecord->orbit.evaluator.currentParams.epoch=epoch;
+  precisionRecord->orbit.evaluator.workIfEpoch=precisionRecord->orbit.evaluator.busyEpoch;//epoch;
+  precisionRecord->orbit.evaluator.currentParams.pixelIndex=0;
+  precisionRecord->orbit.evaluator.currentParams.c.assign(&precisionRecord->orbit.evaluator.currentParams.first_z);
+  //already 0 precisionRecord->orbit.evaluator.currentParams.nth_fz=0;
+  //precisionRecord->orbit.evaluator.currentData.store->rstate=MandelPointStore::ResultState::stUnknown_;
+  //precisionRecord->orbit.evaluator.currentData.store->wstate=MandelPointStore::WorkState::stIdle;
+  precisionRecord->orbit.evaluator.currentData.zero(&precisionRecord->orbit.evaluator.currentParams.first_z);
+  precisionRecord->orbit.evaluator.currentData.store->wstate=MandelPointStore::WorkState::stWorking;
+  precisionRecord->orbit.evaluator.currentParams.breakOnNewNearest=false;
+  precisionRecord->orbit.evaluator.currentParams.maxiter=1<<MAX_EFFORT;
+  precisionRecord->orbit.evaluator.currentParams.want_extangle=false;//don't need for root
+  {
+    while ((precisionRecord->orbit.evaluator.currentData.store->rstate==MandelPointStore::ResultState::stUnknown) &&
+           (precisionRecord->orbit.evaluator.currentData.store->iter<(1<<MAX_EFFORT)))
+    {
+      //precisionRecord->orbit.evaluator.currentParams.maxiter=1<<MAX_EFFORT; //dont't know->run fully
+      precisionRecord->orbit.evaluator.thread.syncMandel();
+    }
+  }
+  if (precisionRecord->orbit.evaluator.currentData.store->rstate==MandelPointStore::ResultState::stPeriod2 ||
+      precisionRecord->orbit.evaluator.currentData.store->rstate==MandelPointStore::ResultState::stPeriod3)
+    result.root.assign(&precisionRecord->orbit.evaluator.currentData.root);
+  else
+    result.root.zero(0, 0);
+
   return result;
 }
 
