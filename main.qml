@@ -155,8 +155,11 @@ Window {
                     ListElement { text: "ExtAng"; key: 3 }//mandelModel.paintStyleExter  }
                     ListElement { text: "Inter"; key: 4 }//mandelModel.paintStyleInter  }
                     ListElement { text: "Near"; key: 5 }//mandelModel.paintStyleNear  }
-                    ListElement { text: "d/dz"; key: 6 }//mandelModel.paintStyleFZ  }
-                    ListElement { text: "d/dc"; key: 7 }//mandelModel.paintStyleFC  }
+                    ListElement { text: "phi"; key: 6 }//
+                    ListElement { text: "phi\'"; key: 7 }//
+                    ListElement { text: "phi\'\'"; key: 8 }//
+                    ListElement { text: "f\'"; key: 9 }//
+                    ListElement { text: "|f'|<1"; key: 10 }//
                 }
                 onActivated: juliaModel.selectedPaintStyle=julia_paintstyle_model.get(currentIndex).key;
             }

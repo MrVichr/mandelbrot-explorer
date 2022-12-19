@@ -46,8 +46,6 @@ struct LaguerrePoint
 
 struct MandelPointStore
 {
-  //TODO: split into state_working { idle, working, resolved }, result { unknown, period2, ... }
-  //because we still work on known result for fc_r
   enum WorkState { stIdle, stWorking, stDone };
   std::atomic<WorkState> wstate;
   enum ResultState { stUnknown, stOutside, stOutAngle, stBoundary, stMisiur, stDiverge, stPeriod2, stPeriod3, stMaxIter };
@@ -61,7 +59,17 @@ struct MandelPointStore
   int surehand;
   int iter, newton_iter;
   double exterior_hits, exterior_avoids; //upper and lower bound
-  double interior;
+  struct
+  {
+    double hits;
+    double hits_re, hits_im; //julia only for now
+    double phi_re, phi_im; //julia only for now
+    double phi1_re, phi1_im; //julia only for now
+    double phi2_re, phi2_im; //julia only for now
+    double f1_re, f1_im; //julia only for now
+    int first_under_1;
+    void zero() {hits=-1; hits_re=0; hits_im=0; phi_re=0; phi_im=0; phi1_re=0; phi1_im=0; phi_re=0; phi2_im=0; f1_re=0; f1_im=0; first_under_1=0; }
+  } interior;
 
   MandelPointStore();
   void assign(const MandelPointStore *src);

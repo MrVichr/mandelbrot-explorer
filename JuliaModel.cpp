@@ -149,17 +149,27 @@ QString JuliaModel::getTextInfoGen()
       state="Misiur"; fc_fz=" fc="+data->fc_c.toString(); break;
     case MandelPointStore::ResultState::stPeriod2:
       state="Per2";
-      if (_selectedPaintStyle==paintStyleFZ)
-        fc_fz=" fz="+data->fz_r.toString();
-      else
-        fc_fz=" fc="+data->fc_c.toString();
+      switch (_selectedPaintStyle)
+      {
+        case paintStylePhi: fc_fz=" fi="+QString::number(data_store->interior.phi_re)+"+i*"+QString::number(data_store->interior.phi_im); break;
+        case paintStylePhi1: fc_fz=" fi'="+QString::number(data_store->interior.phi1_re)+"+i*"+QString::number(data_store->interior.phi1_im); break;
+        case paintStylePhi2: fc_fz=" fi''="+QString::number(data_store->interior.phi2_re)+"+i*"+QString::number(data_store->interior.phi2_im); break;
+        case paintStyleF1: fc_fz=" f'="+QString::number(data_store->interior.f1_re)+"+i*"+QString::number(data_store->interior.f1_im); break;
+        case paintStyleFirstUnder1: fc_fz=" first="+QString::number(data_store->interior.first_under_1); break;
+        default: fc_fz=" fc="+data->fc_c.toString();
+      }
       break;
     case MandelPointStore::ResultState::stPeriod3:
       state="Per3";
-      if (_selectedPaintStyle==paintStyleFZ)
-        fc_fz=" fz="+data->fz_r.toString();
-      else
-        fc_fz=" fc="+data->fc_c.toString();
+      switch (_selectedPaintStyle)
+      {
+        case paintStylePhi: fc_fz=" fi="+QString::number(data_store->interior.phi_re)+"+i*"+QString::number(data_store->interior.phi_im); break;
+        case paintStylePhi1: fc_fz=" fi'="+QString::number(data_store->interior.phi1_re)+"+i*"+QString::number(data_store->interior.phi1_im); break;
+        case paintStylePhi2: fc_fz=" fi''="+QString::number(data_store->interior.phi2_re)+"+i*"+QString::number(data_store->interior.phi2_im); break;
+        case paintStyleF1: fc_fz=" f'="+QString::number(data_store->interior.f1_re)+"+i*"+QString::number(data_store->interior.f1_im); break;
+        case paintStyleFirstUnder1: fc_fz=" first="+QString::number(data_store->interior.first_under_1); break;
+        default: fc_fz=" fc="+data->fc_c.toString();
+      }
       break;
     case MandelPointStore::ResultState::stMaxIter:
       state="Max"; fc_fz=" fc="+data->fc_c.toString(); break;
@@ -215,14 +225,14 @@ QString JuliaModel::getTextInfoSpec()
     {
       //double p=std::atan2((precisionRecord->orbit.bulb.baseFz_.im.toDouble()),
       //                     precisionRecord->orbit.bulb.baseFz_.re.toDouble())*precisionRecord->orbit.bulb.foundMult_;
-      return QString("per=")+QString::number(data_store->period)+" sure="+QString::number(data_store->surehand)+" int="+QString::number(data_store->interior);
+      return QString("per=")+QString::number(data_store->period)+" sure="+QString::number(data_store->surehand)+" int="+QString::number(data_store->interior.hits);
         //  +" mult="+QString::number(std::round(p/(2*M_PI)))+"/"+QString::number(precisionRecord->orbit.bulb.foundMult_);
     } break;
     case MandelPointStore::ResultState::stPeriod3:
     {
       //double p=std::atan2((precisionRecord->orbit.bulb.baseFz_.im.toDouble()),
       //                     precisionRecord->orbit.bulb.baseFz_.re.toDouble())*precisionRecord->orbit.bulb.foundMult_;
-      return QString("per=")+QString::number(data_store->period)+" sure="+QString::number(data_store->surehand)+" int="+QString::number(data_store->interior);
+      return QString("per=")+QString::number(data_store->period)+" sure="+QString::number(data_store->surehand)+" int="+QString::number(data_store->interior.hits);
         //  +" mult="+QString::number(std::round(p/(2*M_PI)))+"/"+QString::number(precisionRecord->orbit.bulb.foundMult_);
     } break;
     case MandelPointStore::ResultState::stMaxIter:
@@ -722,12 +732,20 @@ void JuliaModel::paintOrbit(ShareableImageWrapper image, int x, int y)
     { //interior distance estimate
       int interior;
       painter.setBrush(Qt::BrushStyle::NoBrush);
-      painter.setPen(QColor(0, 0xff, 0xff));
-      interior=qRound(resultStore->interior/precisionRecord->position.step_size);
-      painter.drawEllipse(x-interior, y-interior, 2*interior, 2*interior);
       painter.setPen(QColor(0, 0xc0, 0xc0));
-      interior=qRound(resultStore->interior/4/precisionRecord->position.step_size);
+      interior=qRound(resultStore->interior.hits/4/precisionRecord->position.step_size);
       painter.drawEllipse(x-interior, y-interior, 2*interior, 2*interior);
+
+      painter.setPen(QColor(0, 0xff, 0xff));
+      interior=qRound(resultStore->interior.hits/precisionRecord->position.step_size);
+      painter.drawEllipse(x-interior, y-interior, 2*interior, 2*interior);
+
+      painter.setPen(QColor(0x00, 0x00, 0x00));
+      int inte_x=qRound(resultStore->interior.hits_re/precisionRecord->position.step_size);
+      int inte_y=qRound(resultStore->interior.hits_im/precisionRecord->position.step_size);
+      painter.drawEllipse(x+inte_x-1, y-inte_y-1, 3, 3);
+      painter.setPen(QColor(0xff, 0xff, 0xff));
+      painter.drawEllipse(+x+inte_x-2, y-inte_y-2, 5, 5);
     } break;
     default: ;
   }
@@ -786,6 +804,72 @@ void JuliaModel::paintOrbit(ShareableImageWrapper image, int x, int y)
       };
     }
   }
+
+  //circle one iteration forward
+  {
+    constexpr int straight=10;
+    constexpr int diagonal=7;
+    constexpr struct {int x; int y;} offsets[]={
+      {.x=0,         .y=0},
+      {.x=+straight, .y=0},
+      {.x=+diagonal, .y=+diagonal},
+      {.x=0,         .y=+straight},
+      {.x=-diagonal, .y=+diagonal},
+      {.x=-straight, .y=0},
+      {.x=-diagonal, .y=-diagonal},
+      {.x=0,         .y=-straight},
+      {.x=+diagonal, .y=-diagonal},
+    };
+    QPoint aroundBefore[9];
+    QPoint aroundAfter[9];
+    QPoint aroundDeriv[9];
+    double f_re, f_im, fz_re, fz_im, fzz_re, fzz_im;
+    for (int around=0; around<=8; around++)
+    {
+      aroundBefore[around].setX(x+offsets[around].x);
+      aroundBefore[around].setY(y-offsets[around].y);
+      precisionRecord->position.pixelXtoRE(aroundBefore[around].x()-imageWidth/2, &precisionRecord->orbit.evaluator.loope.sumA.re);
+      precisionRecord->position.pixelYtoIM(imageHeight/2-aroundBefore[around].y(), &precisionRecord->orbit.evaluator.loope.sumA.im);
+
+      precisionRecord->orbit.evaluator.loope.eval_zz(&precisionRecord->orbit.evaluator.tmp, precisionRecord->params.period*1,
+                                                     &precisionRecord->params.base, &precisionRecord->orbit.evaluator.loope.sumA, false, true);
+
+      int circ_x, circ_y;
+      reimToPixel(&circ_x, &circ_y, &precisionRecord->orbit.evaluator.loope.f, &tmp);
+      aroundAfter[around].setX(circ_x);
+      aroundAfter[around].setY(circ_y);
+      if (around==0)
+      {
+        f_re=precisionRecord->orbit.evaluator.loope.f.re.toDouble();
+        f_im=precisionRecord->orbit.evaluator.loope.f.im.toDouble();
+        fz_re=precisionRecord->orbit.evaluator.loope.f_z.re.toDouble();
+        fz_im=precisionRecord->orbit.evaluator.loope.f_z.im.toDouble();
+        fzz_re=precisionRecord->orbit.evaluator.loope.f_zz.re.toDouble();
+        fzz_im=precisionRecord->orbit.evaluator.loope.f_zz.im.toDouble();
+        aroundDeriv[0].setX(circ_x);
+        aroundDeriv[0].setY(circ_y);
+      }
+      else
+      {
+        double dre=offsets[around].x*precisionRecord->position.step_size;
+        double dim=offsets[around].y*precisionRecord->position.step_size;
+        //(dr+i*di)*(dr+i*di)*(zr+i*zi)=(dr*dr-di*di+2*i*di*dr)*(zr+i*zi)=dr*dr*zr+i*dr*dr*zi-di*di*zr-i*di*di*zi+2*i*di*dr*zr-2*di*dr*zi=
+        //  =dr*dr*zr-di*di*zr-2*di*dr*zi+i*dr*dr*zi-i*di*di*zi+2*i*di*dr*zr
+        double ore=dre*fz_re-dim*fz_im+dre*dre*fzz_re-dim*dim*fzz_re-2*dre*dim*fzz_im;
+        double oim=dre*fz_im+dim*fz_re+dre*dre*fzz_im-dim*dim*fzz_im+2*dre*dim*fzz_re;
+        precisionRecord->orbit.evaluator.loope.sumA.zero(f_re+ore, f_im+oim);
+        reimToPixel(&circ_x, &circ_y, &precisionRecord->orbit.evaluator.loope.sumA, &tmp);
+        aroundDeriv[around].setX(circ_x);
+        aroundDeriv[around].setY(circ_y);
+      }
+    }
+    painter.setPen(QColor(0xff, 0x80, 0xff));
+    painter.drawPolyline(aroundBefore, 9);
+    painter.drawPolyline(aroundAfter, 9);
+    painter.setPen(QColor(0xff, 0xc0, 0xff));
+    painter.drawPolyline(aroundDeriv, 9);
+  }
+
   if ((precisionRecord->orbit.evaluator.currentData.store->rstate==MandelPointStore::ResultState::stPeriod2) ||
       (precisionRecord->orbit.evaluator.currentData.store->rstate==MandelPointStore::ResultState::stPeriod3))
   {
@@ -1065,8 +1149,9 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
             case MandelPointStore::ResultState::stPeriod3:
             {
               //ok but shouldn't use raw iter int index=periodToIndex(wtiStore->iter % wtiStore->period);
-              //ok int index=periodToIndex(wtiStore->nearziter_0 % wtiStore->period);
-              int index=periodToIndex(wtiStore->near0iter_1 % wtiStore->period);//also ok?
+              //ok int index=periodToIndex(wtiStore->nearziter_0 % wtiStore->period); fails with c around -1+0i : all chunks at phase=0
+              //int index=periodToIndex(wtiStore->near0iter_1 % wtiStore->period);//also ok?
+              int index=wtiStore->near0iter_1 % wtiStore->period;//also ok?
               /*if (wtiStore->surehand==0 || wtiStore->surehand%wtiStore->period!=0)
               {
                 image.image->setPixel(x, y, 0xffff0080);
@@ -1294,10 +1379,10 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
             case MandelPointStore::ResultState::stPeriod3:
             {
               int ti=30;
-              if ((wtiStore->interior>1) || (wtiStore->interior<=0))
+              if ((wtiStore->interior.hits>4) || (wtiStore->interior.hits<=0))
                 ti=0;
               else
-                ti=(qRound(-log(wtiStore->interior/4)*300)+12*0xc0) % (6*0xc0);
+                ti=(qRound(-log(wtiStore->interior.hits/4)*300)+12*0xc0) % (6*0xc0);
               int r, g, b;
               if (ti<0xC0)
               { r=0x3f+ti; g=0xff; b=0x3f; }                           // + H L
@@ -1406,7 +1491,10 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
             } break;
           }
         } break;
-        case paintStyle::paintStyleFZ:
+        case paintStyle::paintStylePhi:
+        case paintStyle::paintStylePhi1:
+        case paintStyle::paintStylePhi2:
+        case paintStyle::paintStyleF1:
         {
           switch (wtiStore->rstate)
           {
@@ -1435,8 +1523,17 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
             case MandelPointStore::ResultState::stPeriod3:
             {
               precisionRecord->wtiPoint.readFrom(precisionRecord->points, (y*imageWidth+x)*MandelPoint<MandelMath::number_a *>::LEN);
-              double re=precisionRecord->wtiPoint.fz_r.re.toDouble();
-              double im=precisionRecord->wtiPoint.fz_r.im.toDouble(); //fz_r
+              //double re=precisionRecord->wtiPoint.fz_r.re.toDouble();
+              //double im=precisionRecord->wtiPoint.fz_r.im.toDouble(); //fz_r
+              double re, im;
+              switch (_selectedPaintStyle)
+              {
+                case paintStylePhi: re=wtiStore->interior.phi_re; im=wtiStore->interior.phi_im; break;
+                case paintStylePhi1: re=wtiStore->interior.phi1_re; im=wtiStore->interior.phi1_im; break;
+                case paintStylePhi2: re=wtiStore->interior.phi2_re; im=wtiStore->interior.phi2_im; break;
+                case paintStyleF1: re=wtiStore->interior.f1_re; im=wtiStore->interior.f1_im; break;
+                default: re=0; im=0;
+              }
               double mag=sqrt(MandelMath::sqr_double(re)+MandelMath::sqr_double(im));
               /*double mag2=mag*127.49+128;
               double phi=std::atan2(position.worker->toDouble(&data->fz_r_im), position.worker->toDouble(&data->fz_r_re))/(2*M_PI);
@@ -1449,7 +1546,8 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
               //int b=mag==0?128:qRound(im/mag*127.49+128);
               int b=mag==0?128:qRound(im/mag*127.49+256)%256;
               int r=0;
-              mag=log(1+mag)/log(2);
+              //mag=log(1+mag)/log(2);
+              mag=log(mag)/log(2);
               mag=mag-floor(mag);
               if (mag<0.2)
                 r=128;
@@ -1461,7 +1559,50 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
             } break;
           }
         } break;
-        case paintStyle::paintStyleFC:
+        case paintStyle::paintStyleFirstUnder1:
+        {
+          switch (wtiStore->rstate)
+          {
+            case MandelPointStore::ResultState::stUnknown:
+              image.image->setPixel(x, y, 0x00000000);
+              break;
+            case MandelPointStore::ResultState::stOutside:
+            case MandelPointStore::ResultState::stOutAngle:
+            {
+              int b=0x60+floor(0x60*cos((wtiStore->iter/10.0+0)*2*3.1415926535));
+              image.image->setPixel(x, y, 0xff000000+(b*0x010101));
+            } break;
+            case MandelPointStore::ResultState::stBoundary:
+            {
+              image.image->setPixel(x, y, 0xff308030);
+            } break;
+            case MandelPointStore::ResultState::stMisiur:
+            {
+              image.image->setPixel(x, y, 0xff308030);
+            } break;
+            case MandelPointStore::ResultState::stDiverge:
+            {
+              image.image->setPixel(x, y, 0xff308030);
+            } break;
+            case MandelPointStore::ResultState::stPeriod2:
+            case MandelPointStore::ResultState::stPeriod3:
+            {
+              precisionRecord->wtiPoint.readFrom(precisionRecord->points, (y*imageWidth+x)*MandelPoint<MandelMath::number_a *>::LEN);
+              int index=wtiStore->interior.first_under_1;
+              //reverse bottom 7 bits:
+              int g=0x80 | (((0x73516240>>((index&7)<<2))&0x07)<<4) | (index&0x08) | ((0x73516240>>((index&0x70)>>2))&0x07);
+              int b=0;
+              int r=0;
+              image.image->setPixel(x, y, 0xff000000+(r<<16)+(g<<8)+(b));
+            } break;
+            case MandelPointStore::ResultState::stMaxIter:
+            {
+              image.image->setPixel(x, y, 0xff808080);
+            } break;
+          }
+        } break;
+
+        /*case paintStyle::paintStyleFC:
         {
           switch (wtiStore->rstate)
           {
@@ -1521,7 +1662,7 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
               image.image->setPixel(x, y, 0xff808080);
             } break;
           }
-        } break;
+        } break;*/
       }
     }
   //return result;
@@ -1560,7 +1701,7 @@ int JuliaModel::giveWorkThreaded(MandelEvaluator<BASE> *me)
       int extra_effort=0;
       if (!storeAtIndex->wstate.compare_exchange_strong(state_expected, MandelPointStore::WorkState::stWorking))
       {
-        if ((_selectedPaintStyle==paintStyleFC) &&
+        /*if ((_selectedPaintStyle==paintStyleFC) &&
             (!storeAtIndex->has_fc_r) &&
             (storeAtIndex->rstate==MandelPointStore::ResultState::stPeriod2 ||
              storeAtIndex->rstate==MandelPointStore::ResultState::stPeriod3))
@@ -1571,7 +1712,7 @@ int JuliaModel::giveWorkThreaded(MandelEvaluator<BASE> *me)
             //should check if it still needs but it should be quite rare, evaluate tests it anyway
           extra_effort=1;
         }
-        else if (_selectedPaintStyle==paintStyleExterAngle &&
+        else*/ if (_selectedPaintStyle==paintStyleExterAngle &&
                  storeAtIndex->rstate==MandelPointStore::ResultState::stOutside)
         {
           state_expected=MandelPointStore::WorkState::stDone;
@@ -1625,7 +1766,7 @@ int JuliaModel::giveWorkThreaded(MandelEvaluator<BASE> *me)
             me->currentParams.epoch=me->busyEpoch;
             //storeAtIndex->state=MandelPointStore::State::stWorking;
             me->currentParams.pixelIndex=pointIndex;
-            me->currentParams.want_fc_r=(_selectedPaintStyle==paintStyleFC);
+            me->currentParams.want_fc_r=false;//(_selectedPaintStyle==paintStyleFC);
             me->currentParams.want_extangle=(_selectedPaintStyle==paintStyleExterAngle);
 #if CURRENT_STORE_DIRECT
             me->currentData.store=storeAtIndex;

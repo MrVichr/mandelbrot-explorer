@@ -256,14 +256,14 @@ QString MandelModel::getTextInfoSpec()
     {
       double p=std::atan2((precisionRecord->orbit.bulb.baseFz_.im.toDouble()),
                            precisionRecord->orbit.bulb.baseFz_.re.toDouble())*precisionRecord->orbit.bulb.foundMult_;
-      return QString("per=")+QString::number(data_store->period)+" sure="+QString::number(data_store->surehand)+" int="+QString::number(data_store->interior)   +
+      return QString("per=")+QString::number(data_store->period)+" sure="+QString::number(data_store->surehand)+" int="+QString::number(data_store->interior.hits)   +
           " mult="+QString::number(std::round(p/(2*M_PI)))+"/"+QString::number(precisionRecord->orbit.bulb.foundMult_);
     } break;
     case MandelPointStore::ResultState::stPeriod3:
     {
       double p=std::atan2((precisionRecord->orbit.bulb.baseFz_.im.toDouble()),
                            precisionRecord->orbit.bulb.baseFz_.re.toDouble())*precisionRecord->orbit.bulb.foundMult_;
-      return QString("per=")+QString::number(data_store->period)+" sure="+QString::number(data_store->surehand)+" int="+QString::number(data_store->interior)   +
+      return QString("per=")+QString::number(data_store->period)+" sure="+QString::number(data_store->surehand)+" int="+QString::number(data_store->interior.hits)   +
           " mult="+QString::number(std::round(p/(2*M_PI)))+"/"+QString::number(precisionRecord->orbit.bulb.foundMult_);
     } break;
     case MandelPointStore::ResultState::stMaxIter:
@@ -815,10 +815,10 @@ void MandelModel::paintOrbit(ShareableImageWrapper image, int x, int y)
       int interior;
       painter.setBrush(Qt::BrushStyle::NoBrush);
       painter.setPen(QColor(0, 0xff, 0xff));
-      interior=qRound(resultStore->interior/precisionRecord->position.step_size);
+      interior=qRound(resultStore->interior.hits/precisionRecord->position.step_size);
       painter.drawEllipse(x-interior, y-interior, 2*interior, 2*interior);
       painter.setPen(QColor(0, 0xc0, 0xc0));
-      interior=qRound(resultStore->interior/4/precisionRecord->position.step_size);
+      interior=qRound(resultStore->interior.hits/4/precisionRecord->position.step_size);
       painter.drawEllipse(x-interior, y-interior, 2*interior, 2*interior);
     } break;
     default: ;
@@ -1054,6 +1054,11 @@ int MandelModel::writeToImage(ShareableImageWrapper image)
   //QImage result(imageWidth, imageHeight, QImage::Format::Format_ARGB32);//setPixel in _Premultiplied affects surrounding pixels?! _Premultiplied);
   if (image.image->isNull() || (image.image->width()!=imageWidth) || (image.image->height()!=imageHeight))
     return -1;
+
+  //auto deleter=[this, image](const char *foo) {(void)foo; qDebug()<<"Hoorah "<<imageHeight;};
+  //std::unique_ptr<const char, decltype(deleter)> bar("abc", deleter);
+  //qDebug()<<sizeof(deleter)<<sizeof(bar);
+
   timerWriteToImage.start();
   //int indexOfWtiPoint, _discard_;
   {
@@ -1445,10 +1450,10 @@ int MandelModel::writeToImage(ShareableImageWrapper image)
             case MandelPointStore::ResultState::stPeriod3:
             {
               int ti=30;
-              if ((wtiStore->interior>1) || (wtiStore->interior<=0))
+              if ((wtiStore->interior.hits>4) || (wtiStore->interior.hits<=0))
                 ti=0;
               else
-                ti=(qRound(-log(wtiStore->interior/4)*300)+12*0xc0) % (6*0xc0);
+                ti=(qRound(-log(wtiStore->interior.hits/4)*300)+12*0xc0) % (6*0xc0);
               int r, g, b;
               if (ti<0xC0)
               { r=0x3f+ti; g=0xff; b=0x3f; }                           // + H L
