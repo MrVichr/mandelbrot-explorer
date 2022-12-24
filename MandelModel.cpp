@@ -1126,11 +1126,8 @@ int MandelModel::writeToImage(ShareableImageWrapper image)
               else
               {
                 int index=periodToIndex(wtiStore->period);
-                //reverse bottom 7 bits:
-                int rh=0x73516240>>((index&7)<<2); //reverse bits 0..2
-                int rl=0x73516240>>((index&0x70)>>2); //reverse bits 4..6
-                rh=0x80 | ((rh&0x07)<<4) | (index&0x08) | (rl&0x07);
-                image.image->setPixel(x, y, 0xff000000+(rh<<16));
+                int r=0x80 | MandelMath::ReverseBits<7,1>(index);
+                image.image->setPixel(x, y, 0xff000000+(r<<16));
               }
             } break;
             case MandelPointStore::ResultState::stMaxIter:
@@ -1228,10 +1225,7 @@ int MandelModel::writeToImage(ShareableImageWrapper image)
               }
               else*/
               {
-                //reverse bottom 7 bits:
-                int rh=0x73516240>>((index&7)<<2);
-                int rl=0x73516240>>((index&0x70)>>2);
-                rh=0x80 | ((rh&0x07)<<4) | (index&0x08) | (rl&0x07);
+                int r=0x80 | MandelMath::ReverseBits<7,1>(index);
                 /*switch (data->period)
                 {
                   case 1: r=0xc0; break;
@@ -1240,7 +1234,7 @@ int MandelModel::writeToImage(ShareableImageWrapper image)
                   default: r=0xe0;
                 }*/
                 //image.image->setPixel(x, y, 0xffffc0c0);
-                image.image->setPixel(x, y, 0xff000000+rh*0x010101);
+                image.image->setPixel(x, y, 0xff000000+r*0x010101);
               }
             } break;
             case MandelPointStore::ResultState::stMaxIter:
@@ -1548,10 +1542,7 @@ int MandelModel::writeToImage(ShareableImageWrapper image)
                 image.image->setPixel(x, y, 0xff800000);
               /* we need func(2)!=func(3) here
               int index=periodToIndex(data->near0iter);
-              //reverse bottom 7 bits:
-              int rh=0x73516240>>((index&7)<<2);
-              int rl=0x73516240>>((index&0x70)>>2);
-              rh=0x80 | ((rh&0x07)<<4) | (index&0x08) | (rl&0x07);
+              int r=0x80 | MandelMath::ReverseBits<7,1>(index);
               image.image->setPixel(x, y, 0xff000000+(rh<<16));*/
             } break;
             case MandelPointStore::ResultState::stMaxIter:

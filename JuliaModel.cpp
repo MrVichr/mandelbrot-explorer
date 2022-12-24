@@ -1054,10 +1054,8 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
               {
                 int index=periodToIndex(wtiStore->period);
                 //reverse bottom 7 bits:
-                int rh=0x73516240>>((index&7)<<2); //reverse bits 0..2
-                int rl=0x73516240>>((index&0x70)>>2); //reverse bits 4..6
-                rh=0x80 | ((rh&0x07)<<4) | (index&0x08) | (rl&0x07);
-                image.image->setPixel(x, y, 0xff000000+(rh<<16));
+                int r=0x80 | MandelMath::ReverseBits<7,1>(index);
+                image.image->setPixel(x, y, 0xff000000+(r<<16));
               }*/
               double iterx=std::log(wtiStore->iter+1);
               int r=(iterx-floor(iterx))*256;
@@ -1158,10 +1156,7 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
               }
               else*/
               {
-                //reverse bottom 7 bits:
-                int rh=0x73516240>>((index&7)<<2);
-                int rl=0x73516240>>((index&0x70)>>2);
-                rh=0x80 | ((rh&0x07)<<4) | (index&0x08) | (rl&0x07);
+                int r=0x80 | MandelMath::ReverseBits<7,1>(index);
                 /*switch (data->period)
                 {
                   case 1: r=0xc0; break;
@@ -1170,7 +1165,7 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
                   default: r=0xe0;
                 }*/
                 //image.image->setPixel(x, y, 0xffffc0c0);
-                image.image->setPixel(x, y, 0xff000000+rh*0x010101);
+                image.image->setPixel(x, y, 0xff000000+r*0x010101);
               }
             } break;
             case MandelPointStore::ResultState::stMaxIter:
@@ -1479,11 +1474,8 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
                 image.image->setPixel(x, y, 0xff800000);
               /* we need func(2)!=func(3) here
               int index=periodToIndex(data->near0iter);
-              //reverse bottom 7 bits:
-              int rh=0x73516240>>((index&7)<<2);
-              int rl=0x73516240>>((index&0x70)>>2);
-              rh=0x80 | ((rh&0x07)<<4) | (index&0x08) | (rl&0x07);
-              image.image->setPixel(x, y, 0xff000000+(rh<<16));*/
+              int r=0x80 | MandelMath::ReverseBits<7,1>(index);
+              image.image->setPixel(x, y, 0xff000000+(r<<16));*/
             } break;
             case MandelPointStore::ResultState::stMaxIter:
             {
@@ -1590,7 +1582,7 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
               precisionRecord->wtiPoint.readFrom(precisionRecord->points, (y*imageWidth+x)*MandelPoint<MandelMath::number_a *>::LEN);
               int index=wtiStore->interior.first_under_1;
               //reverse bottom 7 bits:
-              int g=0x80 | (((0x73516240>>((index&7)<<2))&0x07)<<4) | (index&0x08) | ((0x73516240>>((index&0x70)>>2))&0x07);
+              int g=0x80 | MandelMath::ReverseBits<7,1>(index);
               int b=0;
               int r=0;
               image.image->setPixel(x, y, 0xff000000+(r<<16)+(g<<8)+(b));

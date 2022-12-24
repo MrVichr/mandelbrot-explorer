@@ -30,6 +30,7 @@ namespace MandelMath {
 
 int gcd(int m, int n);
 int ctz16(int x);
+template <int total, int block> int ReverseBits(int val);
 bool is2kof(int big, int small); //big == small*2^k
 
 enum NumberType { typeEmpty

@@ -41,7 +41,7 @@ int gcd(int m, int n)
     m>>=1; n>>=1; c++;
   }
 
-  /* Dividing n by 2 until a becomes odd */
+  /* Dividing n by 2 until n becomes odd */
   while ((n & 1) == 0)
     n >>= 1;
 
@@ -70,11 +70,13 @@ int ctz16(int x)
   int ctzidx=(((0xF65*(x&-x))&0x7800)>>10);
   int ctz1=((0x59EC6C8C >> ctzidx)&0x0C) | ((0xC486BD63 >> ctzidx)&0x03);
   return ctz1;
-  /* shift, discard top bit and append i, rotate to be max; is i followed by 0 only? -> negate else not negate the discarded bit -> append
+  /*
+   * first find deBruijn sequence of length ctz_capacity
+  shift, discard top bit and append i, rotate to be max; is i followed by 0 only (or last)? -> negate else not negate the discarded bit -> append
       i is considered 1-epsilon (1 except when a tie with another 1)
   ctz 8 bit
   00011101
-  000-00i-i00-y   1
+  000-00i-i00-y   1       old-with_i-rotated-negate
    001-01i-1i0-y   1
     011-11i-11i-y   1
      111-11i-11i-y   0
@@ -83,15 +85,16 @@ int ctz16(int x)
         010-10i-i10-n   0
          100-00i-i00-y   0
           000
-   0x1D * 0=0x0000 >>4&7=0
-   0x1D * 1=0x001D >>4&7=1
-   0x1D * 2=0x003A >>4&7=3   MAGIC[3]:=ctz(2)
-   0x1D * 4=0x0074 >>4&7=7   MAGIC[7]:=ctz(4)
-   0x1D * 8=0x00E8 >>4&7=6
-   0x1D *16=0x01D0 >>4&7=5
-   0x1D *32=0x03A0 >>4&7=2
-   0x1D *64=0x0740 >>4&7=4
-   0x1D*128=0x0E80 >>4&7=0   MAGIC[0]=ctz(128)
+   00011101=0x1D
+   0x1D * 0=0x0000 >>4&7=0                      .......-
+   0x1D * 1=0x001D >>4&7=1                      ......0.
+   0x1D * 2=0x003A >>4&7=3   MAGIC[3]:=ctz(2)   ....1...
+   0x1D * 4=0x0074 >>4&7=7   MAGIC[7]:=ctz(4)   2.......
+   0x1D * 8=0x00E8 >>4&7=6                      .3......
+   0x1D *16=0x01D0 >>4&7=5                      ..4.....
+   0x1D *32=0x03A0 >>4&7=2                      .....5..
+   0x1D *64=0x0740 >>4&7=4                      ...6....
+   0x1D*128=0x0E80 >>4&7=0   MAGIC[0]=ctz(128)  .......7
    0x1D*256=0x1D00 >>4&7=0
    (0x23461507 >> (((0x1D*(i&-i))&0x70)>>2))&0x07 ?= ctz(0..255)
 
@@ -243,6 +246,21 @@ bool is2kof(int big, int small) //big == small*2^k, assuming big>=small
   small>>=ctz16(small);
   return big==small;
 }
+
+template <>
+int ReverseBits<7, 1>(int val) //reverse bottom 7 bits in blocks of 1
+{
+  int rh=0x73516240>>((val&7)<<2);
+  int rl=0x73516240>>((val&0x70)>>2);
+  return ((rh&0x07)<<4) | (val&0x08) | (rl&0x07);
+}
+
+/*template <int total, int block>
+int ReverseBits(int val)
+{
+  static_assert(false, "no can do");
+}*/
+
 
 /*double two_pow_n(unsigned int n)
 {

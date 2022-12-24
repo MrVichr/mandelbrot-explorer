@@ -4858,19 +4858,41 @@ void MandelEvaluator<BASE>::evaluate(int juliaPeriod)
           interior.inte_abs.mul(interior.fz_mag);
           //currentData.store->period=estimateInterior(foundperiod, &currentParams.c, &currentData.root);
           */
+#if 1 //estimate distance in 1 long step
           //find the root we will converge to
           //loope.eval_zz(&tmp, (currentData.store->nearziter_0+juliaPeriod-1)%juliaPeriod, &currentParams.c, &currentData.root, false, true);
           //loope.eval_zz(&tmp, (currentData.store->near0iter_1)%juliaPeriod, &currentParams.c, &currentData.root, false, true);
           loope.eval_zz(&tmp, juliaPeriod-1-(currentData.store->near0iter_1+juliaPeriod-1)%juliaPeriod, &currentParams.c, &currentData.root, false, true);
           newt.tmp1.assign(&loope.f);
           interior.inte.assign(&loope.f);
-          //alpha=f'^period[r0]
+          //alpha=1/f'^period[r0]
           loope.eval_zz(&tmp, juliaPeriod, &currentParams.c, &currentData.root, false, true); //this is the same for all points...
           interior.alpha.assign(&loope.f_z);
           interior.alpha.recip(&tmp);
           interior.alphak.zero(1.0, 0);
           //and let's go
+          interior.zoom.zero(1, 0);
           loope.eval_zz(&tmp, 0, &currentParams.c, &currentParams.first_z, false, true);
+#else //phase 1: iterate until near0iter; phase 2: as above then scale
+      //it has promise but need better near0iter
+          //find the root we will converge to - the one nearest to 0
+          //sqrt(root-c) should work but choosing the right sign will need some effort
+            //but we need the full cycle to find alpha anyway
+          loope.eval_zz(&tmp, juliaPeriod-1, &currentParams.c, &currentData.root, false, true);
+          newt.tmp1.assign(&loope.f);
+          interior.inte.assign(&loope.f);
+          //alpha=1/f'^period[r0]
+          loope.eval_zz(&tmp, 1, &currentParams.c, &currentData.root, false, false);
+          interior.alpha.assign(&loope.f_z);
+          interior.alpha.recip(&tmp);
+          interior.alphak.zero(1.0, 0);
+          //and let's go
+          loope.eval_zz(&tmp, currentData.store->near0iter_1-1, &currentParams.c, &currentParams.first_z, false, true);
+          interior.zoom.assign(&loope.f_z);
+          interior.zoom.recip(&tmp);
+          //restart for phase 2
+          loope.eval_zz(&tmp, 0, &currentParams.c, &loope.f, false, true);
+#endif
           double stop_at=interior.alpha.getMag_double()*loope.f.re.eps234();
           int didcycles=0;
           currentData.store->interior.f1_re=0;
@@ -5104,6 +5126,7 @@ void MandelEvaluator<BASE>::evaluate(int juliaPeriod)
           interior.inte.recip(&tmp);
           interior.inte.mul(&loope.f_z, &tmp);
           */
+          interior.inte.mul(&interior.zoom, &tmp);
           interior.inte_abs.assign(*interior.inte.getMag_tmp(&tmp));
           interior.inte_abs.sqrt();
 
@@ -5226,7 +5249,7 @@ MandelEvaluator<BASE>::Newt::Newt(MandelMath::NumberType ntype):
 
 template<typename BASE>
 MandelEvaluator<BASE>::InteriorInfo::InteriorInfo(MandelMath::NumberType ntype):
-  inte(ntype), inte_abs(ntype), fz(ntype), fz_mag(ntype), alpha(ntype), alphak(ntype)
+  inte(ntype), inte_abs(ntype), fz(ntype), fz_mag(ntype), alpha(ntype), alphak(ntype), zoom(ntype)
 {
   //working_assert(self_allocator.checkFill());
 }

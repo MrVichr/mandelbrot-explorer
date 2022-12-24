@@ -446,10 +446,10 @@ protected:
   } newt;
   struct InteriorInfo
   {
-    enum IndexIntoWorker
+    /*enum IndexIntoWorker
     {
       iiw_inte_abs=71,
-    };
+    };*/
     static constexpr int LEN=6;
     MandelMath::complex<BASE> inte;
     MandelMath::number<BASE> inte_abs;
@@ -457,6 +457,7 @@ protected:
     MandelMath::number<BASE> fz_mag;
     MandelMath::complex<BASE> alpha;
     MandelMath::complex<BASE> alphak;
+    MandelMath::complex<BASE> zoom;
     InteriorInfo(MandelMath::NumberType ntype);
   } interior;
 public:
