@@ -57,12 +57,13 @@ public:
     paintStyleExter=2,
     paintStyleExterAngle=3,
     paintStyleInter=4,
-    paintStyleNear=5,
-    paintStylePhi=6,
-    paintStylePhi1=7,
-    paintStylePhi2=8,
-    paintStyleF1=9,
-    paintStyleFirstUnder1=10,
+    paintStyleNear0=5,
+    paintStyleNearZ=6,
+    paintStylePhi=7,
+    paintStylePhi1=8,
+    paintStylePhi2=9,
+    paintStyleF1=10,
+    paintStyleFirstUnder1=11,
   };
   Q_ENUM(paintStyle);
   paintStyle _selectedPaintStyle;

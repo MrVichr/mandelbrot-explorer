@@ -212,7 +212,7 @@ class ShareableViewInfo: public QObject
 protected:
   int refcount_unused;
 public:
-  static constexpr int LEN=5;
+  //static constexpr int LEN=5;
   ShareableViewInfo(): c(), root(), nth_fz_limit() { } //Qt uses this and operator= instead of copy constructor :-/
   /*template <typename BASE>
   ShareableViewInfo(): c(new MandelMath::number<BASE>(), new MandelMath::number<BASE>()),
@@ -255,7 +255,7 @@ protected:
     iiw__END=iiw__BASE+19
   };*/
 public:
-  static constexpr size_t LEN=19;
+  //static constexpr size_t LEN=19;
   LaguerreStep(MandelMath::NumberType ntype);
   //~LaguerreStep();
   //void switchType(MandelMath::number_worker *worker);
@@ -310,7 +310,7 @@ public:
     iiw_s2=iiw__BASE+24,
     iiw__END=iiw__BASE+26
   };*/
-  static constexpr size_t LEN=26;
+  //static constexpr size_t LEN=26;
   MandelLoopEvaluator(MandelMath::NumberType ntype);
   //~MandelLoopEvaluator();
   /*union Place
@@ -395,12 +395,12 @@ public:
   constexpr static double LARGE_FLOAT2=1e60;
   constexpr static double MAGIC_MIN_SHRINK=1.5;
   constexpr static int MAX_PERIOD=8000;
-  enum IndexIntoWorker
+  /*enum IndexIntoWorker
   {
     iiw_currentData=2,
     iiw_currentParams=28,
     iiwLaguerrePoint=100,
-  };
+  };*/
   int threaded_errorcode;
   int busyEpoch;
   MandelEvaluatorThread thread;
@@ -468,7 +468,7 @@ public:
   int laguerre(int period, const MandelMath::complex<BASE> *c, MandelMath::complex<BASE> *r, const bool fastHoming);
   struct NewtRes
   {
-    static constexpr int LEN=8;
+    //static constexpr int LEN=8;
     int cyclesNeeded;
     //now firstMum_re double firstM;
     MandelMath::complex<BASE> fz_r; //TODO: would be nice to move into newt and move newton() to newt
@@ -495,7 +495,7 @@ protected:
       iiw_fz_mag=42,
       iiw_near0fmag=43,
     };*/
-    static constexpr int LEN=3;
+    //static constexpr int LEN=3;
     MandelMath::complex<BASE> fz_r;
     MandelMath::number<BASE> fz_mag;
     //MandelMath::number<BASE> near0fmag;
@@ -503,11 +503,11 @@ protected:
   } eval;
   struct Newt
   {
-    enum IndexIntoWorker
+    /*enum IndexIntoWorker
     {
       iiw_tmp2=68,
     };
-    static constexpr int LEN=25;
+    static constexpr int LEN=25;*/
     MandelMath::complex<BASE> bestr;
     MandelMath::complex<BASE> f_r;
     //MandelMath::number_store fz_r_re, fz_r_im;
@@ -531,7 +531,7 @@ protected:
     {
       iiw_inte_abs=71,
     };*/
-    static constexpr int LEN=6;
+    //static constexpr int LEN=6;
     MandelMath::complex<BASE> inte;
     MandelMath::number<BASE> inte_abs;
     MandelMath::complex<BASE> fz;
@@ -574,7 +574,7 @@ public:
     //void fixRnearBase(MandelMath::complex_place<WORKER_MULTI> *r, const MandelMath::complex_place<WORKER_MULTI> *c, int period, int *mult);
   public:
     void findBulbBase(typename MandelMath::complex<BASE>::Scratchpad *tmp, int period2, const MandelMath::complex<BASE> *c);//, MandelMath::complex<WORKER_MULTI> *cb, MandelMath::complex<WORKER_MULTI> *rb, MandelMath::complex<WORKER_MULTI> *xc, MandelMath::complex<WORKER_MULTI> *baseZC, MandelMath::complex<WORKER_MULTI> *baseCC, bool *is_card, int *foundMult, MandelMath::complex<WORKER_MULTI> *baseFz);
-    static constexpr int LEN=MandelLoopEvaluator<BASE>::LEN+32+LaguerreStep<BASE>::LEN;
+    //static constexpr int LEN=MandelLoopEvaluator<BASE>::LEN+32+LaguerreStep<BASE>::LEN;
   } bulb;
   struct ExtAngle
   {
@@ -622,7 +622,8 @@ protected:
   protected:
   int periodCheck(int period, const MandelMath::complex<BASE> *c, const MandelMath::complex<BASE> *root_seed, bool exactMatch);
   int estimateInterior(int period, const MandelMath::complex<BASE> *c, const MandelMath::complex<BASE> *root);//, InteriorInfo *interior);
-  void eval_until_bailout(const MandelMath::complex<BASE> *c);
+  void mandel_until_bailout();
+  void julia_until_bailout();
   void evaluateMandel();
   void doMandelThreadedSplit(int epoch);
   void evaluateJulia(int juliaPeriod);

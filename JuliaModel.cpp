@@ -1247,6 +1247,10 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
             case JuliaPointStore::ResultState::stPeriod2:
             case JuliaPointStore::ResultState::stPeriod3:
             {
+              int index=wtiStore->nearziter_0 % wtiStore->period;//also ok?
+              int r=0x80 | MandelMath::ReverseBits<7,1>(index);
+              image.image->setPixel(x, y, 0xff000000+r*0x010101);
+              /*
               precisionRecord->wtiPoint.readFrom(precisionRecord->points, (y*imageWidth+x)*JuliaPoint<MandelMath::number_a *>::LEN);
               double re=precisionRecord->wtiPoint.fz_r.re.toDouble();
               double im=precisionRecord->wtiPoint.fz_r.im.toDouble();
@@ -1268,7 +1272,7 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
                 g=r;//0xc0+qRound(0x3f*re);
                 b=r;//0xc0+qRound(0x3f*im);
               }
-              image.image->setPixel(x, y, 0xff000000+(r<<16)+(g<<8)+b);
+              image.image->setPixel(x, y, 0xff000000+(r<<16)+(g<<8)+b);*/
             } break;
             case JuliaPointStore::ResultState::stMaxIter:
             {
@@ -1331,6 +1335,10 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
             case JuliaPointStore::ResultState::stPeriod2:
             case JuliaPointStore::ResultState::stPeriod3:
             {
+              int index=wtiStore->nearziter_0 % wtiStore->period;//also ok?
+              int r=0x80 | MandelMath::ReverseBits<7,1>(index);
+              image.image->setPixel(x, y, 0xff000000+r*0x010101);
+              /*
               precisionRecord->wtiPoint.readFrom(precisionRecord->points, (y*imageWidth+x)*JuliaPoint<MandelMath::number_a *>::LEN);
               double re=precisionRecord->wtiPoint.fz_r.re.toDouble();
               double im=precisionRecord->wtiPoint.fz_r.im.toDouble();
@@ -1352,7 +1360,7 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
                 g=r;//0xc0+qRound(0x3f*re);
                 b=r;//0xc0+qRound(0x3f*im);
               }
-              image.image->setPixel(x, y, 0xff000000+(r<<16)+(g<<8)+b);
+              image.image->setPixel(x, y, 0xff000000+(r<<16)+(g<<8)+b);*/
             } break;
             case JuliaPointStore::ResultState::stMaxIter:
             {
@@ -1418,7 +1426,7 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
             } break;
           }
         } break;
-        case paintStyle::paintStyleNear:
+        case paintStyle::paintStyleNear0:
         {
           switch (wtiStore->rstate)
           {
@@ -1429,8 +1437,9 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
             case JuliaPointStore::ResultState::stOutAngle:
             {
               //int ti=wtiStore->nearziter_0;
-              int ti=wtiStore->near0iter_1;
-              if (ti>=0)
+              int ti=wtiStore->near0iter_1 % precisionRecord->params.period;
+              image.image->setPixel(x, y, 0xff000080+(MandelMath::ReverseBits<7,1>(ti)<<0));
+              /*if (ti>=0)
               {
                 int tj=0;
                 while ((ti%2)==0) { tj+=128*2/5; ti/=2; }
@@ -1444,7 +1453,7 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
                 image.image->setPixel(x, y, 0xff000000+(b<<0));
               }
               else
-                image.image->setPixel(x, y, 0xff000080);
+                image.image->setPixel(x, y, 0xff000080);*/
             } break;
             case JuliaPointStore::ResultState::stBoundary:
             {
@@ -1472,8 +1481,9 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
               image.image->setPixel(x, y, 0xff000000+(r<<16));*/
 
               //int ti=wtiStore->nearziter_0;
-              int ti=wtiStore->near0iter_1;
-              if (ti>0)
+              int ti=wtiStore->near0iter_1 % precisionRecord->params.period;
+              image.image->setPixel(x, y, 0xff800000+(MandelMath::ReverseBits<7,1>(ti)<<16));
+              /*if (ti>0)
               {
                 int tj=0;
                 while ((ti%2)==0) { tj+=128*2/5; ti/=2; }
@@ -1487,7 +1497,90 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
                 image.image->setPixel(x, y, 0xff000000+(r<<16));
               }
               else
-                image.image->setPixel(x, y, 0xff800000);
+                image.image->setPixel(x, y, 0xff800000);*/
+              /* we need func(2)!=func(3) here
+              int index=periodToIndex(data->near0iter);
+              int r=0x80 | MandelMath::ReverseBits<7,1>(index);
+              image.image->setPixel(x, y, 0xff000000+(r<<16));*/
+            } break;
+            case JuliaPointStore::ResultState::stMaxIter:
+            {
+              image.image->setPixel(x, y, 0xff808080);
+            } break;
+          }
+        } break;
+        case paintStyle::paintStyleNearZ:
+        {
+          switch (wtiStore->rstate)
+          {
+            case JuliaPointStore::ResultState::stUnknown:
+              image.image->setPixel(x, y, 0xff000000);
+              break;
+            case JuliaPointStore::ResultState::stOutside:
+            case JuliaPointStore::ResultState::stOutAngle:
+            {
+              //int ti=wtiStore->nearziter_0;
+              int ti=wtiStore->nearziter_0 % precisionRecord->params.period;
+              image.image->setPixel(x, y, 0xff000080+(MandelMath::ReverseBits<7,1>(ti)<<0));
+              /*if (ti>=0)
+              {
+                int tj=0;
+                while ((ti%2)==0) { tj+=128*2/5; ti/=2; }
+                while ((ti%3)==0) { tj+=128*2/3; ti/=3; }
+                while ((ti%5)==0) { tj+=30; ti/=5; }
+                while ((ti%7)==0) { tj+=40; ti/=7; }
+                while ((ti%11)==0) { tj+=50; ti/=11; }
+                while ((ti%13)==0) { tj+=60; ti/=13; }
+                while ((ti%17)==0) { tj+=70; ti/=17; }
+                int b=0x80+(tj%0x80);
+                image.image->setPixel(x, y, 0xff000000+(b<<0));
+              }
+              else
+                image.image->setPixel(x, y, 0xff000080);*/
+            } break;
+            case JuliaPointStore::ResultState::stBoundary:
+            {
+              image.image->setPixel(x, y, 0xff00ff00);
+            } break;
+            case JuliaPointStore::ResultState::stMisiur:
+            {
+              image.image->setPixel(x, y, 0xff00c000);
+            } break;
+            case JuliaPointStore::ResultState::stDiverge:
+            {
+              image.image->setPixel(x, y, 0xff008000);
+            } break;
+            case JuliaPointStore::ResultState::stPeriod2:
+            case JuliaPointStore::ResultState::stPeriod3:
+            {
+              /*int ti=data->newton_iter; //very noisy, maybe show <=10, >10, >30, 49
+              int r;
+              if (ti<=10)
+                r=0x60;
+              else if (ti<30)
+                r=0x90;
+              else
+                r=0xff;
+              image.image->setPixel(x, y, 0xff000000+(r<<16));*/
+
+              //int ti=wtiStore->nearziter_0;
+              int ti=wtiStore->nearziter_0 % precisionRecord->params.period;
+              image.image->setPixel(x, y, 0xff800000+(MandelMath::ReverseBits<7,1>(ti)<<16));
+              /*if (ti>0)
+              {
+                int tj=0;
+                while ((ti%2)==0) { tj+=128*2/5; ti/=2; }
+                while ((ti%3)==0) { tj+=128*2/3; ti/=3; }
+                while ((ti%5)==0) { tj+=30; ti/=5; }
+                while ((ti%7)==0) { tj+=40; ti/=7; }
+                while ((ti%11)==0) { tj+=50; ti/=11; }
+                while ((ti%13)==0) { tj+=60; ti/=13; }
+                while ((ti%17)==0) { tj+=70; ti/=17; }
+                int r=0x80+(tj%0x80);
+                image.image->setPixel(x, y, 0xff000000+(r<<16));
+              }
+              else
+                image.image->setPixel(x, y, 0xff800000);*/
               /* we need func(2)!=func(3) here
               int index=periodToIndex(data->near0iter);
               int r=0x80 | MandelMath::ReverseBits<7,1>(index);

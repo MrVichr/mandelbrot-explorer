@@ -4536,7 +4536,7 @@ int MandelEvaluator<BASE>::estimateInterior(int period, const MandelMath::comple
 }
 
 template <typename BASE>
-void MandelEvaluator<BASE>::eval_until_bailout(const MandelMath::complex<BASE> *c)
+void MandelEvaluator<BASE>::mandel_until_bailout()
 {
   for (int i=0; i<100; i++) //should be enough to reach 10000^2 except around (-2, 0)
   {
@@ -4564,8 +4564,42 @@ void MandelEvaluator<BASE>::eval_until_bailout(const MandelMath::complex<BASE> *
     };
     //f:=f^2+c
     mandelData.f.sqr(&tmp);
-    mandelData.f.add(c);
+    mandelData.f.add(&currentParams.c);
     mandelData.store->iter++;
+  };
+}
+
+template <typename BASE>
+void MandelEvaluator<BASE>::julia_until_bailout()
+{
+  for (int i=0; i<100; i++) //should be enough to reach 10000^2 except around (-2, 0)
+  {
+    double f_mag=juliaData.f.getMag_double();
+    if (f_mag>1e8)
+      return;
+    //fc_c:=2*f*fc_c+1
+    juliaData.fc_c.mul(&juliaData.f, &tmp);
+    juliaData.fc_c.lshift(1);
+    juliaData.fc_c.re.add_double(1);
+    double fc_c_mag=juliaData.fc_c.getMag_double();
+    if (fc_c_mag>LARGE_FLOAT2)
+    {
+      juliaData.store->rstate=JuliaPointStore::ResultState::stBoundary;
+      return;
+    };
+    //fz_c_mag:=4*fz_c_mag*f.mag
+    juliaData.fz_c_mag.mul(*juliaData.f.getMag_tmp(&tmp));
+    juliaData.fz_c_mag.lshift(2);
+    double fz_c_mag=juliaData.fz_c_mag.toDouble();
+    if (fz_c_mag>LARGE_FLOAT2)
+    {
+      juliaData.store->rstate=JuliaPointStore::ResultState::stDiverge;
+      return;
+    };
+    //f:=f^2+c
+    juliaData.f.sqr(&tmp);
+    juliaData.f.add(&currentParams.c);
+    juliaData.store->iter++;
   };
 }
 
@@ -4623,7 +4657,7 @@ void MandelEvaluator<BASE>::evaluateMandel()
       mandelData.store->rstate=MandelPointStore::ResultState::stOutside;
       //theory says the relative error in estimate is less than 3/bailout for large bailout
       //so lets move out a bit
-      eval_until_bailout(&currentParams.c);//, &currentData.f, &currentData.fc_c); //may switch state to stBoundary
+      mandel_until_bailout();//, &currentData.f, &currentData.fc_c); //may switch state to stBoundary
       if (mandelData.store->rstate!=MandelPointStore::ResultState::stOutside)
       {
         //currentWorker->zero(&currentData.exterior_avoids, 0);
@@ -4974,7 +5008,7 @@ void MandelEvaluator<BASE>::evaluateMandel()
 }
 
 template <typename BASE>
-void MandelEvaluator<BASE>::evaluateJulia(int juliaPeriod_)
+void MandelEvaluator<BASE>::evaluateJulia(int juliaPeriod)
 {
   /*{
     eval.near0fmag.assign(*currentData.near0f.getMag_tmp(&tmp)); //TODO: update on changing near0f
@@ -5002,7 +5036,7 @@ void MandelEvaluator<BASE>::evaluateJulia(int juliaPeriod_)
     }
     else
     {
-      int per=juliaPeriod_;
+      int per=juliaPeriod;
       rem=(juliaData.store->iter-juliaData.store->near0iter_1)%(3*per);
       quo=(juliaData.store->iter-juliaData.store->near0iter_1)/(3*per);
     }
@@ -5027,7 +5061,7 @@ void MandelEvaluator<BASE>::evaluateJulia(int juliaPeriod_)
       juliaData.store->rstate=JuliaPointStore::ResultState::stOutside;
       //theory says the relative error in estimate is less than 3/bailout for large bailout
       //so lets move out a bit
-      eval_until_bailout(&currentParams.c);//, &currentData.f, &currentData.fc_c); //may switch state to stBoundary
+      julia_until_bailout();//, &currentData.f, &currentData.fc_c); //may switch state to stBoundary
       if (juliaData.store->rstate!=JuliaPointStore::ResultState::stOutside)
       {
         //currentWorker->zero(&currentData.exterior_avoids, 0);
@@ -5253,7 +5287,7 @@ void MandelEvaluator<BASE>::evaluateJulia(int juliaPeriod_)
       }
     };
 #endif
-    int jp=juliaPeriod_;
+    int jp=juliaPeriod;
 #if SUREHAND_CHOICE!=1
     if (//(currentData.store->lookper_lastGuess>0) &&
         new_guess_now_>1 ||
@@ -5277,7 +5311,7 @@ void MandelEvaluator<BASE>::evaluateJulia(int juliaPeriod_)
         nop();
       if (juliaData.f.isequal(&juliaData.lookper_startf))
       { //exact match - misiurewicz or converged after too many steps or just a lucky hit
-        testperiod=juliaPeriod_;
+        testperiod=juliaPeriod;
         foundperiod=periodCheck(testperiod, &currentParams.c, &juliaData.lookper_nearr, true);
         if (foundperiod<0) //exact match but repelling
           foundperiod=testperiod;
@@ -5318,11 +5352,11 @@ void MandelEvaluator<BASE>::evaluateJulia(int juliaPeriod_)
         //find the root we will converge to
         //loope.eval_zz(&tmp, (currentData.store->nearziter_0+juliaPeriod-1)%juliaPeriod, &currentParams.c, &currentData.root, false, true);
         //loope.eval_zz(&tmp, (currentData.store->near0iter_1)%juliaPeriod, &currentParams.c, &currentData.root, false, true);
-        loope.eval_zz(&tmp, juliaPeriod_-1-(juliaData.store->near0iter_1+juliaPeriod_-1)%juliaPeriod_, &currentParams.c, &currentParams.juliaRoot, false, true);
+        loope.eval_zz(&tmp, juliaPeriod-1-(juliaData.store->near0iter_1+juliaPeriod-1)%juliaPeriod, &currentParams.c, &currentParams.juliaRoot, false, true);
         newt.tmp1.assign(&loope.f);
         interior.inte.assign(&loope.f);
         //alpha=1/f'^period[r0]
-        loope.eval_zz(&tmp, juliaPeriod_, &currentParams.c, &currentParams.juliaRoot, false, true); //this is the same for all points...
+        loope.eval_zz(&tmp, juliaPeriod, &currentParams.c, &currentParams.juliaRoot, false, true); //this is the same for all points...
         interior.alpha.assign(&loope.f_z);
         interior.alpha.recip(&tmp);
         interior.alphak.zero(1.0, 0);
@@ -5354,7 +5388,7 @@ void MandelEvaluator<BASE>::evaluateJulia(int juliaPeriod_)
         juliaData.store->interior.f1_re=0;
         juliaData.store->interior.f1_im=0;
         juliaData.store->interior.first_under_1=-1;
-        for (int i=0; i<juliaData.store->iter*100/juliaPeriod_; i++)
+        for (int i=0; i<juliaData.store->iter*100/juliaPeriod; i++)
         //for (int i=0; i<5; i++)
         {
           //if ((currentData.store->iter*10-i)%juliaPeriod==0)
@@ -5379,7 +5413,7 @@ void MandelEvaluator<BASE>::evaluateJulia(int juliaPeriod_)
           //advance f
           //loope.f.sqr(&tmp);
           //loope.f.add(&currentParams.c);
-          loope.eval_zz(&tmp, juliaPeriod_, &currentParams.c, &currentParams.juliaRoot, false, false);
+          loope.eval_zz(&tmp, juliaPeriod, &currentParams.c, &currentParams.juliaRoot, false, false);
           if (juliaData.store->interior.first_under_1<0)
           {
             if (loope.f_z.getMag1_tmp(&tmp)->toDouble()<0)
@@ -5524,7 +5558,7 @@ void MandelEvaluator<BASE>::evaluateJulia(int juliaPeriod_)
 #endif
         //check if the_coef*(x-root1)(x-root2) == fi(x) = 1-1/(1+b/((f-r)*alpha^k))
         bulb.t3.assign(&currentParams.first_z);
-        loope.eval_zz(&tmp, juliaPeriod_*didcycles, &currentParams.c, &bulb.t3, false, true);
+        loope.eval_zz(&tmp, juliaPeriod*didcycles, &currentParams.c, &bulb.t3, false, true);
         newt.laguG.assign(&bulb.t3);
         newt.laguG2.assign(&bulb.t3);
         newt.laguG.sub(&bulb.t2);
@@ -5547,7 +5581,7 @@ void MandelEvaluator<BASE>::evaluateJulia(int juliaPeriod_)
 #define DERIVATIVE_H 0.01
         bulb.t3.assign(&currentParams.first_z);
         bulb.t3.re.add_double(DERIVATIVE_H);
-        loope.eval_zz(&tmp, juliaPeriod_*didcycles, &currentParams.c, &bulb.t3, false, true);
+        loope.eval_zz(&tmp, juliaPeriod*didcycles, &currentParams.c, &bulb.t3, false, true);
         newt.laguG.assign(&bulb.t3);
         newt.laguG2.assign(&bulb.t3);
         newt.laguG.sub(&bulb.t2);
@@ -5568,7 +5602,7 @@ void MandelEvaluator<BASE>::evaluateJulia(int juliaPeriod_)
         bulb.t3.assign(&currentParams.first_z);
         //bulb.t3.im.add_double(0.000001);
         bulb.t3.re.add_double(-DERIVATIVE_H);
-        loope.eval_zz(&tmp, juliaPeriod_*didcycles, &currentParams.c, &bulb.t3, false, true);
+        loope.eval_zz(&tmp, juliaPeriod*didcycles, &currentParams.c, &bulb.t3, false, true);
         newt.laguH.assign(&bulb.t3);
         newt.laguX.assign(&bulb.t3);
         newt.laguH.sub(&bulb.t2);
