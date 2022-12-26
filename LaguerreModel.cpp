@@ -175,7 +175,7 @@ QString LaguerreModel::getTextInfoSpec()
     {
       //MandelMath::complex fz(orbit.worker, &orbit.pointData.fz_r_re, &orbit.pointData.fz_r_im, true);
       QString naiveChoice;
-      switch (precisionRecord->orbit.pointData_.store->naiveChoice)
+      switch (precisionRecord->orbit.pointData.store->naiveChoice)
       {
         case NewtonNaiveChoice::nc03: naiveChoice="0.3"; break;
         case NewtonNaiveChoice::nc05: naiveChoice="0.5"; break;
@@ -190,17 +190,17 @@ QString LaguerreModel::getTextInfoSpec()
       switch (_selectedPaintStyle)
       {
         case paintStyleCls:
-          return QString("attr=")+QString::number(precisionRecord->orbit.pointData_.fz_r.getMag_double())+
-                 QString(" firstM=")+QString::number(precisionRecord->orbit.pointData_.store->firstM_)+
+          return QString("attr=")+QString::number(precisionRecord->orbit.pointData.fz_r.getMag_double())+
+                 QString(" firstM=")+QString::number(precisionRecord->orbit.pointData.store->firstM)+
                  QString(" NChoice=")+naiveChoice;
         case paintStyleNthFz:
           return QString::number(precisionRecord->params.nth_fz)+
-                 QString("-th f'=")+precisionRecord->orbit.pointData_.nth_fz.toString();
+                 QString("-th f'=")+precisionRecord->orbit.pointData.nth_fz.toString();
         case paintStyleNthFz1:
           return QString::number(precisionRecord->params.nth_fz)+
-                 QString("-th f'=")+precisionRecord->orbit.pointData_.nth_fz.toString();
+                 QString("-th f'=")+precisionRecord->orbit.pointData.nth_fz.toString();
         case paintStyleRoots:
-          return QString("attr=")+QString::number(precisionRecord->orbit.pointData_.fz_r.getMag_double());
+          return QString("attr=")+QString::number(precisionRecord->orbit.pointData.fz_r.getMag_double());
       }
 
     } break;
@@ -492,16 +492,16 @@ void LaguerreModel::setImageSize(int width, int height)
         break;
 #if !NUMBER_DOUBLE_ONLY
       case MandelMath::NumberType::typeFloat128:
-        new_points=new __float128[newLength];
+        new_points=new __float128[newLength*LaguerrePoint<MandelMath::number_a *>::LEN];
         break;
       case MandelMath::NumberType::typeDDouble:
-        new_points=new MandelMath::dd_real[newLength];
+        new_points=new MandelMath::dd_real[newLength*LaguerrePoint<MandelMath::number_a *>::LEN];
         break;
       case MandelMath::NumberType::typeQDouble:
-        new_points=new MandelMath::dq_real[newLength];
+        new_points=new MandelMath::dq_real[newLength*LaguerrePoint<MandelMath::number_a *>::LEN];
         break;
       case MandelMath::NumberType::typeReal642:
-        new_points=new MandelMath::real642[newLength];
+        new_points=new MandelMath::real642[newLength*LaguerrePoint<MandelMath::number_a *>::LEN];
         break;
 #endif
     }
@@ -573,7 +573,7 @@ void LaguerreModel::startNewEpoch()
     precisionRecord->threads[t]->workIfEpoch=epoch;
   }
   _threadsWorking+=precisionRecord->threadCount;
-  emit triggerLaguerreThreaded(epoch); //::invokeMethod cannot pass parameters, but ::connect can
+  emit triggerLaguerreThreaded(epoch, precisionRecord->params.period); //::invokeMethod cannot pass parameters, but ::connect can
 #endif
 }
 
@@ -670,16 +670,16 @@ void LaguerreModel::paintOrbit(ShareableImageWrapper image, int x, int y)
   precisionRecord->orbit.evaluator.workIfEpoch=precisionRecord->orbit.evaluator.busyEpoch;//epoch;
   precisionRecord->orbit.evaluator.currentParams.pixelIndex=0;
   precisionRecord->orbit.evaluator.currentParams.nth_fz=precisionRecord->params.nth_fz;
-  precisionRecord->orbit.evaluator.tmpLaguerrePoint.zero(&precisionRecord->orbit.evaluator.currentParams.first_z);
+  precisionRecord->orbit.evaluator.laguerreData.zero(&precisionRecord->orbit.evaluator.currentParams.first_z);
   //precisionRecord->orbit.evaluator.currentData.store->wstate=LaguerrePointStore::State::stWorking;
   /*MandelMath::complex base(orbit.worker, &params.base_re_s_, &params.base_im_s, true);
   currentWorker->assign(&orbit.evaluator.currentData.root_re, &orbit.evaluator.currentParams.c_re);
   orbit.worker->assign(&orbit.evaluator.currentData.root_im, &orbit.evaluator.currentParams.c_im);
   MandelMath::complex root(orbit.worker, &orbit.evaluator.currentData.root_re, &orbit.evaluator.currentData.root_im, true);*/
-  precisionRecord->orbit.evaluator.currentData.root.assign(&precisionRecord->orbit.evaluator.currentParams.first_z);
-  precisionRecord->orbit.evaluator.loope.help_c.assign_across(&precisionRecord->params.base);
+  precisionRecord->orbit.evaluator.laguerreData.r.assign(&precisionRecord->orbit.evaluator.currentParams.first_z);
+  precisionRecord->orbit.evaluator.currentParams.c.assign_across(&precisionRecord->params.base);
   {
-    precisionRecord->orbit.evaluator.loope.eval_zz(&precisionRecord->orbit.evaluator.tmp, 1, &precisionRecord->orbit.evaluator.loope.help_c, &precisionRecord->orbit.evaluator.currentData.root, false, true);
+    precisionRecord->orbit.evaluator.loope.eval_zz(&precisionRecord->orbit.evaluator.tmp, 1, &precisionRecord->orbit.evaluator.currentParams.c, &precisionRecord->orbit.evaluator.laguerreData.r, false, true);
     //precisionRecord->orbit.evaluator.bulb.bulbe.eval_zz(1, &precisionRecord->params.base, &precisionRecord->orbit.evaluator.currentData.root, false, true);
     int circ_x, circ_y;
     painter.setBrush(Qt::BrushStyle::NoBrush);
@@ -692,7 +692,7 @@ void LaguerreModel::paintOrbit(ShareableImageWrapper image, int x, int y)
                    {circ_x-2, circ_y+2, circ_x+2, circ_y-2}};
       painter.drawLines(l2, 2);
     };
-    precisionRecord->orbit.evaluator.loope.eval_zz(&precisionRecord->orbit.evaluator.tmp, precisionRecord->params.period-1, &precisionRecord->orbit.evaluator.loope.help_c, &precisionRecord->orbit.evaluator.currentData.root, false, false);
+    precisionRecord->orbit.evaluator.loope.eval_zz(&precisionRecord->orbit.evaluator.tmp, precisionRecord->params.period-1, &precisionRecord->orbit.evaluator.currentParams.c, &precisionRecord->orbit.evaluator.laguerreData.r, false, false);
     painter.setBrush(Qt::BrushStyle::NoBrush);
     painter.setPen(QColor(0xff, 0xff, 0xff)); //white (X) for next period
     reimToPixel(&circ_x, &circ_y, &precisionRecord->orbit.evaluator.loope.f, &tmp);
@@ -704,20 +704,20 @@ void LaguerreModel::paintOrbit(ShareableImageWrapper image, int x, int y)
       painter.drawLines(l2, 2);
     };
   }
-  precisionRecord->orbit.evaluator.thread.syncNewton(precisionRecord->params.period, &precisionRecord->orbit.evaluator.loope.help_c, &precisionRecord->orbit.evaluator.currentData.root, true);
+  precisionRecord->orbit.evaluator.thread.syncLaguerre(precisionRecord->params.period, &precisionRecord->orbit.evaluator.laguerreData.r, true);
   //orbit.pointData.assign(orbit.worker, orbit.evaluator.currentData);
   precisionRecord->orbit.pointDataStore.iter=precisionRecord->orbit.evaluator.newtres.cyclesNeeded;
-  precisionRecord->orbit.pointDataStore.firstM_=precisionRecord->orbit.evaluator.newtres.firstMum_re;
+  precisionRecord->orbit.pointDataStore.firstM=precisionRecord->orbit.evaluator.newtres.firstMum_re;
   precisionRecord->orbit.pointDataStore.firstStep_re=
       precisionRecord->orbit.evaluator.newtres.first_guess_lagu.re.toDouble()-
-      precisionRecord->orbit.evaluator.currentData.f.re.toDouble();
+      precisionRecord->orbit.evaluator.currentParams.first_z.re.toDouble();
   precisionRecord->orbit.pointDataStore.firstStep_im=
       precisionRecord->orbit.evaluator.newtres.first_guess_lagu.im.toDouble()-
-      precisionRecord->orbit.evaluator.currentData.f.im.toDouble();
-  precisionRecord->orbit.pointData_.r.assign_across(&precisionRecord->orbit.evaluator.currentData.root); //not used
-  precisionRecord->orbit.pointData_.fz_r.assign_across(&precisionRecord->orbit.evaluator.newtres.fz_r);
-  precisionRecord->orbit.pointData_.fz_r.re.add_double(1);
-  precisionRecord->orbit.pointData_.nth_fz.assign_across(&precisionRecord->orbit.evaluator.newtres.nth_fz);
+      precisionRecord->orbit.evaluator.currentParams.first_z.im.toDouble();
+  precisionRecord->orbit.pointData.r.assign_across(&precisionRecord->orbit.evaluator.laguerreData.r); //not used
+  precisionRecord->orbit.pointData.fz_r.assign_across(&precisionRecord->orbit.evaluator.newtres.fz_r);
+  precisionRecord->orbit.pointData.fz_r.re.add_double(1);
+  precisionRecord->orbit.pointData.nth_fz.assign_across(&precisionRecord->orbit.evaluator.newtres.nth_fz);
   precisionRecord->orbit.pointDataStore.naiveChoice=precisionRecord->orbit.evaluator.newtres.naiveChoice;
   precisionRecord->orbit.first_mu_re=precisionRecord->orbit.evaluator.newtres.firstMu_re;
   precisionRecord->orbit.first_mu_im=precisionRecord->orbit.evaluator.newtres.firstMu_im;
@@ -728,7 +728,7 @@ void LaguerreModel::paintOrbit(ShareableImageWrapper image, int x, int y)
   double tmp_re, tmp_im;
   painter.setBrush(Qt::BrushStyle::NoBrush);
   painter.setPen(QColor(0xff, 0xff, 0));
-  reimToPixel(&circ_x, &circ_y, &precisionRecord->orbit.evaluator.currentData.root, &tmp);
+  reimToPixel(&circ_x, &circ_y, &precisionRecord->orbit.evaluator.laguerreData.r, &tmp);
   if ((circ_x>=-3) && (circ_x<=10003) && (circ_y>=-3) && (circ_y<=10003))
   {
     double eps2=precisionRecord->position.center.re.eps2();
@@ -1008,16 +1008,16 @@ int LaguerreModel::writeToImage(ShareableImageWrapper image)
                   g=0x00+0x40*(data->firstM+1);
                 else
                   g=0xdf;*/
-                if (wtiStore->firstM_>=3)
+                if (wtiStore->firstM>=3)
                   g=0x7f;
-                else if (wtiStore->firstM_>=2)
-                  g=0xbf-0x40*(wtiStore->firstM_-2);
-                else if (wtiStore->firstM_>=1)
-                  g=0xff-0x40*(wtiStore->firstM_-1);
-                else if (wtiStore->firstM_>=0)
-                  g=0x00+0x40*(wtiStore->firstM_-0);
-                else if (wtiStore->firstM_>=-1)
-                  g=0x40+0x40*(wtiStore->firstM_+1);
+                else if (wtiStore->firstM>=2)
+                  g=0xbf-0x40*(wtiStore->firstM-2);
+                else if (wtiStore->firstM>=1)
+                  g=0xff-0x40*(wtiStore->firstM-1);
+                else if (wtiStore->firstM>=0)
+                  g=0x00+0x40*(wtiStore->firstM-0);
+                else if (wtiStore->firstM>=-1)
+                  g=0x40+0x40*(wtiStore->firstM+1);
                 else
                   g=0x80;
                 int b;
@@ -1200,7 +1200,7 @@ int LaguerreModel::giveWorkThreaded(MandelEvaluator<BASE> *me)
   {
     retryEffortFrom=-1;
     MandelMath::complex<MandelMath::number_a *> &tmpc=precisionRecord->params.base;//will assign to currentParams.c (position.worker, &params.base_re_s_, &params.base_im_s, true);
-    MandelMath::complex<BASE> &root=me->currentData.root;
+    MandelMath::complex<BASE> &root=me->laguerreData.r;
     for (int pi=0; pi<imageWidth*imageHeight; pi++)
     {
       int pointIndex=(nextGivenPointIndex+pi)%(imageWidth*imageHeight);
@@ -1239,12 +1239,14 @@ int LaguerreModel::giveWorkThreaded(MandelEvaluator<BASE> *me)
             precisionRecord->position.pixelXtoRE<BASE>(pointIndex%imageWidth - imageWidth/2, &me->currentParams.first_z.re);
             precisionRecord->position.pixelYtoIM<BASE>(imageHeight/2-pointIndex/imageWidth, &me->currentParams.first_z.im);
             root.assign(&me->currentParams.first_z);
-            me->currentData.f.assign(&root); //set both root and f: root will change, f needed in doneWork
+            //no can do me->currentData.f.assign(&root); //set both root and f: root will change, f needed in doneWork
+            storeAtIndex->firstStep_re=root.re.toDouble();
+            storeAtIndex->firstStep_im=root.im.toDouble();
             me->currentParams.epoch=me->busyEpoch;
             me->currentParams.pixelIndex=pointIndex;
             me->currentParams.nth_fz=precisionRecord->params.nth_fz;
             //me->startNewton(precisionRecord->params.period, &tmpc); //evaluator->currentData.f is additional hidden parameter
-            me->currentData.store->period=precisionRecord->params.period;
+            //me->currentParams.store->period=precisionRecord->params.period;
 
             me->currentParams.c.assign_across(&tmpc);
             //me->currentWorker->assign_across(me->currentParams.c.re, precisionRecord->currentWorker, tmpc.re);
@@ -1304,14 +1306,14 @@ int LaguerreModel::doneWorkThreaded(MandelEvaluator<BASE> *me, int result, bool 
           //in theory, LaguerrePoint can be assigned from NewtRes; in practice, they are quite different
           //MandelMath::worker_multi::Allocator allo(storeWorker->getAllocator(), me->currentParams.pixelIndex*LaguerrePoint::LEN, LaguerrePoint::LEN, nullptr);
           //LaguerrePoint point_(dstStore, &allo, nullptr); mhmm
-          me->tmpLaguerrePoint.r.assign(&me->currentData.root); //root
-          me->tmpLaguerrePoint.fz_r.assign(&me->newtres.fz_r);
-          me->tmpLaguerrePoint.fz_r.re.add_double(1);
-          me->tmpLaguerrePoint.nth_fz.assign(&me->newtres.nth_fz);
-          me->tmpLaguerrePoint.writeTo(precisionRecord->points, me->currentParams.pixelIndex*LaguerrePoint<MandelMath::number_a *>::LEN);
+          //me->laguerreData.r.assign(&me->laguerreData.r); //root
+          me->laguerreData.fz_r.assign(&me->newtres.fz_r);
+          me->laguerreData.fz_r.re.add_double(1);
+          me->laguerreData.nth_fz.assign(&me->newtres.nth_fz);
+          me->laguerreData.writeTo(precisionRecord->points, me->currentParams.pixelIndex*LaguerrePoint<MandelMath::number_a *>::LEN);
           dstStore->iter=me->newtres.cyclesNeeded;
           dstStore->naiveChoice=me->newtres.naiveChoice;
-          dstStore->firstM_=me->newtres.firstMum_re;
+          dstStore->firstM=me->newtres.firstMum_re;
           /* first lagu step - it's easier to just show direction to the root itself, not first step
           dstStore->firstStep_re=me->currentWorker->toDouble(me->newtres.first_guess_lagu.re)-
                                  me->currentWorker->toDouble(me->currentData.f.re);
@@ -1323,9 +1325,9 @@ int LaguerreModel::doneWorkThreaded(MandelEvaluator<BASE> *me, int result, bool 
           dstStore->firstStep_im=me->currentWorker->toDouble(me->currentData.root.im)-
                                  me->currentWorker->toDouble(me->currentData.f.im);*/
           dstStore->firstStep_re=me->newtres.first_lagu1_re-
-                                 me->currentData.f.re.toDouble();
+                                 dstStore->firstStep_re;//me->currentData.f.re.toDouble();
           dstStore->firstStep_im=me->newtres.first_lagu1_im-
-                                 me->currentData.f.im.toDouble();
+                                 dstStore->firstStep_im;//me->currentData.f.im.toDouble();
         }
         else
           dbgPoint();
@@ -1560,7 +1562,7 @@ void LaguerreModel::Position::pixelYtoIM(int y, MandelMath::number<BASE> *result
 
 LaguerreModel::Orbit::Orbit(MandelMath::NumberType ntype):
   evaluator(ntype, true),
-  pointDataStore(), pointData_(&pointDataStore, ntype),
+  pointDataStore(), pointData(&pointDataStore, ntype),
   first_mu_re(0), first_mu_im(0), first_mum_re(0), first_mum_im(0)
 {
 }
@@ -1600,15 +1602,15 @@ LaguerreModel::PrecisionRecord::PrecisionRecord(MandelMath::NumberType ntype, Pr
             {
               return doneReceiver->giveWorkThreaded(me);
             };
-        thread->threaded.doneNewton=[doneReceiver](MandelEvaluator<double> *me, int result, bool giveWork)
+        thread->threaded.doneLaguerre=[doneReceiver](MandelEvaluator<double> *me, int result, bool giveWork)
             {
               return doneReceiver->doneWorkThreaded(me, result, giveWork);
             };
-        QObject::connect(&threads[t]->thread, &MandelEvaluatorThread::doneNewtonThreaded,
+        QObject::connect(&threads[t]->thread, &MandelEvaluatorThread::doneLaguerreThreaded,
                          doneReceiver, &LaguerreModel::doneWorkInThread,
                          Qt::ConnectionType::QueuedConnection);
         QObject::connect(doneReceiver, &LaguerreModel::triggerLaguerreThreaded,
-                         &threads[t]->thread, &MandelEvaluatorThread::doNewtonThreaded,
+                         &threads[t]->thread, &MandelEvaluatorThread::doLaguerreThreaded,
                          Qt::ConnectionType::QueuedConnection);
       }
       break;
@@ -1623,15 +1625,15 @@ LaguerreModel::PrecisionRecord::PrecisionRecord(MandelMath::NumberType ntype, Pr
             {
               return doneReceiver->giveWorkThreaded<__float128>(me);
             };
-        thread->threaded.doneNewton=[doneReceiver](MandelEvaluator<__float128> *me, int result, bool giveWork)
+        thread->threaded.doneLaguerre=[doneReceiver](MandelEvaluator<__float128> *me, int result, bool giveWork)
             {
               return doneReceiver->doneWorkThreaded<__float128>(me, result, giveWork);
             };
-        QObject::connect(&threads[t]->thread, &MandelEvaluatorThread::doneNewtonThreaded,
+        QObject::connect(&threads[t]->thread, &MandelEvaluatorThread::doneLaguerreThreaded,
                          doneReceiver, &LaguerreModel::doneWorkInThread,
                          Qt::ConnectionType::QueuedConnection);
         QObject::connect(doneReceiver, &LaguerreModel::triggerLaguerreThreaded,
-                         &threads[t]->thread, &MandelEvaluatorThread::doNewtonThreaded,
+                         &threads[t]->thread, &MandelEvaluatorThread::doLaguerreThreaded,
                          Qt::ConnectionType::QueuedConnection);
       }
       break;
@@ -1645,15 +1647,15 @@ LaguerreModel::PrecisionRecord::PrecisionRecord(MandelMath::NumberType ntype, Pr
             {
               return doneReceiver->giveWorkThreaded<MandelMath::dd_real>(me);
             };
-        thread->threaded.doneNewton=[doneReceiver](MandelEvaluator<MandelMath::dd_real> *me, int result, bool giveWork)
+        thread->threaded.doneLaguerre=[doneReceiver](MandelEvaluator<MandelMath::dd_real> *me, int result, bool giveWork)
             {
               return doneReceiver->doneWorkThreaded<MandelMath::dd_real>(me, result, giveWork);
             };
-        QObject::connect(&threads[t]->thread, &MandelEvaluatorThread::doneNewtonThreaded,
+        QObject::connect(&threads[t]->thread, &MandelEvaluatorThread::doneLaguerreThreaded,
                          doneReceiver, &LaguerreModel::doneWorkInThread,
                          Qt::ConnectionType::QueuedConnection);
         QObject::connect(doneReceiver, &LaguerreModel::triggerLaguerreThreaded,
-                         &threads[t]->thread, &MandelEvaluatorThread::doNewtonThreaded,
+                         &threads[t]->thread, &MandelEvaluatorThread::doLaguerreThreaded,
                          Qt::ConnectionType::QueuedConnection);
       }
       break;
@@ -1667,15 +1669,15 @@ LaguerreModel::PrecisionRecord::PrecisionRecord(MandelMath::NumberType ntype, Pr
             {
               return doneReceiver->giveWorkThreaded<MandelMath::dq_real>(me);
             };
-        thread->threaded.doneNewton=[doneReceiver](MandelEvaluator<MandelMath::dq_real> *me, int result, bool giveWork)
+        thread->threaded.doneLaguerre=[doneReceiver](MandelEvaluator<MandelMath::dq_real> *me, int result, bool giveWork)
             {
               return doneReceiver->doneWorkThreaded<MandelMath::dq_real>(me, result, giveWork);
             };
-        QObject::connect(&threads[t]->thread, &MandelEvaluatorThread::doneNewtonThreaded,
+        QObject::connect(&threads[t]->thread, &MandelEvaluatorThread::doneLaguerreThreaded,
                          doneReceiver, &LaguerreModel::doneWorkInThread,
                          Qt::ConnectionType::QueuedConnection);
         QObject::connect(doneReceiver, &LaguerreModel::triggerLaguerreThreaded,
-                         &threads[t]->thread, &MandelEvaluatorThread::doNewtonThreaded,
+                         &threads[t]->thread, &MandelEvaluatorThread::doLaguerreThreaded,
                          Qt::ConnectionType::QueuedConnection);
       }
       break;
@@ -1689,15 +1691,15 @@ LaguerreModel::PrecisionRecord::PrecisionRecord(MandelMath::NumberType ntype, Pr
             {
               return doneReceiver->giveWorkThreaded<MandelMath::real642>(me);
             };
-        thread->threaded.doneNewton=[doneReceiver](MandelEvaluator<MandelMath::real642> *me, int result, bool giveWork)
+        thread->threaded.doneLaguerre=[doneReceiver](MandelEvaluator<MandelMath::real642> *me, int result, bool giveWork)
             {
               return doneReceiver->doneWorkThreaded<MandelMath::real642>(me, result, giveWork);
             };
-        QObject::connect(&threads[t]->thread, &MandelEvaluatorThread::doneNewtonThreaded,
+        QObject::connect(&threads[t]->thread, &MandelEvaluatorThread::doneLaguerreThreaded,
                          doneReceiver, &LaguerreModel::doneWorkInThread,
                          Qt::ConnectionType::QueuedConnection);
         QObject::connect(doneReceiver, &LaguerreModel::triggerLaguerreThreaded,
-                         &threads[t]->thread, &MandelEvaluatorThread::doNewtonThreaded,
+                         &threads[t]->thread, &MandelEvaluatorThread::doLaguerreThreaded,
                          Qt::ConnectionType::QueuedConnection);
       }
       break;

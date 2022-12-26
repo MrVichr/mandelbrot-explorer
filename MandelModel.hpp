@@ -150,15 +150,15 @@ protected:
     //-> evaluator.currentData MandelPoint pointData;
     struct Bulb
     {
-      bool valid_;
-      MandelMath::complex<MandelMath::number_a *> cb_;
-      MandelMath::complex<MandelMath::number_a *> rb_;
-      MandelMath::complex<MandelMath::number_a *> xc_;
-      MandelMath::complex<MandelMath::number_a *> baseZC_;
-      MandelMath::complex<MandelMath::number_a *> baseCC_;
-      MandelMath::complex<MandelMath::number_a *> baseFz_;
+      bool valid_unused;
+      MandelMath::complex<MandelMath::number_a *> cb_unused;
+      MandelMath::complex<MandelMath::number_a *> rb_unused;
+      MandelMath::complex<MandelMath::number_a *> xc_unused;
+      MandelMath::complex<MandelMath::number_a *> baseZC_unused;
+      MandelMath::complex<MandelMath::number_a *> baseCC_unused;
+      MandelMath::complex<MandelMath::number_a *> baseFz;
       int foundMult_;
-      bool is_card_;
+      bool is_card_unused;
       Bulb(MandelMath::NumberType ntype);
       ~Bulb();
       constexpr static int LEN=12;
@@ -186,7 +186,7 @@ protected:
     MandelEvaluator<MandelMath::number_a *> **threads;
     PrecisionRecord(MandelMath::NumberType ntype, PrecisionRecord *source, MandelModel *doneReceiver);
     ~PrecisionRecord();
-    constexpr static int LEN=ShareableViewInfo::LEN+MandelPoint<MandelMath::number_a *>::LEN+Position::LEN+Orbit::LEN+5  +6;
+    //constexpr static int LEN=ShareableViewInfo::LEN+MandelPoint_<MandelMath::number_a *>::LEN+Position::LEN+Orbit::LEN+5  +6;
       //setViewDouble=2 setView=2 updateCachedDepth=2 -> +6
   } *precisionRecord;
 };

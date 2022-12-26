@@ -20,8 +20,8 @@ public:
   JuliaModel();
   ~JuliaModel();
   Q_INVOKABLE void startRunning();
-  void transformStore(void *old_points, MandelPointStore *old_store, int old_width, int old_height, const MandelMath::complex<MandelMath::number_a *> *old_c,
-                      void *new_points, MandelPointStore *new_store, int new_width, int new_height, const MandelMath::complex<MandelMath::number_a *> *new_c,
+  void transformStore(void *old_points, JuliaPointStore *old_store, int old_width, int old_height, const MandelMath::complex<MandelMath::number_a *> *old_c,
+                      void *new_points, JuliaPointStore *new_store, int new_width, int new_height, const MandelMath::complex<MandelMath::number_a *> *new_c,
                       int inlog, int new_step_log);
   Q_INVOKABLE void setParams(ShareableViewInfo viewInfo);
   void setView(const MandelMath::complex<MandelMath::number_a *> *c, double scale);
@@ -115,7 +115,7 @@ signals:
 protected:
   //MandelMath::worker_multi::Allocator<MandelMath::worker_multi> *storeAllocator;
   //MandelMath::worker_multi *storeWorker; //pointStore
-  MandelPointStore *pointStore;
+  JuliaPointStore *pointStore;
   //constexpr static int MAX_ZOOM_IN_DOUBLE=55;//53;
   //MandelMath::number_store::DbgType currentMath;
   int epoch;
@@ -149,17 +149,17 @@ protected:
   struct Orbit
   {
     MandelEvaluator<MandelMath::number_a *> evaluator;
-    MandelPointStore pointDataStore; //but we need it for long-term storage of results
-    MandelPoint<MandelMath::number_a *> pointData_;
+    JuliaPointStore pointDataStore; //but we need it for long-term storage of results
+    JuliaPoint<MandelMath::number_a *> pointData;
     double first_mu_re, first_mu_im, first_mum_re, first_mum_im;
     Orbit(MandelMath::NumberType ntype);
     ~Orbit();
-    constexpr static int LEN=MandelPoint<MandelMath::number_a *>::LEN;
+    constexpr static int LEN=JuliaPoint<MandelMath::number_a *>::LEN;
   };
   struct PrecisionRecord
   {
     MandelMath::NumberType ntype;
-    MandelPoint<MandelMath::number_a *> wtiPoint;
+    JuliaPoint<MandelMath::number_a *> wtiPoint;
     Params params;
     Position position;
     Orbit orbit;
@@ -169,7 +169,7 @@ protected:
     MandelEvaluator<MandelMath::number_a *> **threads;
     PrecisionRecord(MandelMath::NumberType ntype, PrecisionRecord *source, JuliaModel *doneReceiver);
     ~PrecisionRecord();
-    constexpr static int LEN=Params::LEN+MandelPoint<MandelMath::number_a *>::LEN+Position::LEN+Orbit::LEN  +4   +1;
+    //constexpr static int LEN=Params::LEN+JuliaPoint<MandelMath::number_a *>::LEN+Position::LEN+Orbit::LEN  +4   +1;
   } *precisionRecord;
 };
 

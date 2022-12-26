@@ -12,7 +12,7 @@ struct LaguerrePointStore
 {
   enum State { stUnknown, stWorking, stResolved, stFail };
   std::atomic<State> state;
-  double firstM_;
+  double firstM;
   double firstStep_re, firstStep_im;
   NewtonNaiveChoice naiveChoice;
   int iter;
@@ -107,7 +107,7 @@ struct MandelPoint
   MandelMath::number<BASE> fz_c_mag; //since the beginning
   MandelMath::number<BASE> sure_fz_mag; //since near0
   MandelMath::complex<BASE> sure_startf;
-  MandelMath::complex<BASE> lookper_startf_;
+  MandelMath::complex<BASE> lookper_startf;
   MandelMath::complex<BASE> lookper_nearr;
   MandelMath::number<BASE> lookper_nearr_dist;
   MandelMath::number<BASE> lookper_totalFzmag;
@@ -116,6 +116,87 @@ struct MandelPoint
   MandelMath::complex<BASE> root;
   MandelMath::number<BASE> extangle;
   MandelPoint &operator =(MandelPoint &src) = delete;
+  //template <int IIW_SRC>
+  //void assign<WORKER_MULTI, IIW_OFFSET, IIW_SRC>(const MandelPoint<WORKER_MULTI, IIW_SRC> &src);
+  //template <int IIW_SRC>
+  //void assign(const MandelPoint<WORKER_MULTI, IIW_SRC> &src);
+  void readFrom(void *storage, int index);//BASE src[LEN]);
+  void writeTo(void *storage, int index);
+  void zero(const MandelMath::complex<BASE> *first_z);
+};
+
+struct JuliaPointStore
+{
+  enum WorkState { stIdle, stWorking, stDone };
+  std::atomic<WorkState> wstate;
+  enum ResultState { stUnknown, stOutside, stOutAngle, stBoundary, stMisiur, stDiverge, stPeriod2, stPeriod3, stMaxIter };
+  ResultState rstate;
+  bool has_fc_r;
+  int lookper_startiter, lookper_prevGuess, lookper_lastGuess;
+  bool lookper_nearr_dist_touched; //check if equal but only once; in theory should only happen at dist=0
+  int near0iter_1; //actual+1
+  int nearziter_0;
+  int period;
+  int surehand;
+  int iter, newton_iter;
+  double exterior_hits, exterior_avoids; //upper and lower bound
+  struct
+  {
+    double hits;
+    double hits_re, hits_im;
+    double phi_re, phi_im;
+    double phi1_re, phi1_im;
+    double phi2_re, phi2_im;
+    double f1_re, f1_im;
+    int first_under_1;
+    void zero() {hits=-1; hits_re=0; hits_im=0; phi_re=0; phi_im=0; phi1_re=0; phi1_im=0; phi_re=0; phi2_im=0; f1_re=0; f1_im=0; first_under_1=0; }
+  } interior;
+
+  JuliaPointStore();
+  void assign(const JuliaPointStore *src);
+};
+
+template <class BASE>
+struct JuliaPoint
+{
+  //static constexpr size_t LEN=20;
+  enum IndexIntoWorker
+  {
+    iiw__BASE=0,
+    iiw_f_=iiw__BASE+0,
+    iiw_fc_c=iiw__BASE+2,
+    iiw_fz_r=iiw__BASE+4,
+    iiw_fz_c_mag=iiw__BASE+6,
+    iiw_sure_fz_mag=iiw__BASE+7,
+    iiw_sure_startf=iiw__BASE+8,
+    iiw_lookper_startf=iiw__BASE+10,
+    iiw_lookper_nearr=iiw__BASE+12,
+    iiw_lookper_nearr_dist=iiw__BASE+14,
+    iiw_lookper_totalFzmag=iiw__BASE+15,
+    iiw_near0m=iiw__BASE+16,
+    iiw_nearzm=iiw__BASE+17,
+    iiw_root=iiw__BASE+18,
+    iiw_extangle=iiw__BASE+20,
+    iiw__END=iiw__BASE+21
+  };
+  static constexpr size_t LEN=iiw__END-iiw__BASE;
+  JuliaPointStore *store;
+  JuliaPoint(JuliaPointStore *store, MandelMath::NumberType ntype);
+  MandelMath::complex<BASE> f;
+  MandelMath::complex<BASE> fc_c; //fc_c, or fz_r if stPeriod2 or stPeriod3
+  MandelMath::complex<BASE> fz_r;
+  MandelMath::number<BASE> fz_c_mag; //since the beginning
+  MandelMath::number<BASE> sure_fz_mag; //since near0
+  MandelMath::complex<BASE> sure_startf;
+  MandelMath::complex<BASE> lookper_startf;
+  MandelMath::complex<BASE> lookper_nearr;
+  MandelMath::number<BASE> lookper_nearr_dist;
+  MandelMath::number<BASE> lookper_totalFzmag;
+  MandelMath::number<BASE> near0m;
+  MandelMath::number<BASE> nearzm;
+  MandelMath::complex<BASE> root;
+  MandelMath::number<BASE> extangle;
+  JuliaPoint &operator =(JuliaPoint &src) = delete;
   //template <int IIW_SRC>
   //void assign<WORKER_MULTI, IIW_OFFSET, IIW_SRC>(const MandelPoint<WORKER_MULTI, IIW_SRC> &src);
   //template <int IIW_SRC>
@@ -158,7 +239,7 @@ template <class BASE>
 class LaguerreStep
 {
 protected:
-  enum IndexIntoWorker
+  /*enum IndexIntoWorker
   {
     iiw__BASE=133,
     iiw_step=iiw__BASE+0,
@@ -172,9 +253,9 @@ protected:
     iiw_laguX=iiw__BASE+15,
     iiw_fzzf=iiw__BASE+17,
     iiw__END=iiw__BASE+19
-  };
+  };*/
 public:
-  static constexpr size_t LEN=iiw__END-iiw__BASE;
+  static constexpr size_t LEN=19;
   LaguerreStep(MandelMath::NumberType ntype);
   //~LaguerreStep();
   //void switchType(MandelMath::number_worker *worker);
@@ -210,7 +291,7 @@ template <typename BASE>
 class MandelLoopEvaluator
 {
 public:
-  enum IndexIntoWorker
+  /*enum IndexIntoWorker
   {
     iiw__BASE=75,
     iiw_help_c=iiw__BASE+0,
@@ -228,8 +309,8 @@ public:
     iiw_s1=iiw__BASE+22,
     iiw_s2=iiw__BASE+24,
     iiw__END=iiw__BASE+26
-  };
-  static constexpr size_t LEN=iiw__END-iiw__BASE;
+  };*/
+  static constexpr size_t LEN=26;
   MandelLoopEvaluator(MandelMath::NumberType ntype);
   //~MandelLoopEvaluator();
   /*union Place
@@ -257,7 +338,7 @@ public:
                     const MandelMath::complex<BASE> *c, const MandelMath::complex<BASE> *z, int iter); //
 
   //inputs
-  MandelMath::complex<BASE> help_c; //for use by caller if needed
+  //MandelMath::complex<BASE> help_c; //for use by caller if needed
     // TODO: back into params.c now that we have first_z ?
   //MandelMath::number_store z_re, z_im;
   //MandelMath::number_store c_re, c_im;
@@ -294,15 +375,15 @@ public:
   MandelEvaluatorThread(MandelEvaluator<MandelMath::number_a *> *owner);
   void syncMandel();
   void syncJulia(int juliaPeriod);
-  int syncNewton(int period, const MandelMath::complex<MandelMath::number_a *> *c, MandelMath::complex<MandelMath::number_a *> *r, const bool fastHoming);
+  int syncLaguerre(int period, MandelMath::complex<MandelMath::number_a *> *r, const bool fastHoming);
 public slots:
   void doMandelThreaded(int epoch);
   void doJuliaThreaded(int epoch, int juliaPeriod);
-  void doNewtonThreaded(int epoch);
+  void doLaguerreThreaded(int epoch, int laguerrePeriod);
 signals:
   void doneMandelThreaded(MandelEvaluatorThread *me);
   void doneJuliaThreaded(MandelEvaluatorThread *me);
-  void doneNewtonThreaded(MandelEvaluatorThread *me);
+  void doneLaguerreThreaded(MandelEvaluatorThread *me);
 };
 
 template <class BASE>
@@ -352,15 +433,17 @@ public:
 
   struct ComputeParams
   {
-    enum IndexIntoWorker
+    /*enum IndexIntoWorker
     {
       iiw__BASE=0,
       iiw_c=iiw__BASE+0,
-      iiw_z=iiw__BASE+2,
-      iiw__END=iiw__BASE+4
+      iiw_r=iiw__BASE+2,
+      iiw_z=iiw__BASE+4,
+      iiw__END=iiw__BASE+6
     };
-    static constexpr size_t LEN=iiw__END-iiw__BASE;
+    static constexpr size_t LEN=iiw__END-iiw__BASE;*/
     MandelMath::complex<BASE> c;
+    MandelMath::complex<BASE> juliaRoot;
     MandelMath::complex<BASE> first_z;
     int epoch;
     int pixelIndex;
@@ -371,20 +454,18 @@ public:
     int nth_fz;
     ComputeParams(MandelMath::NumberType ntype);
   } currentParams;
-  //MandelMath::worker_multi::Allocator currentDataAllocator;
-  MandelPointStore currentDataStore;
-  MandelPoint<BASE> currentData;
-  LaguerrePointStore tmpLaguerreStore;
-  LaguerrePoint<BASE> tmpLaguerrePoint;
-  //JuliaPointStore tmpJuliaStore;  but same as mandel
-  //JuliaPoint<BASE> tmpJuliaPoint; more important, eval() is same for mandel and julia
+  LaguerrePointStore laguerreStore;
+  LaguerrePoint<BASE> laguerreData;
+  MandelPointStore mandelDataStore;
+  MandelPoint<BASE> mandelData;
+  JuliaPointStore juliaStore;
+  JuliaPoint<BASE> juliaData;
   typename MandelMath::complex<BASE>::Scratchpad tmp;
 
   void syncMandelSplit();
   void syncJuliaSplit(int juliaPeriod);
   MandelLoopEvaluator<BASE> loope;
-  //void startNewton(int period, const MandelMath::complex *c /*, currentData.f const *root, */);
-  int newton(int period, const MandelMath::complex<BASE> *c, MandelMath::complex<BASE> *r, const bool fastHoming);
+  int laguerre(int period, const MandelMath::complex<BASE> *c, MandelMath::complex<BASE> *r, const bool fastHoming);
   struct NewtRes
   {
     static constexpr int LEN=8;
@@ -507,7 +588,7 @@ public:
     MandelLoopEvaluator<BASE> *loope;
     LaguerreStep<BASE> *lagus;
     MandelMath::complex<BASE> z;
-    MandelMath::complex<BASE> r_;
+    MandelMath::complex<BASE> r;
     MandelMath::number<BASE> angleC;
     MandelMath::number<BASE> angle;
     MandelMath::complex<BASE> x;
@@ -527,14 +608,14 @@ public:
     ~ExtAngle();
     void computeMJ(number *result, bool mandel, int iter, const complex *c, const complex *z, typename complex::Scratchpad *tmp);
   } extangle;
-  static constexpr size_t LEN=ComputeParams::LEN+MandelPoint<BASE>::LEN+LaguerrePoint<BASE>::LEN+NewtRes::LEN+Eval::LEN+Newt::LEN+InteriorInfo::LEN+Bulb::LEN;
+  //static constexpr size_t LEN=10+ ComputeParams::LEN+MandelPoint_<BASE>::LEN+LaguerrePoint<BASE>::LEN+JuliaPoint<BASE>::LEN+NewtRes::LEN+Eval::LEN+Newt::LEN+InteriorInfo::LEN+Bulb::LEN;
 public:
   struct
   {
     std::function<int (MandelEvaluator *me)> give;
+    std::function<int (MandelEvaluator *me, int result, bool giveWork)> doneLaguerre;
     std::function<int (MandelEvaluator *me, bool giveWork)> doneMandel;
     std::function<int (MandelEvaluator *me, bool giveWork)> doneJulia;
-    std::function<int (MandelEvaluator *me, int result, bool giveWork)> doneNewton;
   } threaded;
 protected:
 
@@ -542,10 +623,11 @@ protected:
   int periodCheck(int period, const MandelMath::complex<BASE> *c, const MandelMath::complex<BASE> *root_seed, bool exactMatch);
   int estimateInterior(int period, const MandelMath::complex<BASE> *c, const MandelMath::complex<BASE> *root);//, InteriorInfo *interior);
   void eval_until_bailout(const MandelMath::complex<BASE> *c);
-  void evaluate(int juliaPeriod);
+  void evaluateMandel();
   void doMandelThreadedSplit(int epoch);
+  void evaluateJulia(int juliaPeriod);
   void doJuliaThreadedSplit(int epoch, int juliaPeriod);
-  void doNewtonThreadedSplit(int epoch);
+  void doLaguerreThreadedSplit(int epoch, int laguerrePeriod);
   friend MandelEvaluatorThread;
 /*protected slots:
   void doCompute();

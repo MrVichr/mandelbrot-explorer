@@ -485,7 +485,7 @@ Window {
               //  busyIndicator.color="blue"; //up to 2*threads during dragging... or more
               else
                 busyIndicator.color="red";
-              busyIndicator2.text=juliaModel.threadsWorking
+              busyIndicator2.text=juliaModel.threadsWorking;
             };
             if (rbuttonViewLagu.checked)
             {
@@ -495,8 +495,15 @@ Window {
               labelXY.text=laguerreModel.getTextXY();
               labelInfoGen.text=laguerreModel.getTextInfoGen();
               labelInfoSpec.text=laguerreModel.getTextInfoSpec();
-              busyIndicator.color="black";
-              busyIndicator2.text="";
+              if (laguerreModel.threadsWorking===0)
+                busyIndicator.color="green";
+              else if (laguerreModel.threadsWorking<laguerreModel.threadsMax)
+                busyIndicator.color="yellow";
+              //else if (laguerreModel.threadsWorking>laguerreModel.threadsMax)
+              //  busyIndicator.color="blue"; //up to 2*threads during dragging... or more
+              else
+                busyIndicator.color="red";
+              busyIndicator2.text=laguerreModel.threadsWorking;
             };
         }
     }

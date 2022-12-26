@@ -254,15 +254,15 @@ QString MandelModel::getTextInfoSpec()
       return "sure="+QString::number(data_store->surehand);
     case MandelPointStore::ResultState::stPeriod2:
     {
-      double p=std::atan2((precisionRecord->orbit.bulb.baseFz_.im.toDouble()),
-                           precisionRecord->orbit.bulb.baseFz_.re.toDouble())*precisionRecord->orbit.bulb.foundMult_;
+      double p=std::atan2((precisionRecord->orbit.bulb.baseFz.im.toDouble()),
+                           precisionRecord->orbit.bulb.baseFz.re.toDouble())*precisionRecord->orbit.bulb.foundMult_;
       return QString("per=")+QString::number(data_store->period)+" sure="+QString::number(data_store->surehand)+" int="+QString::number(data_store->interior.hits)   +
           " mult="+QString::number(std::round(p/(2*M_PI)))+"/"+QString::number(precisionRecord->orbit.bulb.foundMult_);
     } break;
     case MandelPointStore::ResultState::stPeriod3:
     {
-      double p=std::atan2((precisionRecord->orbit.bulb.baseFz_.im.toDouble()),
-                           precisionRecord->orbit.bulb.baseFz_.re.toDouble())*precisionRecord->orbit.bulb.foundMult_;
+      double p=std::atan2((precisionRecord->orbit.bulb.baseFz.im.toDouble()),
+                           precisionRecord->orbit.bulb.baseFz.re.toDouble())*precisionRecord->orbit.bulb.foundMult_;
       return QString("per=")+QString::number(data_store->period)+" sure="+QString::number(data_store->surehand)+" int="+QString::number(data_store->interior.hits)   +
           " mult="+QString::number(std::round(p/(2*M_PI)))+"/"+QString::number(precisionRecord->orbit.bulb.foundMult_);
     } break;
@@ -277,16 +277,16 @@ ShareableViewInfo MandelModel::getViewInfo()
   ShareableViewInfo result(precisionRecord->ntype);
   MandelMath::complex<MandelMath::number_a *>::Scratchpad spad(precisionRecord->ntype);
   //result.worker=orbit.worker;
-  result.period=precisionRecord->orbit.evaluator.currentData.store->nearziter_0;//evaluator.currentData.lookper_lastGuess;//orbit.pointData.period;
+  result.period=precisionRecord->orbit.evaluator.mandelData.store->nearziter_0;//evaluator.currentData.lookper_lastGuess;//orbit.pointData.period;
   if (result.period<1)
     result.period=1;
   result.nth_fz=result.period;/*precisionRecord->orbit.evaluator.currentData.store->period;
   if (result.nth_fz<1)
     result.nth_fz=result.period;*/
   result.scale=precisionRecord->position.step_size;
-  if ((precisionRecord->orbit.evaluator.currentData.store->rstate==MandelPointStore::ResultState::stPeriod2) ||
-      (precisionRecord->orbit.evaluator.currentData.store->rstate==MandelPointStore::ResultState::stPeriod3))
-    result.juliaPeriod=precisionRecord->orbit.evaluator.currentData.store->period;
+  if ((precisionRecord->orbit.evaluator.mandelData.store->rstate==MandelPointStore::ResultState::stPeriod2) ||
+      (precisionRecord->orbit.evaluator.mandelData.store->rstate==MandelPointStore::ResultState::stPeriod3))
+    result.juliaPeriod=precisionRecord->orbit.evaluator.mandelData.store->period;
   else
     result.juliaPeriod=1<<MAX_EFFORT;
   /*orbit.worker->init_(&result.re_, &result.re_p);
@@ -294,16 +294,16 @@ ShareableViewInfo MandelModel::getViewInfo()
   orbit.worker->init_(&result.root_re, &result.rre_p);
   orbit.worker->init_(&result.root_im, &result.rim_p);*/
   result.c.assign_across(&precisionRecord->orbit.evaluator.currentParams.c);
-  result.root.assign_across(&precisionRecord->orbit.evaluator.currentData.root);
+  result.root.assign_across(&precisionRecord->orbit.evaluator.mandelData.root);
   precisionRecord->orbit.evaluator.loope.eval_zz(&precisionRecord->orbit.evaluator.tmp, result.nth_fz,
       &precisionRecord->orbit.evaluator.currentParams.c,//result.c,
-      &precisionRecord->orbit.evaluator.currentData.root,//result.root,
+      &precisionRecord->orbit.evaluator.mandelData.root,//result.root,
       false);
   result.nth_fz_limit.assign_across(precisionRecord->orbit.evaluator.loope.f_z.getMag_tmp(&spad));
 
   //TODO: why here? should be somewhere else
   precisionRecord->lagu_c.assign_across(&precisionRecord->orbit.evaluator.currentParams.c);
-  precisionRecord->lagu_r.assign_across(&precisionRecord->orbit.evaluator.currentData.root);
+  precisionRecord->lagu_r.assign_across(&precisionRecord->orbit.evaluator.mandelData.root);
 
   return result;
 }
@@ -328,22 +328,22 @@ ShareableViewInfo MandelModel::makeViewInfo(const QVariantMap &params)
   //already 0 precisionRecord->orbit.evaluator.currentParams.nth_fz=0;
   //precisionRecord->orbit.evaluator.currentData.store->rstate=MandelPointStore::ResultState::stUnknown_;
   //precisionRecord->orbit.evaluator.currentData.store->wstate=MandelPointStore::WorkState::stIdle;
-  precisionRecord->orbit.evaluator.currentData.zero(&precisionRecord->orbit.evaluator.currentParams.first_z);
-  precisionRecord->orbit.evaluator.currentData.store->wstate=MandelPointStore::WorkState::stWorking;
+  precisionRecord->orbit.evaluator.mandelData.zero(&precisionRecord->orbit.evaluator.currentParams.first_z);
+  precisionRecord->orbit.evaluator.mandelData.store->wstate=MandelPointStore::WorkState::stWorking;
   precisionRecord->orbit.evaluator.currentParams.breakOnNewNearest=false;
   precisionRecord->orbit.evaluator.currentParams.maxiter=1<<MAX_EFFORT;
   precisionRecord->orbit.evaluator.currentParams.want_extangle=false;//don't need for root
   {
-    while ((precisionRecord->orbit.evaluator.currentData.store->rstate==MandelPointStore::ResultState::stUnknown) &&
-           (precisionRecord->orbit.evaluator.currentData.store->iter<(1<<MAX_EFFORT)))
+    while ((precisionRecord->orbit.evaluator.mandelData.store->rstate==MandelPointStore::ResultState::stUnknown) &&
+           (precisionRecord->orbit.evaluator.mandelData.store->iter<(1<<MAX_EFFORT)))
     {
       //precisionRecord->orbit.evaluator.currentParams.maxiter=1<<MAX_EFFORT; //dont't know->run fully
       precisionRecord->orbit.evaluator.thread.syncMandel();
     }
   }
-  if (precisionRecord->orbit.evaluator.currentData.store->rstate==MandelPointStore::ResultState::stPeriod2 ||
-      precisionRecord->orbit.evaluator.currentData.store->rstate==MandelPointStore::ResultState::stPeriod3)
-    result.root.assign(&precisionRecord->orbit.evaluator.currentData.root);
+  if (precisionRecord->orbit.evaluator.mandelData.store->rstate==MandelPointStore::ResultState::stPeriod2 ||
+      precisionRecord->orbit.evaluator.mandelData.store->rstate==MandelPointStore::ResultState::stPeriod3)
+    result.root.assign(&precisionRecord->orbit.evaluator.mandelData.root);
   else
     result.root.zero(0, 0);
 
@@ -598,16 +598,16 @@ void MandelModel::setImageSize(int width, int height)
         break;
 #if !NUMBER_DOUBLE_ONLY
       case MandelMath::NumberType::typeFloat128:
-        new_points=new __float128[newLength];
+        new_points=new __float128[newLength*MandelPoint<MandelMath::number_a *>::LEN];
         break;
       case MandelMath::NumberType::typeDDouble:
-        new_points=new MandelMath::dd_real[newLength];
+        new_points=new MandelMath::dd_real[newLength*MandelPoint<MandelMath::number_a *>::LEN];
         break;
       case MandelMath::NumberType::typeQDouble:
-        new_points=new MandelMath::dq_real[newLength];
+        new_points=new MandelMath::dq_real[newLength*MandelPoint<MandelMath::number_a *>::LEN];
         break;
       case MandelMath::NumberType::typeReal642:
-        new_points=new MandelMath::real642[newLength];
+        new_points=new MandelMath::real642[newLength*MandelPoint<MandelMath::number_a *>::LEN];
         break;
 #endif
     }
@@ -832,8 +832,8 @@ void MandelModel::paintOrbit(ShareableImageWrapper image, int x, int y)
   //already 0 precisionRecord->orbit.evaluator.currentParams.nth_fz=0;
   //precisionRecord->orbit.evaluator.currentData.store->rstate=MandelPointStore::ResultState::stUnknown_;
   //precisionRecord->orbit.evaluator.currentData.store->wstate=MandelPointStore::WorkState::stIdle;
-  precisionRecord->orbit.evaluator.currentData.zero(&precisionRecord->orbit.evaluator.currentParams.first_z);
-  precisionRecord->orbit.evaluator.currentData.store->wstate=MandelPointStore::WorkState::stWorking;
+  precisionRecord->orbit.evaluator.mandelData.zero(&precisionRecord->orbit.evaluator.currentParams.first_z);
+  precisionRecord->orbit.evaluator.mandelData.store->wstate=MandelPointStore::WorkState::stWorking;
   precisionRecord->orbit.evaluator.currentParams.breakOnNewNearest=true;
   precisionRecord->orbit.evaluator.currentParams.maxiter=1<<MAX_EFFORT;
   precisionRecord->orbit.evaluator.currentParams.want_extangle=(_selectedPaintStyle==paintStyleExterAngle) ||
@@ -842,24 +842,24 @@ void MandelModel::paintOrbit(ShareableImageWrapper image, int x, int y)
     painter.setBrush(Qt::BrushStyle::NoBrush);
     painter.setPen(QColor(0xff, 0xff, 0xff)); //paint path
     int line_sx, line_sy;
-    reimToPixel(&line_sx, &line_sy, &precisionRecord->orbit.evaluator.currentData.f, &tmp);
-    while ((precisionRecord->orbit.evaluator.currentData.store->rstate==MandelPointStore::ResultState::stUnknown) &&
-           (precisionRecord->orbit.evaluator.currentData.store->iter<(1<<MAX_EFFORT)))
+    reimToPixel(&line_sx, &line_sy, &precisionRecord->orbit.evaluator.mandelData.f, &tmp);
+    while ((precisionRecord->orbit.evaluator.mandelData.store->rstate==MandelPointStore::ResultState::stUnknown) &&
+           (precisionRecord->orbit.evaluator.mandelData.store->iter<(1<<MAX_EFFORT)))
     {
       int line_ex, line_ey;
 
       if ((resultStore->rstate==MandelPointStore::ResultState::stPeriod2 || resultStore->rstate==MandelPointStore::ResultState::stPeriod3) &&
-          precisionRecord->orbit.evaluator.currentData.store->iter<resultStore->period)
+          precisionRecord->orbit.evaluator.mandelData.store->iter<resultStore->period)
       { //paint first period fully
-        precisionRecord->orbit.evaluator.currentParams.maxiter=precisionRecord->orbit.evaluator.currentData.store->iter+1;
+        precisionRecord->orbit.evaluator.currentParams.maxiter=precisionRecord->orbit.evaluator.mandelData.store->iter+1;
       }
-      else if (precisionRecord->orbit.evaluator.currentData.store->lookper_lastGuess==0)
+      else if (precisionRecord->orbit.evaluator.mandelData.store->lookper_lastGuess==0)
         precisionRecord->orbit.evaluator.currentParams.maxiter=1<<MAX_EFFORT; //dont't know->run fully
       else //stop at multiples of lookper, +1
-        precisionRecord->orbit.evaluator.currentParams.maxiter=1+(precisionRecord->orbit.evaluator.currentData.store->iter/precisionRecord->orbit.evaluator.currentData.store->lookper_lastGuess+1)*precisionRecord->orbit.evaluator.currentData.store->lookper_lastGuess;
+        precisionRecord->orbit.evaluator.currentParams.maxiter=1+(precisionRecord->orbit.evaluator.mandelData.store->iter/precisionRecord->orbit.evaluator.mandelData.store->lookper_lastGuess+1)*precisionRecord->orbit.evaluator.mandelData.store->lookper_lastGuess;
       precisionRecord->orbit.evaluator.thread.syncMandel();
 
-      reimToPixel(&line_ex, &line_ey, &precisionRecord->orbit.evaluator.currentData.f, &tmp);
+      reimToPixel(&line_ex, &line_ey, &precisionRecord->orbit.evaluator.mandelData.f, &tmp);
       if (line_ex>=-3 && line_ex<=10003 && line_ey>=-3 && line_ey<=10003)
       {
         if (line_sx>=-3 && line_sx<=10003 && line_sy>=-3 && line_sy<=10003)
@@ -869,12 +869,12 @@ void MandelModel::paintOrbit(ShareableImageWrapper image, int x, int y)
       };
     }
   }
-  if ((precisionRecord->orbit.evaluator.currentData.store->rstate==MandelPointStore::ResultState::stPeriod2) ||
-      (precisionRecord->orbit.evaluator.currentData.store->rstate==MandelPointStore::ResultState::stPeriod3))
+  if ((precisionRecord->orbit.evaluator.mandelData.store->rstate==MandelPointStore::ResultState::stPeriod2) ||
+      (precisionRecord->orbit.evaluator.mandelData.store->rstate==MandelPointStore::ResultState::stPeriod3))
   {
     int circ_x, circ_y;
     painter.setPen(QColor(0, 0xff, 0xff)); //paint root
-    reimToPixel(&circ_x, &circ_y, &precisionRecord->orbit.evaluator.currentData.root, &tmp);
+    reimToPixel(&circ_x, &circ_y, &precisionRecord->orbit.evaluator.mandelData.root, &tmp);
     if ((circ_x>=-3) && (circ_x<=10003) && (circ_y>=-3) && (circ_y<=10003))
     {
       painter.drawEllipse(circ_x-3, circ_y-3, 2*3, 2*3);
@@ -899,9 +899,9 @@ void MandelModel::paintOrbit(ShareableImageWrapper image, int x, int y)
         &precisionRecord->orbit.bulb.is_card, &precisionRecord->orbit.bulb.foundMult, &precisionRecord->orbit.bulb.baseFz);*/
     //precisionRecord->orbit.bulb.valid=
     precisionRecord->orbit.evaluator.bulb.findBulbBase(&precisionRecord->orbit.evaluator.tmp,
-        precisionRecord->orbit.evaluator.currentData.store->period,
+        precisionRecord->orbit.evaluator.mandelData.store->period,
         &precisionRecord->orbit.evaluator.currentParams.c);
-    precisionRecord->orbit.bulb.baseFz_.assign_across(&precisionRecord->orbit.evaluator.bulb.res_baseFz);
+    precisionRecord->orbit.bulb.baseFz.assign_across(&precisionRecord->orbit.evaluator.bulb.res_baseFz);
     precisionRecord->orbit.bulb.foundMult_=precisionRecord->orbit.evaluator.bulb.res_foundMult;
     if (precisionRecord->orbit.evaluator.bulb.res_valid)
     {
@@ -947,7 +947,7 @@ void MandelModel::paintOrbit(ShareableImageWrapper image, int x, int y)
 
   //beginning of external ray
   if (_selectedPaintStyle==paintStyle::paintStyleExterAngle &&
-      precisionRecord->orbit.evaluator.currentData.store->rstate==MandelPointStore::ResultState::stOutAngle)
+      precisionRecord->orbit.evaluator.mandelData.store->rstate==MandelPointStore::ResultState::stOutAngle)
   {
     int circ_x, circ_y;
     painter.setBrush(Qt::BrushStyle::SolidPattern);
@@ -1777,9 +1777,9 @@ int MandelModel::giveWorkThreaded(MandelEvaluator<BASE> *me)
 #if CURRENT_STORE_DIRECT
             me->currentData.store=storeAtIndex;
 #else
-            me->currentDataStore.assign(storeAtIndex);
+            me->mandelDataStore.assign(storeAtIndex);
 #endif
-            me->currentData.readFrom(precisionRecord->points, pointIndex*MandelPoint<MandelMath::number_a *>::LEN);
+            me->mandelData.readFrom(precisionRecord->points, pointIndex*MandelPoint<MandelMath::number_a *>::LEN);
             nextGivenPointIndex=(pointIndex+1)%(imageWidth*imageHeight);
             effortBonus=nextEffortBonus;
             return 0;
@@ -1813,10 +1813,10 @@ int MandelModel::doneWorkThreaded(MandelEvaluator<BASE> *me, bool giveWork)
 #endif
     {
       //int first, capac;
-      me->currentData.writeTo(precisionRecord->points, me->currentParams.pixelIndex*MandelPoint<MandelMath::number_a *>::LEN);
+      me->mandelData.writeTo(precisionRecord->points, me->currentParams.pixelIndex*MandelPoint<MandelMath::number_a *>::LEN);
 #if CURRENT_STORE_DIRECT
 #else
-      dstStore->assign(me->currentData.store);
+      dstStore->assign(me->mandelData.store);
 #endif
     }
     if (dstStore->wstate.load()==MandelPointStore::WorkState::stIdle)
@@ -2066,7 +2066,8 @@ MandelModel::Orbit::~Orbit()
 }
 
 MandelModel::Orbit::Bulb::Bulb(MandelMath::NumberType ntype):
-  cb_(ntype), rb_(ntype), xc_(ntype), baseZC_(ntype), baseCC_(ntype), baseFz_(ntype)
+  cb_unused(ntype), rb_unused(ntype), xc_unused(ntype),
+  baseZC_unused(ntype), baseCC_unused(ntype), baseFz(ntype)
 {
 }
 

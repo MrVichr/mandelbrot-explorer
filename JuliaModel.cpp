@@ -121,33 +121,33 @@ QString JuliaModel::getTextInfoGen()
     return "? +i* ?";
   //MandelMath::worker_multi::Allocator allo(storeWorker->getAllocator(), (orbit_x+imageWidth*orbit_y)*JuliaPoint::LEN, JuliaPoint::LEN, nullptr);
   //JuliaPoint data_(&pointStore_[orbit_x+imageWidth*orbit_y], &allo);
-  MandelPointStore *data_store=&pointStore[orbit_x+imageWidth*orbit_y];
+  JuliaPointStore *data_store=&pointStore[orbit_x+imageWidth*orbit_y];
   precisionRecord->wtiPoint.store=data_store;
-  precisionRecord->wtiPoint.readFrom(precisionRecord->points, (orbit_x+imageWidth*orbit_y)*MandelPoint<MandelMath::number_a *>::LEN);
-  MandelPoint<MandelMath::number_a *> *data=&precisionRecord->wtiPoint;
+  precisionRecord->wtiPoint.readFrom(precisionRecord->points, (orbit_x+imageWidth*orbit_y)*JuliaPoint<MandelMath::number_a *>::LEN);
+  JuliaPoint<MandelMath::number_a *> *data=&precisionRecord->wtiPoint;
 
   QString state;
   QString fc_fz;
   switch (data_store->rstate)
   {
-    case MandelPointStore::ResultState::stUnknown:
-      if (data_store->wstate.load()==MandelPointStore::WorkState::stIdle)
+    case JuliaPointStore::ResultState::stUnknown:
+      if (data_store->wstate.load()==JuliaPointStore::WorkState::stIdle)
         state="Unk";
       else
         state="Working...";
       fc_fz=" fc="+data->fc_c.toString();
       break;
-    case MandelPointStore::ResultState::stOutside:
+    case JuliaPointStore::ResultState::stOutside:
       state="Out"; fc_fz=" fc="+data->fc_c.toString(); break;
-    case MandelPointStore::ResultState::stOutAngle:
+    case JuliaPointStore::ResultState::stOutAngle:
       state="OutA"; fc_fz=" fc="+data->fc_c.toString(); break;
-    case MandelPointStore::ResultState::stBoundary:
+    case JuliaPointStore::ResultState::stBoundary:
       state="Bound"; fc_fz=" fc="+data->fc_c.toString(); break;
-    case MandelPointStore::ResultState::stDiverge:
+    case JuliaPointStore::ResultState::stDiverge:
       state="Diver"; fc_fz=" fc="+data->fc_c.toString(); break;
-    case MandelPointStore::ResultState::stMisiur:
+    case JuliaPointStore::ResultState::stMisiur:
       state="Misiur"; fc_fz=" fc="+data->fc_c.toString(); break;
-    case MandelPointStore::ResultState::stPeriod2:
+    case JuliaPointStore::ResultState::stPeriod2:
       state="Per2";
       switch (_selectedPaintStyle)
       {
@@ -159,7 +159,7 @@ QString JuliaModel::getTextInfoGen()
         default: fc_fz=" fc="+data->fc_c.toString();
       }
       break;
-    case MandelPointStore::ResultState::stPeriod3:
+    case JuliaPointStore::ResultState::stPeriod3:
       state="Per3";
       switch (_selectedPaintStyle)
       {
@@ -171,7 +171,7 @@ QString JuliaModel::getTextInfoGen()
         default: fc_fz=" fc="+data->fc_c.toString();
       }
       break;
-    case MandelPointStore::ResultState::stMaxIter:
+    case JuliaPointStore::ResultState::stMaxIter:
       state="Max"; fc_fz=" fc="+data->fc_c.toString(); break;
   }
 
@@ -195,47 +195,47 @@ QString JuliaModel::getTextInfoSpec()
     return "? +i* ?";
   //MandelMath::worker_multi::Allocator allo(storeWorker->getAllocator(), (orbit_x+imageWidth*orbit_y)*JuliaPoint::LEN, JuliaPoint::LEN, nullptr);
   //JuliaPoint data_(&pointStore_[orbit_x+imageWidth*orbit_y], &allo);
-  MandelPointStore *data_store=&pointStore[orbit_x+imageWidth*orbit_y];
+  JuliaPointStore *data_store=&pointStore[orbit_x+imageWidth*orbit_y];
   precisionRecord->wtiPoint.store=data_store;
 
-  precisionRecord->wtiPoint.readFrom(precisionRecord->points, (orbit_x+imageWidth*orbit_y)*MandelPoint<MandelMath::number_a *>::LEN);
+  precisionRecord->wtiPoint.readFrom(precisionRecord->points, (orbit_x+imageWidth*orbit_y)*JuliaPoint<MandelMath::number_a *>::LEN);
   //JuliaPoint<MandelMath::number_a *> *data=&precisionRecord->wtiPoint;
 
   switch (data_store->rstate)
   {
-    case MandelPointStore::ResultState::stUnknown:
-      if (data_store->wstate.load()==MandelPointStore::WorkState::stIdle)
+    case JuliaPointStore::ResultState::stUnknown:
+      if (data_store->wstate.load()==JuliaPointStore::WorkState::stIdle)
         return " ";
       else
         return "Working...";
       break;
-    case MandelPointStore::ResultState::stOutside:
+    case JuliaPointStore::ResultState::stOutside:
       return QString("ext=")+QString::number(data_store->exterior_hits)+" sure="+QString::number(data_store->surehand); break;
-    case MandelPointStore::ResultState::stOutAngle:
+    case JuliaPointStore::ResultState::stOutAngle:
       return QString("ext=")+QString::number(data_store->exterior_hits)+
              " phi="+precisionRecord->wtiPoint.extangle.toString()+
              " sure="+QString::number(data_store->surehand); break;
-    case MandelPointStore::ResultState::stBoundary:
+    case JuliaPointStore::ResultState::stBoundary:
       return "sure="+QString::number(data_store->surehand);
-    case MandelPointStore::ResultState::stDiverge:
+    case JuliaPointStore::ResultState::stDiverge:
       return "sure="+QString::number(data_store->surehand);
-    case MandelPointStore::ResultState::stMisiur:
+    case JuliaPointStore::ResultState::stMisiur:
       return "sure="+QString::number(data_store->surehand);
-    case MandelPointStore::ResultState::stPeriod2:
+    case JuliaPointStore::ResultState::stPeriod2:
     {
       //double p=std::atan2((precisionRecord->orbit.bulb.baseFz_.im.toDouble()),
       //                     precisionRecord->orbit.bulb.baseFz_.re.toDouble())*precisionRecord->orbit.bulb.foundMult_;
       return QString("per=")+QString::number(data_store->period)+" sure="+QString::number(data_store->surehand)+" int="+QString::number(data_store->interior.hits);
         //  +" mult="+QString::number(std::round(p/(2*M_PI)))+"/"+QString::number(precisionRecord->orbit.bulb.foundMult_);
     } break;
-    case MandelPointStore::ResultState::stPeriod3:
+    case JuliaPointStore::ResultState::stPeriod3:
     {
       //double p=std::atan2((precisionRecord->orbit.bulb.baseFz_.im.toDouble()),
       //                     precisionRecord->orbit.bulb.baseFz_.re.toDouble())*precisionRecord->orbit.bulb.foundMult_;
       return QString("per=")+QString::number(data_store->period)+" sure="+QString::number(data_store->surehand)+" int="+QString::number(data_store->interior.hits);
         //  +" mult="+QString::number(std::round(p/(2*M_PI)))+"/"+QString::number(precisionRecord->orbit.bulb.foundMult_);
     } break;
-    case MandelPointStore::ResultState::stMaxIter:
+    case JuliaPointStore::ResultState::stMaxIter:
       return "sure="+QString::number(data_store->surehand);
   }
   return "-?-?-";
@@ -260,28 +260,44 @@ void JuliaModel::setParams(ShareableViewInfo viewInfo)
       precisionRecord->params.root.assign_across(&viewInfo.root);
     }
     precisionRecord->orbit.evaluator.currentParams.c.assign_across(&precisionRecord->params.base);
+    precisionRecord->orbit.evaluator.currentParams.juliaRoot.assign_across(&precisionRecord->params.root);
     switch (precisionRecord->ntype)
     {
       case MandelMath::NumberType::typeEmpty:
       case MandelMath::NumberType::typeDouble:
         for (int t=0; t<precisionRecord->threadCount; t++)
+        {
           ((MandelEvaluator<double> *)precisionRecord->threads[t])->currentParams.c.assign_across(&precisionRecord->params.base);
+          ((MandelEvaluator<double> *)precisionRecord->threads[t])->currentParams.juliaRoot.assign_across(&precisionRecord->params.root);
+        }
         break;
       case MandelMath::NumberType::typeFloat128:
         for (int t=0; t<precisionRecord->threadCount; t++)
+        {
           ((MandelEvaluator<__float128> *)precisionRecord->threads[t])->currentParams.c.assign_across(&precisionRecord->params.base);
+          ((MandelEvaluator<__float128> *)precisionRecord->threads[t])->currentParams.juliaRoot.assign_across(&precisionRecord->params.root);
+        }
         break;
       case MandelMath::NumberType::typeDDouble:
         for (int t=0; t<precisionRecord->threadCount; t++)
+        {
           ((MandelEvaluator<MandelMath::dd_real> *)precisionRecord->threads[t])->currentParams.c.assign_across(&precisionRecord->params.base);
+          ((MandelEvaluator<MandelMath::dd_real> *)precisionRecord->threads[t])->currentParams.juliaRoot.assign_across(&precisionRecord->params.root);
+        }
         break;
       case MandelMath::NumberType::typeQDouble:
         for (int t=0; t<precisionRecord->threadCount; t++)
+        {
           ((MandelEvaluator<MandelMath::dq_real> *)precisionRecord->threads[t])->currentParams.c.assign_across(&precisionRecord->params.base);
+          ((MandelEvaluator<MandelMath::dq_real> *)precisionRecord->threads[t])->currentParams.juliaRoot.assign_across(&precisionRecord->params.root);
+        }
         break;
       case MandelMath::NumberType::typeReal642:
         for (int t=0; t<precisionRecord->threadCount; t++)
+        {
           ((MandelEvaluator<MandelMath::real642> *)precisionRecord->threads[t])->currentParams.c.assign_across(&precisionRecord->params.base);
+          ((MandelEvaluator<MandelMath::real642> *)precisionRecord->threads[t])->currentParams.juliaRoot.assign_across(&precisionRecord->params.root);
+        }
         break;
     }
     /*else
@@ -365,9 +381,9 @@ int PixelPositionTransformer::transform(int new_value, int offset)
     return -1;//call reset() in the second loop, we may still need the points  =imageHeight;
 }*/
 
-void JuliaModel::transformStore(void *old_points, MandelPointStore *old_store, int old_width, int old_height, const MandelMath::complex<MandelMath::number_a *> *old_c,
-                                   void *new_points, MandelPointStore *new_store, int new_width, int new_height, const MandelMath::complex<MandelMath::number_a *> *new_c,
-                                   int inlog, int new_step_log)
+void JuliaModel::transformStore(void *old_points, JuliaPointStore *old_store, int old_width, int old_height, const MandelMath::complex<MandelMath::number_a *> *old_c,
+                                void *new_points, JuliaPointStore *new_store, int new_width, int new_height, const MandelMath::complex<MandelMath::number_a *> *new_c,
+                                int inlog, int new_step_log)
 {
   if (precisionRecord==nullptr)
   {
@@ -408,10 +424,10 @@ void JuliaModel::transformStore(void *old_points, MandelPointStore *old_store, i
         if ((oldy>=0) && (oldy<old_height) && (oldx>=0) && (oldx<old_width))
         { //copy old point to new place
           new_store[newy*new_width+newx].assign(&old_store[oldy*old_width+oldx]);
-          if (new_store[newy*new_width+newx].wstate==MandelPointStore::WorkState::stWorking)
-            new_store[newy*new_width+newx].wstate=MandelPointStore::WorkState::stIdle; //work will be cancelled because of new epoch
-          precisionRecord->wtiPoint.readFrom(old_points, (oldy*old_width+oldx)*MandelPoint<MandelMath::number_a *>::LEN);
-          precisionRecord->wtiPoint.writeTo(new_points, (newy*new_width+newx)*MandelPoint<MandelMath::number_a *>::LEN);
+          if (new_store[newy*new_width+newx].wstate==JuliaPointStore::WorkState::stWorking)
+            new_store[newy*new_width+newx].wstate=JuliaPointStore::WorkState::stIdle; //work will be cancelled because of new epoch
+          precisionRecord->wtiPoint.readFrom(old_points, (oldy*old_width+oldx)*JuliaPoint<MandelMath::number_a *>::LEN);
+          precisionRecord->wtiPoint.writeTo(new_points, (newy*new_width+newx)*JuliaPoint<MandelMath::number_a *>::LEN);
           //new_sworker->assign_block((newy*new_width+newx)*JuliaPoint<WORKER_MULTI>::LEN, old_sworker, (oldy*old_width+oldx)*JuliaPoint<WORKER_MULTI>::LEN, JuliaPoint<WORKER_MULTI>::LEN);
         }
         else
@@ -420,7 +436,7 @@ void JuliaModel::transformStore(void *old_points, MandelPointStore *old_store, i
           first_z.re.add_double((newx - new_width/2)*precisionRecord->position.step_size);
           precisionRecord->wtiPoint.store=&new_store[newy*new_width+newx];
           precisionRecord->wtiPoint.zero(&first_z);
-          precisionRecord->wtiPoint.writeTo(new_points, (newy*new_width+newx)*MandelPoint<MandelMath::number_a *>::LEN);
+          precisionRecord->wtiPoint.writeTo(new_points, (newy*new_width+newx)*JuliaPoint<MandelMath::number_a *>::LEN);
           //new_sworker->assign_block((newy*new_width+newx)*JuliaPoint<WORKER_MULTI>::LEN, precisionRecord->currentWorker, indexOfWtiPoint, JuliaPoint<WORKER_MULTI>::LEN);
         }
       };
@@ -439,10 +455,10 @@ void JuliaModel::transformStore(void *old_points, MandelPointStore *old_store, i
         if ((oldy>=0) && (oldy<old_height) && (oldx>=0) && (oldx<old_width))
         { //copy old to new
           new_store[newy*new_width+newx].assign(&old_store[oldy*old_width+oldx]);
-          if (new_store[newy*new_width+newx].wstate==MandelPointStore::WorkState::stWorking)
-            new_store[newy*new_width+newx].wstate=MandelPointStore::WorkState::stIdle; //work will be cancelled because of new epoch
-          precisionRecord->wtiPoint.readFrom(old_points, (oldy*old_width+oldx)*MandelPoint<MandelMath::number_a *>::LEN);
-          precisionRecord->wtiPoint.writeTo(new_points, (newy*new_width+newx)*MandelPoint<MandelMath::number_a *>::LEN);
+          if (new_store[newy*new_width+newx].wstate==JuliaPointStore::WorkState::stWorking)
+            new_store[newy*new_width+newx].wstate=JuliaPointStore::WorkState::stIdle; //work will be cancelled because of new epoch
+          precisionRecord->wtiPoint.readFrom(old_points, (oldy*old_width+oldx)*JuliaPoint<MandelMath::number_a *>::LEN);
+          precisionRecord->wtiPoint.writeTo(new_points, (newy*new_width+newx)*JuliaPoint<MandelMath::number_a *>::LEN);
           //new_sworker->assign_block((newy*new_width+newx)*JuliaPoint<WORKER_MULTI>::LEN, old_sworker, (oldy*old_width+oldx)*JuliaPoint<WORKER_MULTI>::LEN, JuliaPoint<WORKER_MULTI>::LEN);
         }
         else
@@ -451,7 +467,7 @@ void JuliaModel::transformStore(void *old_points, MandelPointStore *old_store, i
           first_z.re.add_double((newx - new_width/2)*precisionRecord->position.step_size);
           precisionRecord->wtiPoint.store=&new_store[newy*new_width+newx];
           precisionRecord->wtiPoint.zero(&first_z);
-          precisionRecord->wtiPoint.writeTo(new_points, (newy*new_width+newx)*MandelPoint<MandelMath::number_a *>::LEN);
+          precisionRecord->wtiPoint.writeTo(new_points, (newy*new_width+newx)*JuliaPoint<MandelMath::number_a *>::LEN);
           //new_sworker->assign_block((newy*new_width+newx)*JuliaPoint<WORKER_MULTI>::LEN, precisionRecord->currentWorker, indexOfWtiPoint, JuliaPoint<WORKER_MULTI>::LEN);
         }
       }
@@ -530,9 +546,9 @@ void JuliaModel::setImageSize(int width, int height)
     QWriteLocker locker(&threading_mutex);
     epoch=(epoch%2000000000)+1; //invalidate threads while transforming store
     int newLength=width*height;
-    MandelPointStore *newStore=new MandelPointStore[newLength];
+    JuliaPointStore *newStore=new JuliaPointStore[newLength];
     {
-      QString size_as_text=QString::number(newLength*sizeof(MandelPointStore));
+      QString size_as_text=QString::number(newLength*sizeof(JuliaPointStore));
       for (int pos=size_as_text.length()-3; pos>0; pos-=3)
         size_as_text.insert(pos, '\'');
       qDebug()<<"laguerreStore uses"<<size_as_text.toLocal8Bit().constData()<<"B";
@@ -542,20 +558,20 @@ void JuliaModel::setImageSize(int width, int height)
     {
       case MandelMath::NumberType::typeEmpty: goto lolwut;
       case MandelMath::NumberType::typeDouble: lolwut:
-        new_points=new double[newLength*MandelPoint<MandelMath::number_a *>::LEN];
+        new_points=new double[newLength*JuliaPoint<MandelMath::number_a *>::LEN];
         break;
 #if !NUMBER_DOUBLE_ONLY
       case MandelMath::NumberType::typeFloat128:
-        new_points=new __float128[newLength];
+        new_points=new __float128[newLength*JuliaPoint<MandelMath::number_a *>::LEN];
         break;
       case MandelMath::NumberType::typeDDouble:
-        new_points=new MandelMath::dd_real[newLength];
+        new_points=new MandelMath::dd_real[newLength*JuliaPoint<MandelMath::number_a *>::LEN];
         break;
       case MandelMath::NumberType::typeQDouble:
-        new_points=new MandelMath::dq_real[newLength];
+        new_points=new MandelMath::dq_real[newLength*JuliaPoint<MandelMath::number_a *>::LEN];
         break;
       case MandelMath::NumberType::typeReal642:
-        new_points=new MandelMath::real642[newLength];
+        new_points=new MandelMath::real642[newLength*JuliaPoint<MandelMath::number_a *>::LEN];
         break;
 #endif
     }
@@ -687,7 +703,7 @@ void JuliaModel::paintOrbit(ShareableImageWrapper image, int x, int y)
   }*/
 
   MandelMath::number<MandelMath::number_a *> tmp(precisionRecord->ntype);
-  MandelPointStore *resultStore=&pointStore[y*imageWidth+x];
+  JuliaPointStore *resultStore=&pointStore[y*imageWidth+x];
   {
     int circ_x, circ_y;
     painter.setBrush(Qt::BrushStyle::NoBrush);
@@ -715,8 +731,8 @@ void JuliaModel::paintOrbit(ShareableImageWrapper image, int x, int y)
   }
   switch (resultStore->rstate)
   {
-    case MandelPointStore::ResultState::stOutside:
-    case MandelPointStore::ResultState::stOutAngle:
+    case JuliaPointStore::ResultState::stOutside:
+    case JuliaPointStore::ResultState::stOutAngle:
     { //exterior distance estimate
       int exterior;
       painter.setBrush(Qt::BrushStyle::NoBrush);
@@ -727,8 +743,8 @@ void JuliaModel::paintOrbit(ShareableImageWrapper image, int x, int y)
       exterior=qRound(resultStore->exterior_avoids/precisionRecord->position.step_size);
       painter.drawEllipse(x-exterior, y-exterior, 2*exterior, 2*exterior);
     } break;
-    case MandelPointStore::ResultState::stPeriod2:
-    case MandelPointStore::ResultState::stPeriod3:
+    case JuliaPointStore::ResultState::stPeriod2:
+    case JuliaPointStore::ResultState::stPeriod3:
     { //interior distance estimate
       int interior;
       painter.setBrush(Qt::BrushStyle::NoBrush);
@@ -763,12 +779,12 @@ void JuliaModel::paintOrbit(ShareableImageWrapper image, int x, int y)
   precisionRecord->orbit.evaluator.workIfEpoch=precisionRecord->orbit.evaluator.busyEpoch;//epoch;
   precisionRecord->orbit.evaluator.currentParams.pixelIndex=0;
   //already 0 precisionRecord->orbit.evaluator.currentParams.nth_fz=0;
-  precisionRecord->orbit.evaluator.currentData.zero(&precisionRecord->orbit.evaluator.currentParams.first_z);
-  precisionRecord->orbit.evaluator.currentData.store->wstate=MandelPointStore::WorkState::stWorking;
+  precisionRecord->orbit.evaluator.juliaData.zero(&precisionRecord->orbit.evaluator.currentParams.first_z);
+  precisionRecord->orbit.evaluator.juliaData.store->wstate=JuliaPointStore::WorkState::stWorking;
   precisionRecord->orbit.evaluator.currentParams.breakOnNewNearest=true;
   precisionRecord->orbit.evaluator.currentParams.maxiter=1<<MAX_EFFORT;
   precisionRecord->orbit.evaluator.currentParams.want_extangle=(_selectedPaintStyle==paintStyleExterAngle) ||
-                                                               (resultStore->rstate==MandelPointStore::ResultState::stOutAngle);
+                                                               (resultStore->rstate==JuliaPointStore::ResultState::stOutAngle);
   precisionRecord->orbit.evaluator.currentParams.c.assign_across(&precisionRecord->params.base);
 
   //precisionRecord->orbit.evaluator.currentData.root.assign(&precisionRecord->orbit.evaluator.currentParams.c);
@@ -777,24 +793,24 @@ void JuliaModel::paintOrbit(ShareableImageWrapper image, int x, int y)
     painter.setBrush(Qt::BrushStyle::NoBrush);
     painter.setPen(QColor(0xff, 0xff, 0xff)); //paint path
     int line_sx, line_sy;
-    reimToPixel(&line_sx, &line_sy, &precisionRecord->orbit.evaluator.currentData.f, &tmp);
-    while ((precisionRecord->orbit.evaluator.currentData.store->rstate==MandelPointStore::ResultState::stUnknown) &&
-           (precisionRecord->orbit.evaluator.currentData.store->iter<(1<<MAX_EFFORT)))
+    reimToPixel(&line_sx, &line_sy, &precisionRecord->orbit.evaluator.juliaData.f, &tmp);
+    while ((precisionRecord->orbit.evaluator.juliaData.store->rstate==JuliaPointStore::ResultState::stUnknown) &&
+           (precisionRecord->orbit.evaluator.juliaData.store->iter<(1<<MAX_EFFORT)))
     {
       int line_ex, line_ey;
 
-      if ((resultStore->rstate==MandelPointStore::ResultState::stPeriod2 || resultStore->rstate==MandelPointStore::ResultState::stPeriod3) &&
-          precisionRecord->orbit.evaluator.currentData.store->iter<resultStore->period)
+      if ((resultStore->rstate==JuliaPointStore::ResultState::stPeriod2 || resultStore->rstate==JuliaPointStore::ResultState::stPeriod3) &&
+          precisionRecord->orbit.evaluator.juliaData.store->iter<resultStore->period)
       { //paint first period fully
-        precisionRecord->orbit.evaluator.currentParams.maxiter=precisionRecord->orbit.evaluator.currentData.store->iter+1;
+        precisionRecord->orbit.evaluator.currentParams.maxiter=precisionRecord->orbit.evaluator.juliaData.store->iter+1;
       }
-      else if (precisionRecord->orbit.evaluator.currentData.store->lookper_lastGuess==0)
+      else if (precisionRecord->orbit.evaluator.juliaData.store->lookper_lastGuess==0)
         precisionRecord->orbit.evaluator.currentParams.maxiter=1<<MAX_EFFORT; //dont't know->run fully
       else //stop at multiples of lookper, +1
-        precisionRecord->orbit.evaluator.currentParams.maxiter=1+(precisionRecord->orbit.evaluator.currentData.store->iter/precisionRecord->orbit.evaluator.currentData.store->lookper_lastGuess+1)*precisionRecord->orbit.evaluator.currentData.store->lookper_lastGuess;
+        precisionRecord->orbit.evaluator.currentParams.maxiter=1+(precisionRecord->orbit.evaluator.juliaData.store->iter/precisionRecord->orbit.evaluator.juliaData.store->lookper_lastGuess+1)*precisionRecord->orbit.evaluator.juliaData.store->lookper_lastGuess;
       precisionRecord->orbit.evaluator.thread.syncJulia(precisionRecord->params.period);
 
-      reimToPixel(&line_ex, &line_ey, &precisionRecord->orbit.evaluator.currentData.f, &tmp);
+      reimToPixel(&line_ex, &line_ey, &precisionRecord->orbit.evaluator.juliaData.f, &tmp);
       if (line_ex>=-3 && line_ex<=10003 && line_ey>=-3 && line_ey<=10003)
       {
         if (line_sx>=-3 && line_sx<=10003 && line_sy>=-3 && line_sy<=10003)
@@ -870,12 +886,12 @@ void JuliaModel::paintOrbit(ShareableImageWrapper image, int x, int y)
     painter.drawPolyline(aroundDeriv, 9);
   }
 
-  if ((precisionRecord->orbit.evaluator.currentData.store->rstate==MandelPointStore::ResultState::stPeriod2) ||
-      (precisionRecord->orbit.evaluator.currentData.store->rstate==MandelPointStore::ResultState::stPeriod3))
+  if ((precisionRecord->orbit.evaluator.juliaData.store->rstate==JuliaPointStore::ResultState::stPeriod2) ||
+      (precisionRecord->orbit.evaluator.juliaData.store->rstate==JuliaPointStore::ResultState::stPeriod3))
   {
     int circ_x, circ_y;
     painter.setPen(QColor(0, 0xff, 0xff)); //paint root
-    reimToPixel(&circ_x, &circ_y, &precisionRecord->orbit.evaluator.currentData.root, &tmp);
+    reimToPixel(&circ_x, &circ_y, &precisionRecord->orbit.evaluator.juliaData.root, &tmp);
     if ((circ_x>=-3) && (circ_x<=10003) && (circ_y>=-3) && (circ_y<=10003))
     {
       painter.drawEllipse(circ_x-3, circ_y-3, 2*3, 2*3);
@@ -887,7 +903,7 @@ void JuliaModel::paintOrbit(ShareableImageWrapper image, int x, int y)
   };
   //beginning of external ray
   if (_selectedPaintStyle==paintStyle::paintStyleExterAngle &&
-      precisionRecord->orbit.evaluator.currentData.store->rstate==MandelPointStore::ResultState::stOutAngle)
+      precisionRecord->orbit.evaluator.juliaData.store->rstate==JuliaPointStore::ResultState::stOutAngle)
   {
     int circ_x, circ_y;
     painter.setBrush(Qt::BrushStyle::SolidPattern);
@@ -996,7 +1012,7 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
   timerWriteToImage.start();
   //double params_nth_fz_limit=precisionRecord->params.nth_fz_limit.toDouble();
   double extAngleZoom=1<<this->_extAngleZoom;
-  MandelPointStore *wtiStore;
+  JuliaPointStore *wtiStore;
   //static constexpr unsigned int FAIL_COLOR=0xff404040;
   for (int y=0; y<imageHeight; y++)
     for (int x=0; x<imageWidth; x++)
@@ -1012,33 +1028,33 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
         {
           switch (wtiStore->rstate)
           {
-            case MandelPointStore::ResultState::stUnknown:
-              if (wtiStore->wstate==MandelPointStore::WorkState::stIdle)
+            case JuliaPointStore::ResultState::stUnknown:
+              if (wtiStore->wstate==JuliaPointStore::WorkState::stIdle)
                 image.image->setPixel(x, y, 0xffffffff);
               else
                 image.image->setPixel(x, y, 0xffff00ff);
                 //image.image->setPixel(x, y, 0xffffffff);
               break;
-            case MandelPointStore::ResultState::stOutside:
-            case MandelPointStore::ResultState::stOutAngle:
+            case JuliaPointStore::ResultState::stOutside:
+            case JuliaPointStore::ResultState::stOutAngle:
             {
               int b=0x9f+floor(0x60*cos((wtiStore->iter/10.0+0)*2*3.1415926535));
               image.image->setPixel(x, y, 0xff000000+(b<<0));
             } break;
-            case MandelPointStore::ResultState::stBoundary:
+            case JuliaPointStore::ResultState::stBoundary:
             {
               image.image->setPixel(x, y, 0xff00ff00);
             } break;
-            case MandelPointStore::ResultState::stMisiur:
+            case JuliaPointStore::ResultState::stMisiur:
             {
               image.image->setPixel(x, y, 0xff8000ff);
             } break;
-            case MandelPointStore::ResultState::stDiverge:
+            case JuliaPointStore::ResultState::stDiverge:
             {
               image.image->setPixel(x, y, 0xffffc000);
             } break;
-            case MandelPointStore::ResultState::stPeriod2:
-            case MandelPointStore::ResultState::stPeriod3:
+            case JuliaPointStore::ResultState::stPeriod2:
+            case JuliaPointStore::ResultState::stPeriod3:
             {
               /*int r;
               switch (data->period)
@@ -1061,7 +1077,7 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
               int r=(iterx-floor(iterx))*256;
               image.image->setPixel(x, y, 0xff000000+(r<<16));
             } break;
-            case MandelPointStore::ResultState::stMaxIter:
+            case JuliaPointStore::ResultState::stMaxIter:
             {
               image.image->setPixel(x, y, 0xff808080);
             } break;
@@ -1071,11 +1087,11 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
         {
           switch (wtiStore->rstate)
           {
-            case MandelPointStore::ResultState::stUnknown:
+            case JuliaPointStore::ResultState::stUnknown:
               image.image->setPixel(x, y, 0x00906090);
               break;
-            case MandelPointStore::ResultState::stOutside:
-            case MandelPointStore::ResultState::stOutAngle:
+            case JuliaPointStore::ResultState::stOutside:
+            case JuliaPointStore::ResultState::stOutAngle:
             {
               #if 0 //smooth color madness
               int r=128+floor(127*cos(data->iter/10.0*2*3.1415926535));
@@ -1108,7 +1124,7 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
               #endif
 
               #if 1 //smooth by iter
-              precisionRecord->wtiPoint.readFrom(precisionRecord->points, (y*imageWidth+x)*MandelPoint<MandelMath::number_a *>::LEN);
+              precisionRecord->wtiPoint.readFrom(precisionRecord->points, (y*imageWidth+x)*JuliaPoint<MandelMath::number_a *>::LEN);
               double re=precisionRecord->wtiPoint.f.re.toDouble();
               double im=precisionRecord->wtiPoint.f.im.toDouble();
               double iter=wtiStore->iter+6-log2(log2(re*re+im*im)); //+6 to match integer coloring
@@ -1131,20 +1147,20 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
               #endif
 
             } break;
-            case MandelPointStore::ResultState::stBoundary:
+            case JuliaPointStore::ResultState::stBoundary:
             {
               image.image->setPixel(x, y, 0xffffffff);
             } break;
-            case MandelPointStore::ResultState::stMisiur:
+            case JuliaPointStore::ResultState::stMisiur:
             {
               image.image->setPixel(x, y, 0xffffffff);
             } break;
-            case MandelPointStore::ResultState::stDiverge:
+            case JuliaPointStore::ResultState::stDiverge:
             {
               image.image->setPixel(x, y, 0xffffffff);
             } break;
-            case MandelPointStore::ResultState::stPeriod2:
-            case MandelPointStore::ResultState::stPeriod3:
+            case JuliaPointStore::ResultState::stPeriod2:
+            case JuliaPointStore::ResultState::stPeriod3:
             {
               //ok but shouldn't use raw iter int index=periodToIndex(wtiStore->iter % wtiStore->period);
               //ok int index=periodToIndex(wtiStore->nearziter_0 % wtiStore->period); fails with c around -1+0i : all chunks at phase=0
@@ -1168,7 +1184,7 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
                 image.image->setPixel(x, y, 0xff000000+r*0x010101);
               }
             } break;
-            case MandelPointStore::ResultState::stMaxIter:
+            case JuliaPointStore::ResultState::stMaxIter:
             {
               //image.image->setPixel(x, y, 0xff808080);
               image.image->setPixel(x, y, 0xff000000);
@@ -1179,11 +1195,11 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
         {
           switch (wtiStore->rstate)
           {
-            case MandelPointStore::ResultState::stUnknown:
+            case JuliaPointStore::ResultState::stUnknown:
               image.image->setPixel(x, y, 0x00000000);
               break;
-            case MandelPointStore::ResultState::stOutside:
-            case MandelPointStore::ResultState::stOutAngle:
+            case JuliaPointStore::ResultState::stOutside:
+            case JuliaPointStore::ResultState::stOutAngle:
             {
               double tf;
               if ((wtiStore->exterior_hits>10000) || (wtiStore->exterior_hits<=0))
@@ -1216,22 +1232,22 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
                   image.image->setPixel(x, y, 0xff000000+(r<<16)+(g<<8)+(b));
               }
             } break;
-            case MandelPointStore::ResultState::stBoundary:
+            case JuliaPointStore::ResultState::stBoundary:
             {
               image.image->setPixel(x, y, 0xff308030);
             } break;
-            case MandelPointStore::ResultState::stMisiur:
+            case JuliaPointStore::ResultState::stMisiur:
             {
               image.image->setPixel(x, y, 0xff308030);
             } break;
-            case MandelPointStore::ResultState::stDiverge:
+            case JuliaPointStore::ResultState::stDiverge:
             {
               image.image->setPixel(x, y, 0xff308030);
             } break;
-            case MandelPointStore::ResultState::stPeriod2:
-            case MandelPointStore::ResultState::stPeriod3:
+            case JuliaPointStore::ResultState::stPeriod2:
+            case JuliaPointStore::ResultState::stPeriod3:
             {
-              precisionRecord->wtiPoint.readFrom(precisionRecord->points, (y*imageWidth+x)*MandelPoint<MandelMath::number_a *>::LEN);
+              precisionRecord->wtiPoint.readFrom(precisionRecord->points, (y*imageWidth+x)*JuliaPoint<MandelMath::number_a *>::LEN);
               double re=precisionRecord->wtiPoint.fz_r.re.toDouble();
               double im=precisionRecord->wtiPoint.fz_r.im.toDouble();
               //double angle=std::atan2(im, re);
@@ -1254,7 +1270,7 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
               }
               image.image->setPixel(x, y, 0xff000000+(r<<16)+(g<<8)+b);
             } break;
-            case MandelPointStore::ResultState::stMaxIter:
+            case JuliaPointStore::ResultState::stMaxIter:
             {
               image.image->setPixel(x, y, 0xff808080);
             } break;
@@ -1264,15 +1280,15 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
         {
           switch (wtiStore->rstate)
           {
-            case MandelPointStore::ResultState::stUnknown:
+            case JuliaPointStore::ResultState::stUnknown:
               image.image->setPixel(x, y, 0x00000000);
               break;
-            case MandelPointStore::ResultState::stOutside:
+            case JuliaPointStore::ResultState::stOutside:
               image.image->setPixel(x, y, 0x00606060);
               break;
-            case MandelPointStore::ResultState::stOutAngle:
+            case JuliaPointStore::ResultState::stOutAngle:
             {
-              precisionRecord->wtiPoint.readFrom(precisionRecord->points, (y*imageWidth+x)*MandelPoint<MandelMath::number_a *>::LEN);
+              precisionRecord->wtiPoint.readFrom(precisionRecord->points, (y*imageWidth+x)*JuliaPoint<MandelMath::number_a *>::LEN);
               double tf=precisionRecord->wtiPoint.extangle.toDouble();
               if (tf==precisionRecord->orbit.evaluator.extangle.SPECIAL_VALUE_DEEP)
               {
@@ -1300,22 +1316,22 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
                   image.image->setPixel(x, y, 0xff000000+(r<<16)+(g<<8)+(b));
               }
             } break;
-            case MandelPointStore::ResultState::stBoundary:
+            case JuliaPointStore::ResultState::stBoundary:
             {
               image.image->setPixel(x, y, 0xff308030);
             } break;
-            case MandelPointStore::ResultState::stMisiur:
+            case JuliaPointStore::ResultState::stMisiur:
             {
               image.image->setPixel(x, y, 0xff308030);
             } break;
-            case MandelPointStore::ResultState::stDiverge:
+            case JuliaPointStore::ResultState::stDiverge:
             {
               image.image->setPixel(x, y, 0xff308030);
             } break;
-            case MandelPointStore::ResultState::stPeriod2:
-            case MandelPointStore::ResultState::stPeriod3:
+            case JuliaPointStore::ResultState::stPeriod2:
+            case JuliaPointStore::ResultState::stPeriod3:
             {
-              precisionRecord->wtiPoint.readFrom(precisionRecord->points, (y*imageWidth+x)*MandelPoint<MandelMath::number_a *>::LEN);
+              precisionRecord->wtiPoint.readFrom(precisionRecord->points, (y*imageWidth+x)*JuliaPoint<MandelMath::number_a *>::LEN);
               double re=precisionRecord->wtiPoint.fz_r.re.toDouble();
               double im=precisionRecord->wtiPoint.fz_r.im.toDouble();
               //double angle=std::atan2(im, re);
@@ -1338,7 +1354,7 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
               }
               image.image->setPixel(x, y, 0xff000000+(r<<16)+(g<<8)+b);
             } break;
-            case MandelPointStore::ResultState::stMaxIter:
+            case JuliaPointStore::ResultState::stMaxIter:
             {
               image.image->setPixel(x, y, 0xff808080);
             } break;
@@ -1348,30 +1364,30 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
         {
           switch (wtiStore->rstate)
           {
-            case MandelPointStore::ResultState::stUnknown:
+            case JuliaPointStore::ResultState::stUnknown:
               image.image->setPixel(x, y, 0x00000000);
               break;
-            case MandelPointStore::ResultState::stOutside:
-            case MandelPointStore::ResultState::stOutAngle:
+            case JuliaPointStore::ResultState::stOutside:
+            case JuliaPointStore::ResultState::stOutAngle:
             {
               //int b=0x60+floor(0x60*cos((wtiStore->iter/10.0+0)*2*3.1415926535));
               int b=qRound(log(wtiStore->iter)*100)%256;
               image.image->setPixel(x, y, 0xff000000+(b*0x010101));
             } break;
-            case MandelPointStore::ResultState::stBoundary:
+            case JuliaPointStore::ResultState::stBoundary:
             {
               image.image->setPixel(x, y, 0xff308030);
             } break;
-            case MandelPointStore::ResultState::stMisiur:
+            case JuliaPointStore::ResultState::stMisiur:
             {
               image.image->setPixel(x, y, 0xff308030);
             } break;
-            case MandelPointStore::ResultState::stDiverge:
+            case JuliaPointStore::ResultState::stDiverge:
             {
               image.image->setPixel(x, y, 0xff308030);
             } break;
-            case MandelPointStore::ResultState::stPeriod2:
-            case MandelPointStore::ResultState::stPeriod3:
+            case JuliaPointStore::ResultState::stPeriod2:
+            case JuliaPointStore::ResultState::stPeriod3:
             {
               int ti=30;
               if ((wtiStore->interior.hits>4) || (wtiStore->interior.hits<=0))
@@ -1396,7 +1412,7 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
               else
                 image.image->setPixel(x, y, 0xff000000+(r<<16)+(g<<8)+(b));
             } break;
-            case MandelPointStore::ResultState::stMaxIter:
+            case JuliaPointStore::ResultState::stMaxIter:
             {
               image.image->setPixel(x, y, 0xff808080);
             } break;
@@ -1406,11 +1422,11 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
         {
           switch (wtiStore->rstate)
           {
-            case MandelPointStore::ResultState::stUnknown:
+            case JuliaPointStore::ResultState::stUnknown:
               image.image->setPixel(x, y, 0xff000000);
               break;
-            case MandelPointStore::ResultState::stOutside:
-            case MandelPointStore::ResultState::stOutAngle:
+            case JuliaPointStore::ResultState::stOutside:
+            case JuliaPointStore::ResultState::stOutAngle:
             {
               //int ti=wtiStore->nearziter_0;
               int ti=wtiStore->near0iter_1;
@@ -1430,20 +1446,20 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
               else
                 image.image->setPixel(x, y, 0xff000080);
             } break;
-            case MandelPointStore::ResultState::stBoundary:
+            case JuliaPointStore::ResultState::stBoundary:
             {
               image.image->setPixel(x, y, 0xff00ff00);
             } break;
-            case MandelPointStore::ResultState::stMisiur:
+            case JuliaPointStore::ResultState::stMisiur:
             {
               image.image->setPixel(x, y, 0xff00c000);
             } break;
-            case MandelPointStore::ResultState::stDiverge:
+            case JuliaPointStore::ResultState::stDiverge:
             {
               image.image->setPixel(x, y, 0xff008000);
             } break;
-            case MandelPointStore::ResultState::stPeriod2:
-            case MandelPointStore::ResultState::stPeriod3:
+            case JuliaPointStore::ResultState::stPeriod2:
+            case JuliaPointStore::ResultState::stPeriod3:
             {
               /*int ti=data->newton_iter; //very noisy, maybe show <=10, >10, >30, 49
               int r;
@@ -1477,7 +1493,7 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
               int r=0x80 | MandelMath::ReverseBits<7,1>(index);
               image.image->setPixel(x, y, 0xff000000+(r<<16));*/
             } break;
-            case MandelPointStore::ResultState::stMaxIter:
+            case JuliaPointStore::ResultState::stMaxIter:
             {
               image.image->setPixel(x, y, 0xff808080);
             } break;
@@ -1490,31 +1506,31 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
         {
           switch (wtiStore->rstate)
           {
-            case MandelPointStore::ResultState::stUnknown:
+            case JuliaPointStore::ResultState::stUnknown:
               image.image->setPixel(x, y, 0x00000000);
               break;
-            case MandelPointStore::ResultState::stOutside:
-            case MandelPointStore::ResultState::stOutAngle:
+            case JuliaPointStore::ResultState::stOutside:
+            case JuliaPointStore::ResultState::stOutAngle:
             {
               int b=0x60+floor(0x60*cos((wtiStore->iter/10.0+0)*2*3.1415926535));
               image.image->setPixel(x, y, 0xff000000+(b*0x010101));
             } break;
-            case MandelPointStore::ResultState::stBoundary:
+            case JuliaPointStore::ResultState::stBoundary:
             {
               image.image->setPixel(x, y, 0xff308030);
             } break;
-            case MandelPointStore::ResultState::stMisiur:
+            case JuliaPointStore::ResultState::stMisiur:
             {
               image.image->setPixel(x, y, 0xff308030);
             } break;
-            case MandelPointStore::ResultState::stDiverge:
+            case JuliaPointStore::ResultState::stDiverge:
             {
               image.image->setPixel(x, y, 0xff308030);
             } break;
-            case MandelPointStore::ResultState::stPeriod2:
-            case MandelPointStore::ResultState::stPeriod3:
+            case JuliaPointStore::ResultState::stPeriod2:
+            case JuliaPointStore::ResultState::stPeriod3:
             {
-              precisionRecord->wtiPoint.readFrom(precisionRecord->points, (y*imageWidth+x)*MandelPoint<MandelMath::number_a *>::LEN);
+              precisionRecord->wtiPoint.readFrom(precisionRecord->points, (y*imageWidth+x)*JuliaPoint<MandelMath::number_a *>::LEN);
               //double re=precisionRecord->wtiPoint.fz_r.re.toDouble();
               //double im=precisionRecord->wtiPoint.fz_r.im.toDouble(); //fz_r
               double re, im;
@@ -1545,7 +1561,7 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
                 r=128;
               image.image->setPixel(x, y, 0xff000000+(r<<16)+(g<<8)+(b));
             } break;
-            case MandelPointStore::ResultState::stMaxIter:
+            case JuliaPointStore::ResultState::stMaxIter:
             {
               image.image->setPixel(x, y, 0xff808080);
             } break;
@@ -1555,31 +1571,31 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
         {
           switch (wtiStore->rstate)
           {
-            case MandelPointStore::ResultState::stUnknown:
+            case JuliaPointStore::ResultState::stUnknown:
               image.image->setPixel(x, y, 0x00000000);
               break;
-            case MandelPointStore::ResultState::stOutside:
-            case MandelPointStore::ResultState::stOutAngle:
+            case JuliaPointStore::ResultState::stOutside:
+            case JuliaPointStore::ResultState::stOutAngle:
             {
               int b=0x60+floor(0x60*cos((wtiStore->iter/10.0+0)*2*3.1415926535));
               image.image->setPixel(x, y, 0xff000000+(b*0x010101));
             } break;
-            case MandelPointStore::ResultState::stBoundary:
+            case JuliaPointStore::ResultState::stBoundary:
             {
               image.image->setPixel(x, y, 0xff308030);
             } break;
-            case MandelPointStore::ResultState::stMisiur:
+            case JuliaPointStore::ResultState::stMisiur:
             {
               image.image->setPixel(x, y, 0xff308030);
             } break;
-            case MandelPointStore::ResultState::stDiverge:
+            case JuliaPointStore::ResultState::stDiverge:
             {
               image.image->setPixel(x, y, 0xff308030);
             } break;
-            case MandelPointStore::ResultState::stPeriod2:
-            case MandelPointStore::ResultState::stPeriod3:
+            case JuliaPointStore::ResultState::stPeriod2:
+            case JuliaPointStore::ResultState::stPeriod3:
             {
-              precisionRecord->wtiPoint.readFrom(precisionRecord->points, (y*imageWidth+x)*MandelPoint<MandelMath::number_a *>::LEN);
+              precisionRecord->wtiPoint.readFrom(precisionRecord->points, (y*imageWidth+x)*JuliaPoint<MandelMath::number_a *>::LEN);
               int index=wtiStore->interior.first_under_1;
               //reverse bottom 7 bits:
               int g=0x80 | MandelMath::ReverseBits<7,1>(index);
@@ -1587,7 +1603,7 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
               int r=0;
               image.image->setPixel(x, y, 0xff000000+(r<<16)+(g<<8)+(b));
             } break;
-            case MandelPointStore::ResultState::stMaxIter:
+            case JuliaPointStore::ResultState::stMaxIter:
             {
               image.image->setPixel(x, y, 0xff808080);
             } break;
@@ -1688,10 +1704,10 @@ int JuliaModel::giveWorkThreaded(MandelEvaluator<BASE> *me)
         //dbgPoint();
       //MandelMath::worker_multi::Allocator allo(storeWorker->getAllocator(), pointIndex*MandelPoint::LEN, MandelPoint::LEN, nullptr);
       //MandelPoint pointData_(&pointStore_[pointIndex], &allo);
-      MandelPointStore *storeAtIndex=&pointStore[pointIndex];
-      MandelPointStore::WorkState state_expected=MandelPointStore::WorkState::stIdle;
+      JuliaPointStore *storeAtIndex=&pointStore[pointIndex];
+      JuliaPointStore::WorkState state_expected=JuliaPointStore::WorkState::stIdle;
       int extra_effort=0;
-      if (!storeAtIndex->wstate.compare_exchange_strong(state_expected, MandelPointStore::WorkState::stWorking))
+      if (!storeAtIndex->wstate.compare_exchange_strong(state_expected, JuliaPointStore::WorkState::stWorking))
       {
         /*if ((_selectedPaintStyle==paintStyleFC) &&
             (!storeAtIndex->has_fc_r) &&
@@ -1705,10 +1721,10 @@ int JuliaModel::giveWorkThreaded(MandelEvaluator<BASE> *me)
           extra_effort=1;
         }
         else*/ if (_selectedPaintStyle==paintStyleExterAngle &&
-                 storeAtIndex->rstate==MandelPointStore::ResultState::stOutside)
+                 storeAtIndex->rstate==JuliaPointStore::ResultState::stOutside)
         {
-          state_expected=MandelPointStore::WorkState::stDone;
-          if (!storeAtIndex->wstate.compare_exchange_strong(state_expected, MandelPointStore::WorkState::stWorking))
+          state_expected=JuliaPointStore::WorkState::stDone;
+          if (!storeAtIndex->wstate.compare_exchange_strong(state_expected, JuliaPointStore::WorkState::stWorking))
             continue;
             //should check if it still needs but it should be quite rare, evaluate tests it anyway
           extra_effort=1;
@@ -1737,14 +1753,14 @@ int JuliaModel::giveWorkThreaded(MandelEvaluator<BASE> *me)
           {
             if (effort>=MAX_EFFORT)
             {
-              storeAtIndex->rstate=MandelPointStore::ResultState::stMaxIter;
-              storeAtIndex->wstate=MandelPointStore::WorkState::stDone;
+              storeAtIndex->rstate=JuliaPointStore::ResultState::stMaxIter;
+              storeAtIndex->wstate=JuliaPointStore::WorkState::stDone;
             }
             else
             {
               if (retryEffortFrom<0)
                 retryEffortFrom=pointIndex;
-              storeAtIndex->wstate=MandelPointStore::WorkState::stIdle;
+              storeAtIndex->wstate=JuliaPointStore::WorkState::stIdle;
             }
           }
           else
@@ -1763,9 +1779,9 @@ int JuliaModel::giveWorkThreaded(MandelEvaluator<BASE> *me)
 #if CURRENT_STORE_DIRECT
             me->currentData.store=storeAtIndex;
 #else
-            me->currentDataStore.assign(storeAtIndex);
+            me->juliaStore.assign(storeAtIndex);
 #endif
-            me->currentData.readFrom(precisionRecord->points, pointIndex*MandelPoint<MandelMath::number_a *>::LEN);
+            me->juliaData.readFrom(precisionRecord->points, pointIndex*JuliaPoint<MandelMath::number_a *>::LEN);
             nextGivenPointIndex=(pointIndex+1)%(imageWidth*imageHeight);
             effortBonus=nextEffortBonus;
             return 0;
@@ -1791,24 +1807,24 @@ int JuliaModel::doneWorkThreaded(MandelEvaluator<BASE> *me, bool giveWork)
   QReadLocker locker(&threading_mutex);
   if ((me->currentParams.epoch==epoch) && (me->currentParams.pixelIndex>=0) && (me->currentParams.pixelIndex<imageWidth*imageHeight))
   {
-    MandelPointStore *dstStore=&pointStore[me->currentParams.pixelIndex];
-    if (dstStore->wstate!=MandelPointStore::WorkState::stWorking)
+    JuliaPointStore *dstStore=&pointStore[me->currentParams.pixelIndex];
+    if (dstStore->wstate!=JuliaPointStore::WorkState::stWorking)
       dbgPoint(); //leftovers should be from different epoch
-    me->currentData.writeTo(precisionRecord->points, me->currentParams.pixelIndex*MandelPoint<MandelMath::number_a *>::LEN);
-    dstStore->assign(me->currentData.store);
-    if (dstStore->wstate.load()==MandelPointStore::WorkState::stIdle)
+    me->juliaData.writeTo(precisionRecord->points, me->currentParams.pixelIndex*JuliaPoint<MandelMath::number_a *>::LEN);
+    dstStore->assign(me->juliaData.store);
+    if (dstStore->wstate.load()==JuliaPointStore::WorkState::stIdle)
       dbgPoint();
-    if (dstStore->wstate==MandelPointStore::WorkState::stWorking)
+    if (dstStore->wstate==JuliaPointStore::WorkState::stWorking)
     {
        if (dstStore->iter>=(1<<MAX_EFFORT))
        {
-         dstStore->rstate=MandelPointStore::ResultState::stMaxIter;
-         dstStore->wstate=MandelPointStore::WorkState::stDone;
+         dstStore->rstate=JuliaPointStore::ResultState::stMaxIter;
+         dstStore->wstate=JuliaPointStore::WorkState::stDone;
        }
-       else if (dstStore->rstate!=MandelPointStore::ResultState::stUnknown)
-         dstStore->wstate=MandelPointStore::WorkState::stDone;
+       else if (dstStore->rstate!=JuliaPointStore::ResultState::stUnknown)
+         dstStore->wstate=JuliaPointStore::WorkState::stDone;
        else
-         dstStore->wstate=MandelPointStore::WorkState::stIdle;
+         dstStore->wstate=JuliaPointStore::WorkState::stIdle;
     }
     else
       dbgPoint();
@@ -1842,24 +1858,24 @@ void JuliaModel::selectedPrecisionChanged()
     using Type=MandelMath::NumberType;
     case precisionDouble: lolwut:
       newPrecision=Type::typeDouble;
-      new_points=MandelMath::number<double>::convert_block(precisionRecord?precisionRecord->ntype:Type::typeEmpty, precisionRecord?precisionRecord->points:nullptr, pointCount*MandelPoint<double>::LEN);
+      new_points=MandelMath::number<double>::convert_block(precisionRecord?precisionRecord->ntype:Type::typeEmpty, precisionRecord?precisionRecord->points:nullptr, pointCount*JuliaPoint<double>::LEN);
       break;
 #if !NUMBER_DOUBLE_ONLY
     case precisionFloat128:
       newPrecision=Type::typeFloat128;
-      new_points=MandelMath::number<__float128>::convert_block(precisionRecord?precisionRecord->ntype:Type::typeEmpty, precisionRecord?precisionRecord->points:nullptr, pointCount*MandelPoint<__float128>::LEN);
+      new_points=MandelMath::number<__float128>::convert_block(precisionRecord?precisionRecord->ntype:Type::typeEmpty, precisionRecord?precisionRecord->points:nullptr, pointCount*JuliaPoint<__float128>::LEN);
       break;
     case precisionDDouble:
       newPrecision=Type::typeDDouble;
-      new_points=MandelMath::number<MandelMath::dd_real>::convert_block(precisionRecord?precisionRecord->ntype:Type::typeEmpty, precisionRecord?precisionRecord->points:nullptr, pointCount*MandelPoint<MandelMath::dd_real>::LEN);
+      new_points=MandelMath::number<MandelMath::dd_real>::convert_block(precisionRecord?precisionRecord->ntype:Type::typeEmpty, precisionRecord?precisionRecord->points:nullptr, pointCount*JuliaPoint<MandelMath::dd_real>::LEN);
       break;
     case precisionQDouble:
       newPrecision=Type::typeQDouble;
-      new_points=MandelMath::number<MandelMath::dq_real>::convert_block(precisionRecord?precisionRecord->ntype:Type::typeEmpty, precisionRecord?precisionRecord->points:nullptr, pointCount*MandelPoint<MandelMath::dq_real>::LEN);
+      new_points=MandelMath::number<MandelMath::dq_real>::convert_block(precisionRecord?precisionRecord->ntype:Type::typeEmpty, precisionRecord?precisionRecord->points:nullptr, pointCount*JuliaPoint<MandelMath::dq_real>::LEN);
       break;
     case precisionReal642:
       newPrecision=Type::typeReal642;
-      new_points=MandelMath::number<MandelMath::real642>::convert_block(precisionRecord?precisionRecord->ntype:Type::typeEmpty, precisionRecord?precisionRecord->points:nullptr, pointCount*MandelPoint<MandelMath::real642>::LEN);
+      new_points=MandelMath::number<MandelMath::real642>::convert_block(precisionRecord?precisionRecord->ntype:Type::typeEmpty, precisionRecord?precisionRecord->points:nullptr, pointCount*JuliaPoint<MandelMath::real642>::LEN);
       break;
 #endif
     default: goto lolwut;
@@ -2039,7 +2055,7 @@ void JuliaModel::Position::pixelYtoIM(int y, MandelMath::number<BASE> *result)
 
 JuliaModel::Orbit::Orbit(MandelMath::NumberType ntype):
   evaluator(ntype, true),
-  pointDataStore(), pointData_(&pointDataStore, ntype),
+  pointDataStore(), pointData(&pointDataStore, ntype),
   first_mu_re(0), first_mu_im(0), first_mum_re(0), first_mum_im(0)
 {
 }

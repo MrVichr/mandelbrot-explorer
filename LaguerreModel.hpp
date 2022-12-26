@@ -102,7 +102,7 @@ public slots:
 signals:
   void selectedPaintStyleChanged();
   void selectedPrecisionChange();
-  void triggerLaguerreThreaded(int epoch);
+  void triggerLaguerreThreaded(int epoch, int laguerrePeriod);
 protected:
   //MandelMath::worker_multi::Allocator<MandelMath::worker_multi> *storeAllocator;
   //MandelMath::worker_multi *storeWorker; //pointStore
@@ -144,7 +144,7 @@ protected:
     //-> evaluator.tmpLaguerreStore
     LaguerrePointStore pointDataStore; //but we need it for long-term storage of results
     //-> evaluator.tmpLaguerrePoint ? LaguerrePoint<MandelMath::worker_multi> pointData;
-    LaguerrePoint<MandelMath::number_a *> pointData_;
+    LaguerrePoint<MandelMath::number_a *> pointData;
     double first_mu_re, first_mu_im, first_mum_re, first_mum_im;
     Orbit(MandelMath::NumberType ntype);
     ~Orbit();
@@ -163,7 +163,7 @@ protected:
     MandelEvaluator<MandelMath::number_a *> **threads;
     PrecisionRecord(MandelMath::NumberType ntype, PrecisionRecord *source, LaguerreModel *doneReceiver);
     ~PrecisionRecord();
-    constexpr static int LEN=Params::LEN+LaguerrePoint<MandelMath::number_a *>::LEN+Position::LEN+Orbit::LEN  +4   +1;
+    //constexpr static int LEN=Params::LEN+LaguerrePoint<MandelMath::number_a *>::LEN+Position::LEN+Orbit::LEN  +4   +1;
   } *precisionRecord;
 };
 
