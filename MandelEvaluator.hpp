@@ -62,13 +62,8 @@ struct MandelPointStore
   struct
   {
     double hits;
-    double hits_re, hits_im; //julia only for now
-    double phi_re, phi_im; //julia only for now
-    double phi1_re, phi1_im; //julia only for now
-    double phi2_re, phi2_im; //julia only for now
-    double f1_re, f1_im; //julia only for now
-    int first_under_1;
-    void zero() {hits=-1; hits_re=0; hits_im=0; phi_re=0; phi_im=0; phi1_re=0; phi1_im=0; phi_re=0; phi2_im=0; f1_re=0; f1_im=0; first_under_1=0; }
+    double hits_re, hits_im;
+    void zero() {hits=-1; hits_re=0; hits_im=0; }
   } interior;
 
   MandelPointStore();
@@ -131,14 +126,14 @@ struct JuliaPointStore
   std::atomic<WorkState> wstate;
   enum ResultState { stUnknown, stOutside, stOutAngle, stBoundary, stMisiur, stDiverge, stPeriod2, stPeriod3, stMaxIter };
   ResultState rstate;
-  bool has_fc_r;
-  int lookper_startiter, lookper_prevGuess, lookper_lastGuess;
-  bool lookper_nearr_dist_touched; //check if equal but only once; in theory should only happen at dist=0
+  //bool has_fc_r;
+  int lookper_startiter;//, lookper_prevGuess, lookper_lastGuess;
+  //bool lookper_nearr_dist_touched; //check if equal but only once; in theory should only happen at dist=0
   int near0iter_1; //actual+1
   int nearziter_0;
-  int period;
-  int surehand;
-  int iter, newton_iter;
+  //int period;
+  //int surehand;
+  int iter;
   double exterior_hits, exterior_avoids; //upper and lower bound
   struct
   {
@@ -149,7 +144,8 @@ struct JuliaPointStore
     double phi2_re, phi2_im;
     double f1_re, f1_im;
     int first_under_1;
-    void zero() {hits=-1; hits_re=0; hits_im=0; phi_re=0; phi_im=0; phi1_re=0; phi1_im=0; phi_re=0; phi2_im=0; f1_re=0; f1_im=0; first_under_1=0; }
+    int cycles_until_root;
+    void zero() {hits=-1; hits_re=0; hits_im=0; phi_re=0; phi_im=0; phi1_re=0; phi1_im=0; phi_re=0; phi2_im=0; f1_re=0; f1_im=0; first_under_1=0; cycles_until_root=0; }
   } interior;
 
   JuliaPointStore();
@@ -165,38 +161,30 @@ struct JuliaPoint
     iiw__BASE=0,
     iiw_f_=iiw__BASE+0,
     iiw_fc_c=iiw__BASE+2,
-    iiw_fz_r=iiw__BASE+4,
-    iiw_fz_c_mag=iiw__BASE+6,
-    iiw_sure_fz_mag=iiw__BASE+7,
-    iiw_sure_startf=iiw__BASE+8,
-    iiw_lookper_startf=iiw__BASE+10,
-    iiw_lookper_nearr=iiw__BASE+12,
-    iiw_lookper_nearr_dist=iiw__BASE+14,
-    iiw_lookper_totalFzmag=iiw__BASE+15,
-    iiw_near0m=iiw__BASE+16,
-    iiw_nearzm=iiw__BASE+17,
-    iiw_root=iiw__BASE+18,
-    iiw_extangle=iiw__BASE+20,
-    iiw__END=iiw__BASE+21
+    iiw_fz_c_mag=iiw__BASE+4,
+    iiw_lookper_distr=iiw__BASE+5,
+    iiw_lookper_fz=iiw__BASE+7,
+    iiw_near0m=iiw__BASE+9,
+    iiw_nearzm=iiw__BASE+10,
+    iiw_near0fzm=iiw__BASE+11,
+    iiw_since0fzm=iiw__BASE+12,
+    iiw_extangle=iiw__BASE+13,
+    iiw__END=iiw__BASE+14
   };
   static constexpr size_t LEN=iiw__END-iiw__BASE;
   JuliaPointStore *store;
   JuliaPoint(JuliaPointStore *store, MandelMath::NumberType ntype);
   MandelMath::complex<BASE> f;
-  MandelMath::complex<BASE> fc_c; //fc_c, or fz_r if stPeriod2 or stPeriod3
-  MandelMath::complex<BASE> fz_r;
-  MandelMath::number<BASE> fz_c_mag; //since the beginning
-  MandelMath::number<BASE> sure_fz_mag; //since near0
-  MandelMath::complex<BASE> sure_startf;
-  MandelMath::complex<BASE> lookper_startf;
-  MandelMath::complex<BASE> lookper_nearr;
-  MandelMath::number<BASE> lookper_nearr_dist;
-  MandelMath::number<BASE> lookper_totalFzmag;
-  MandelMath::number<BASE> near0m;
+  MandelMath::complex<BASE> fz_z;
+  MandelMath::number<BASE> fz_z_mag; //since the beginning
+  MandelMath::complex<BASE> lookper_distr;
+  MandelMath::complex<BASE> lookper_fz;
   MandelMath::number<BASE> nearzm;
-  MandelMath::complex<BASE> root;
+  MandelMath::number<BASE> near0fzm; //from start to near0
+  MandelMath::number<BASE> near0m;
+  MandelMath::number<BASE> since0fzm; //from near0+1 to end
   MandelMath::number<BASE> extangle;
-  JuliaPoint &operator =(JuliaPoint &src) = delete;
+  JuliaPoint &operator=(JuliaPoint &src) = delete;
   //template <int IIW_SRC>
   //void assign<WORKER_MULTI, IIW_OFFSET, IIW_SRC>(const MandelPoint<WORKER_MULTI, IIW_SRC> &src);
   //template <int IIW_SRC>
@@ -213,25 +201,24 @@ protected:
   int refcount_unused;
 public:
   //static constexpr int LEN=5;
-  ShareableViewInfo(): c(), root(), nth_fz_limit() { } //Qt uses this and operator= instead of copy constructor :-/
+  ShareableViewInfo(): view(), c(), nth_fz_limit() { } //Qt uses this and operator= instead of copy constructor :-/
   /*template <typename BASE>
   ShareableViewInfo(): c(new MandelMath::number<BASE>(), new MandelMath::number<BASE>()),
                        root(new MandelMath::number<BASE>(), new MandelMath::number<BASE>()),
                        nth_fz_limit(new MandelMath::number<BASE>()), scale(1), period(0), nth_fz(0) { }*/
-  ShareableViewInfo(MandelMath::NumberType ntype): c(ntype), root(ntype), nth_fz_limit(ntype), scale(1), period(0), nth_fz(0), juliaPeriod(0) { }
+  ShareableViewInfo(MandelMath::NumberType ntype): view(ntype), c(ntype), nth_fz_limit(ntype), scale(1), nth_fz(0), max_root_effort(3) { }
   ShareableViewInfo(ShareableViewInfo &src);
   ShareableViewInfo(const ShareableViewInfo &src);
   ShareableViewInfo(ShareableViewInfo &&src); //important
   //~ShareableViewInfo();
   ShareableViewInfo &operator=(ShareableViewInfo &src);
   ShareableViewInfo &operator=(ShareableViewInfo &&src);
+  MandelMath::complex<MandelMath::number_a *> view;
   MandelMath::complex<MandelMath::number_a *> c;
-  MandelMath::complex<MandelMath::number_a *> root;
   MandelMath::number<MandelMath::number_a *> nth_fz_limit;
   double scale;
-  int period;
   int nth_fz;
-  int juliaPeriod; //mouse point period, or 1<<MAX_EFFORT outside
+  int max_root_effort;
 };
 Q_DECLARE_METATYPE(ShareableViewInfo);
 
@@ -444,6 +431,7 @@ public:
     static constexpr size_t LEN=iiw__END-iiw__BASE;*/
     MandelMath::complex<BASE> c;
     MandelMath::complex<BASE> juliaRoot;
+    MandelMath::complex<BASE> juliaAlpha; // |alpha|<1
     MandelMath::complex<BASE> first_z;
     int epoch;
     int pixelIndex;

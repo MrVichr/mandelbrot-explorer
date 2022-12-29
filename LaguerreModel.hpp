@@ -27,6 +27,7 @@ public:
   void transformStore(void *old_points, LaguerrePointStore *old_store, int old_width, int old_height, const MandelMath::complex<MandelMath::number_a *> *old_c,
                       void *new_points, LaguerrePointStore *new_store, int new_width, int new_height, const MandelMath::complex<MandelMath::number_a *> *new_c,
                       int inlog, int new_step_log);
+  void recomputeRoot(int max_effort);
   Q_INVOKABLE void setParams(ShareableViewInfo viewInfo);
   void setView(const MandelMath::complex<MandelMath::number_a *> *c, double scale);
   Q_INVOKABLE void drag(double delta_x, double delta_y);
@@ -49,7 +50,7 @@ public:
     static constexpr int LEN=5;
     int period;
     int nth_fz;
-    MandelMath::complex<MandelMath::number_a *> base;
+    MandelMath::complex<MandelMath::number_a *> c;
     MandelMath::complex<MandelMath::number_a *> root;
     MandelMath::number<MandelMath::number_a *> nth_fz_limit;
     Params(MandelMath::NumberType ntype, const Params *source);

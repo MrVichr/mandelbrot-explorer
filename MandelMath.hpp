@@ -1079,6 +1079,7 @@ public:
 double sqr_double(double x); //no one ever needed this function before year 2022, right?
 void complex_double_sqrt(double *res_re, double *res_im, double in_re, double in_im); //res_re>=0
 double radixfloor_double(double x1, double x2);
+void real_double_quadratic(double *res, double a, double b2, double c);
 void complex_double_quadratic(double *res_re, double *res_im,
                               double a_re, double a_im, double b2_re, double b2_im, double c_re, double c_im);
 void complex_double_quadratic2(double *res1_re, double *res1_im,

@@ -277,24 +277,16 @@ ShareableViewInfo MandelModel::getViewInfo()
   ShareableViewInfo result(precisionRecord->ntype);
   MandelMath::complex<MandelMath::number_a *>::Scratchpad spad(precisionRecord->ntype);
   //result.worker=orbit.worker;
-  result.period=precisionRecord->orbit.evaluator.mandelData.store->nearziter_0;//evaluator.currentData.lookper_lastGuess;//orbit.pointData.period;
-  if (result.period<1)
-    result.period=1;
-  result.nth_fz=result.period;/*precisionRecord->orbit.evaluator.currentData.store->period;
+  result.nth_fz=precisionRecord->orbit.evaluator.mandelData.store->near0iter_1;/*precisionRecord->orbit.evaluator.currentData.store->period;
   if (result.nth_fz<1)
     result.nth_fz=result.period;*/
   result.scale=precisionRecord->position.step_size;
-  if ((precisionRecord->orbit.evaluator.mandelData.store->rstate==MandelPointStore::ResultState::stPeriod2) ||
-      (precisionRecord->orbit.evaluator.mandelData.store->rstate==MandelPointStore::ResultState::stPeriod3))
-    result.juliaPeriod=precisionRecord->orbit.evaluator.mandelData.store->period;
-  else
-    result.juliaPeriod=1<<MAX_EFFORT;
+  result.max_root_effort=MAX_EFFORT;
   /*orbit.worker->init_(&result.re_, &result.re_p);
   orbit.worker->init_(&result.im, &result.im_p);
   orbit.worker->init_(&result.root_re, &result.rre_p);
   orbit.worker->init_(&result.root_im, &result.rim_p);*/
   result.c.assign_across(&precisionRecord->orbit.evaluator.currentParams.c);
-  result.root.assign_across(&precisionRecord->orbit.evaluator.mandelData.root);
   precisionRecord->orbit.evaluator.loope.eval_zz(&precisionRecord->orbit.evaluator.tmp, result.nth_fz,
       &precisionRecord->orbit.evaluator.currentParams.c,//result.c,
       &precisionRecord->orbit.evaluator.mandelData.root,//result.root,
@@ -311,41 +303,14 @@ ShareableViewInfo MandelModel::getViewInfo()
 ShareableViewInfo MandelModel::makeViewInfo(const QVariantMap &params)
 {
   ShareableViewInfo result(precisionRecord->ntype);
+  result.view.zero(params.value("viewRe", 0.0).toDouble(), params.value("viewIm", 0.0).toDouble());
   result.scale=params.value("viewZoom", 0.0).toDouble();
   result.c.zero(params.value("cRe", 0.0).toDouble(), params.value("cIm", 0.0).toDouble());
   //have to be correct result.root.zero(0, 0);
-  result.juliaPeriod=params.value("period", 1<<MAX_EFFORT).toInt();
-  result.nth_fz=result.juliaPeriod;
+  result.nth_fz=params.value("period", 1<<MAX_EFFORT).toInt();
   precisionRecord->lagu_c.zero(params.value("cRe", 0.0).toDouble(), params.value("cIm", 0.0).toDouble());
   precisionRecord->lagu_r.zero(0,0);
-
-  //compute the root
-  precisionRecord->orbit.evaluator.currentParams.first_z.assign(&result.c);
-  precisionRecord->orbit.evaluator.currentParams.epoch=epoch;
-  precisionRecord->orbit.evaluator.workIfEpoch=precisionRecord->orbit.evaluator.busyEpoch;//epoch;
-  precisionRecord->orbit.evaluator.currentParams.pixelIndex=0;
-  precisionRecord->orbit.evaluator.currentParams.c.assign(&precisionRecord->orbit.evaluator.currentParams.first_z);
-  //already 0 precisionRecord->orbit.evaluator.currentParams.nth_fz=0;
-  //precisionRecord->orbit.evaluator.currentData.store->rstate=MandelPointStore::ResultState::stUnknown_;
-  //precisionRecord->orbit.evaluator.currentData.store->wstate=MandelPointStore::WorkState::stIdle;
-  precisionRecord->orbit.evaluator.mandelData.zero(&precisionRecord->orbit.evaluator.currentParams.first_z);
-  precisionRecord->orbit.evaluator.mandelData.store->wstate=MandelPointStore::WorkState::stWorking;
-  precisionRecord->orbit.evaluator.currentParams.breakOnNewNearest=false;
-  precisionRecord->orbit.evaluator.currentParams.maxiter=1<<MAX_EFFORT;
-  precisionRecord->orbit.evaluator.currentParams.want_extangle=false;//don't need for root
-  {
-    while ((precisionRecord->orbit.evaluator.mandelData.store->rstate==MandelPointStore::ResultState::stUnknown) &&
-           (precisionRecord->orbit.evaluator.mandelData.store->iter<(1<<MAX_EFFORT)))
-    {
-      //precisionRecord->orbit.evaluator.currentParams.maxiter=1<<MAX_EFFORT; //dont't know->run fully
-      precisionRecord->orbit.evaluator.thread.syncMandel();
-    }
-  }
-  if (precisionRecord->orbit.evaluator.mandelData.store->rstate==MandelPointStore::ResultState::stPeriod2 ||
-      precisionRecord->orbit.evaluator.mandelData.store->rstate==MandelPointStore::ResultState::stPeriod3)
-    result.root.assign(&precisionRecord->orbit.evaluator.mandelData.root);
-  else
-    result.root.zero(0, 0);
+  result.max_root_effort=MAX_EFFORT;
 
   return result;
 }
@@ -814,12 +779,22 @@ void MandelModel::paintOrbit(ShareableImageWrapper image, int x, int y)
     { //interior distance estimate
       int interior;
       painter.setBrush(Qt::BrushStyle::NoBrush);
-      painter.setPen(QColor(0, 0xff, 0xff));
-      interior=qRound(resultStore->interior.hits/precisionRecord->position.step_size);
-      painter.drawEllipse(x-interior, y-interior, 2*interior, 2*interior);
       painter.setPen(QColor(0, 0xc0, 0xc0));
       interior=qRound(resultStore->interior.hits/4/precisionRecord->position.step_size);
       painter.drawEllipse(x-interior, y-interior, 2*interior, 2*interior);
+
+      painter.setPen(QColor(0, 0xff, 0xff));
+      interior=qRound(resultStore->interior.hits/precisionRecord->position.step_size);
+      painter.drawEllipse(x-interior, y-interior, 2*interior, 2*interior);
+
+      /*direction doesn't seem right, where does 1-|fz|^2 come from?
+      painter.setPen(QColor(0x00, 0x00, 0x00));
+      int inte_x=qRound(resultStore->interior.hits_re/precisionRecord->position.step_size);
+      int inte_y=qRound(resultStore->interior.hits_im/precisionRecord->position.step_size);
+      painter.drawEllipse(x+inte_x-1, y-inte_y-1, 3, 3);
+      painter.setPen(QColor(0xff, 0xff, 0xff));
+      painter.drawEllipse(+x+inte_x-2, y-inte_y-2, 5, 5);
+      */
     } break;
     default: ;
   }
@@ -848,7 +823,7 @@ void MandelModel::paintOrbit(ShareableImageWrapper image, int x, int y)
     {
       int line_ex, line_ey;
 
-      if ((resultStore->rstate==MandelPointStore::ResultState::stPeriod2 || resultStore->rstate==MandelPointStore::ResultState::stPeriod3) &&
+      if ((resultStore->rstate==MandelPointStore::ResultState::stPeriod2 || resultStore->rstate==MandelPointStore::ResultState::stPeriod3 || resultStore->rstate==MandelPointStore::ResultState::stMaxIter) &&
           precisionRecord->orbit.evaluator.mandelData.store->iter<resultStore->period)
       { //paint first period fully
         precisionRecord->orbit.evaluator.currentParams.maxiter=precisionRecord->orbit.evaluator.mandelData.store->iter+1;

@@ -23,6 +23,7 @@ public:
   void transformStore(void *old_points, JuliaPointStore *old_store, int old_width, int old_height, const MandelMath::complex<MandelMath::number_a *> *old_c,
                       void *new_points, JuliaPointStore *new_store, int new_width, int new_height, const MandelMath::complex<MandelMath::number_a *> *new_c,
                       int inlog, int new_step_log);
+  void recomputeRoot(int max_effort);
   Q_INVOKABLE void setParams(ShareableViewInfo viewInfo);
   void setView(const MandelMath::complex<MandelMath::number_a *> *c, double scale);
   Q_INVOKABLE void drag(double delta_x, double delta_y);
@@ -43,8 +44,8 @@ public:
   struct Params
   {
     static constexpr int LEN=4;
-    int period;
-    MandelMath::complex<MandelMath::number_a *> base;
+    int period; //TODO: 0 doesn't seem to be the best choice for "no interior", MAXINT would better
+    MandelMath::complex<MandelMath::number_a *> c;
     MandelMath::complex<MandelMath::number_a *> root;
     Params(MandelMath::NumberType ntype, const Params *source);
   };
@@ -125,6 +126,7 @@ protected:
   int nextGivenPointIndex;
   int effortBonus;
   constexpr static int MAX_EFFORT=22;
+  //constexpr static int MAX_EFFORT=13;
   QElapsedTimer timerWriteToImage;
 
   struct Position

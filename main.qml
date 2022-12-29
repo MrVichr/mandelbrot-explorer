@@ -422,6 +422,7 @@ Window {
                 Repeater {
                     model: [
                         {viewRe: -0.5, viewIm: 0, viewZoom: 1/128, cRe: 0, cIm: 0, period: 1, caption: 'Main view'},
+                        {viewRe:  0.00439453125,      viewIm: 0.0252380371093750, viewZoom: 1/65536.0, cRe: -0.5289001464843750, cIm: 0.6682891845703125, period: 14, caption: 'curl'},
                         {viewRe: -0.7342796903103590, viewIm: 0.1835422439035028, viewZoom: 1/4294967296.0, cRe: -0.7342796875163913, cIm: 0.1835422653239220, period: 1156, caption: 'Noisy zoom'},
                     ]
                     MenuItem {

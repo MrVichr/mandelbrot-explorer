@@ -5417,6 +5417,57 @@ double radixfloor_double(double x1, double x2)
 /*
  finds smaller (in abs) root of ax^2+2bx+c=0
 */
+void real_double_quadratic(double *res,
+                           double a, double b2, double c)
+{
+  /*
+  a x^2 + 2 b x + c = 0
+  x1,x2= -(b +- sqrt(b^2-a*c))/a
+  for small a
+  x1,x2= -b*(1 +- sqrt(1-a*c/b^2))/a
+  x1,x2= -b*(1 +- sqrt(1-a*c/b^2))/(a*c/b^2)*c/b^2
+  HELP(x)=(1+-sqrt(1-x))/x =1/(1-+sqrt(1-x))
+  x1,x2= -c/b*HELP(a*c/b^2)   or rather, for a<b, c<b
+  for b<a
+  (F1)  x1,x2= -(b/a +- sqrt(b^2/a^2-c/a))     good for a>b, c>b until ~ c>b^2/a
+  (F1') x1,x2= -(1/a)*(b - sqrt(b^2-a*c))      good for b^2<<a*c
+  (F2)  x1,x2= -(b/a)*(1 +- sqrt(1-a*c/b^2))   good for a>b, c<b^2/a
+  for b>a  b^2/a>b
+  x1,x2= -b*(1 +- sqrt(1-a*c/b^2))/a/c*b^2*c/b^2
+        x1,x2= -(c/b)*HELP(a*c/b^2)            good for c<b, until c<b^2/a
+  (F3)  x1=    -(c/b)/(1+sqrt(1-a*c/b^2))      good for b>0 (cancellation for x2)
+  (F3')        -(c)/(b+-sqrt(b^2-a*c))         good except both b,c small e.g. 0
+
+  Muller's method: B=2b   2c/(-B+-sqrt(B^2-4ac))
+  x1,x2= c/(-b+-sqrt(b^2-ac))     -c/(b+sqrt(b^2-ac))
+  x1,x2= c/b/(-1+-sqrt(1-ac/b^2))
+  */
+  double bb=b2*b2;
+  double bbac=bb-a*c; //b^2-ac
+  double d=std::sqrt(bbac); //caller should make sure that c<0 so that it's rather b^2+a*c
+  double t1;
+  if (b2*d<0)//if (b2<0)
+  {
+    t1=b2-d;
+  }
+  else
+  {
+    t1=b2+d;
+  }
+  if (std::abs(t1)>std::abs(a)) //do we prefer to divide by t1 or by a? the bigger!
+  { //F3'
+    *res=-c/t1; //-c/(b+sqrt(b^2-a*c))
+  }
+  else
+  { //when a is large
+    t1=2*b2-t1;//b2-d;
+    *res=-t1/a; //-(b - sqrt(b^2-a*c))/a
+  }
+}
+
+/*
+ finds smaller (in abs) root of ax^2+2bx+c=0
+*/
 void complex_double_quadratic(double *res_re, double *res_im,
                               double a_re, double a_im, double b2_re, double b2_im, double c_re, double c_im)
 {

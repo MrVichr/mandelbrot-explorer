@@ -135,18 +135,18 @@ QString JuliaModel::getTextInfoGen()
         state="Unk";
       else
         state="Working...";
-      fc_fz=" fc="+data->fc_c.toString();
+      fc_fz=" fz="+data->fz_z.toString();
       break;
     case JuliaPointStore::ResultState::stOutside:
-      state="Out"; fc_fz=" fc="+data->fc_c.toString(); break;
+      state="Out"; fc_fz=" fz="+data->fz_z.toString(); break;
     case JuliaPointStore::ResultState::stOutAngle:
-      state="OutA"; fc_fz=" fc="+data->fc_c.toString(); break;
+      state="OutA"; fc_fz=" fz="+data->fz_z.toString(); break;
     case JuliaPointStore::ResultState::stBoundary:
-      state="Bound"; fc_fz=" fc="+data->fc_c.toString(); break;
+      state="Bound"; fc_fz=" fz="+data->fz_z.toString(); break;
     case JuliaPointStore::ResultState::stDiverge:
-      state="Diver"; fc_fz=" fc="+data->fc_c.toString(); break;
+      state="Diver"; fc_fz=" fz="+data->fz_z.toString(); break;
     case JuliaPointStore::ResultState::stMisiur:
-      state="Misiur"; fc_fz=" fc="+data->fc_c.toString(); break;
+      state="Misiur"; fc_fz=" fz="+data->fz_z.toString(); break;
     case JuliaPointStore::ResultState::stPeriod2:
       state="Per2";
       switch (_selectedPaintStyle)
@@ -156,7 +156,7 @@ QString JuliaModel::getTextInfoGen()
         case paintStylePhi2: fc_fz=" fi''="+QString::number(data_store->interior.phi2_re)+"+i*"+QString::number(data_store->interior.phi2_im); break;
         case paintStyleF1: fc_fz=" f'="+QString::number(data_store->interior.f1_re)+"+i*"+QString::number(data_store->interior.f1_im); break;
         case paintStyleFirstUnder1: fc_fz=" first="+QString::number(data_store->interior.first_under_1); break;
-        default: fc_fz=" fc="+data->fc_c.toString();
+        default: fc_fz=" fz="+data->fz_z.toString();
       }
       break;
     case JuliaPointStore::ResultState::stPeriod3:
@@ -168,18 +168,25 @@ QString JuliaModel::getTextInfoGen()
         case paintStylePhi2: fc_fz=" fi''="+QString::number(data_store->interior.phi2_re)+"+i*"+QString::number(data_store->interior.phi2_im); break;
         case paintStyleF1: fc_fz=" f'="+QString::number(data_store->interior.f1_re)+"+i*"+QString::number(data_store->interior.f1_im); break;
         case paintStyleFirstUnder1: fc_fz=" first="+QString::number(data_store->interior.first_under_1); break;
-        default: fc_fz=" fc="+data->fc_c.toString();
+        default: fc_fz=" fz="+data->fz_z.toString();
       }
       break;
     case JuliaPointStore::ResultState::stMaxIter:
-      state="Max"; fc_fz=" fc="+data->fc_c.toString(); break;
+      state="Max"; fc_fz=" fz="+data->fz_z.toString(); break;
   }
 
-  return state+" iter="+QString::number(data_store->iter)+
-               " nearz="+QString::number(data_store->nearziter_0)+"("+QString::number(data_store->nearziter_0%precisionRecord->params.period)+")"+
-               " near0="+QString::number(data_store->near0iter_1)+"("+QString::number(data_store->near0iter_1%precisionRecord->params.period)+")"+
-               " ("+QString::number((data_store->near0iter_1-data_store->nearziter_0))+")"+
-      fc_fz;
+  if (precisionRecord->params.period<=0)
+    return state+" iter="+QString::number(data_store->iter)+
+                 " nearz="+QString::number(data_store->nearziter_0)+"("+QString::number(data_store->nearziter_0)+")"+
+                 " near0="+QString::number(data_store->near0iter_1)+"("+QString::number(data_store->near0iter_1)+")"+
+                 " ("+QString::number((data_store->near0iter_1-data_store->nearziter_0))+")"+
+           fc_fz;
+  else
+    return state+" iter="+QString::number(data_store->iter)+
+                 " nearz="+QString::number(data_store->nearziter_0)+"("+QString::number(data_store->nearziter_0%precisionRecord->params.period)+")"+
+                 " near0="+QString::number(data_store->near0iter_1)+"("+QString::number(data_store->near0iter_1%precisionRecord->params.period)+")"+
+                 " ("+QString::number((data_store->near0iter_1-data_store->nearziter_0))+")"+
+           fc_fz;
 }
 
 QString JuliaModel::getTextInfoSpec()
@@ -205,40 +212,122 @@ QString JuliaModel::getTextInfoSpec()
   {
     case JuliaPointStore::ResultState::stUnknown:
       if (data_store->wstate.load()==JuliaPointStore::WorkState::stIdle)
-        return " ";
+        return QString("per=")+QString::number(precisionRecord->params.period)+" ";
       else
         return "Working...";
       break;
     case JuliaPointStore::ResultState::stOutside:
-      return QString("ext=")+QString::number(data_store->exterior_hits)+" sure="+QString::number(data_store->surehand); break;
+      return QString("per=")+QString::number(precisionRecord->params.period)+
+             QString(" ext=")+QString::number(data_store->exterior_hits); break;
     case JuliaPointStore::ResultState::stOutAngle:
-      return QString("ext=")+QString::number(data_store->exterior_hits)+
-             " phi="+precisionRecord->wtiPoint.extangle.toString()+
-             " sure="+QString::number(data_store->surehand); break;
+      return QString("per=")+QString::number(precisionRecord->params.period)+
+             QString(" ext=")+QString::number(data_store->exterior_hits)+
+                     " phi="+precisionRecord->wtiPoint.extangle.toString(); break;
     case JuliaPointStore::ResultState::stBoundary:
-      return "sure="+QString::number(data_store->surehand);
+      return QString("per=")+QString::number(precisionRecord->params.period);
     case JuliaPointStore::ResultState::stDiverge:
-      return "sure="+QString::number(data_store->surehand);
+      return QString("per=")+QString::number(precisionRecord->params.period);
     case JuliaPointStore::ResultState::stMisiur:
-      return "sure="+QString::number(data_store->surehand);
+      return QString("per=")+QString::number(precisionRecord->params.period);
     case JuliaPointStore::ResultState::stPeriod2:
     {
       //double p=std::atan2((precisionRecord->orbit.bulb.baseFz_.im.toDouble()),
       //                     precisionRecord->orbit.bulb.baseFz_.re.toDouble())*precisionRecord->orbit.bulb.foundMult_;
-      return QString("per=")+QString::number(data_store->period)+" sure="+QString::number(data_store->surehand)+" int="+QString::number(data_store->interior.hits);
+      return QString("per=")+QString::number(precisionRecord->params.period)+
+                    " int="+QString::number(data_store->interior.hits);
         //  +" mult="+QString::number(std::round(p/(2*M_PI)))+"/"+QString::number(precisionRecord->orbit.bulb.foundMult_);
     } break;
     case JuliaPointStore::ResultState::stPeriod3:
     {
       //double p=std::atan2((precisionRecord->orbit.bulb.baseFz_.im.toDouble()),
       //                     precisionRecord->orbit.bulb.baseFz_.re.toDouble())*precisionRecord->orbit.bulb.foundMult_;
-      return QString("per=")+QString::number(data_store->period)+" sure="+QString::number(data_store->surehand)+" int="+QString::number(data_store->interior.hits);
+      return QString("per=")+QString::number(precisionRecord->params.period)+
+                    " int="+QString::number(data_store->interior.hits);
         //  +" mult="+QString::number(std::round(p/(2*M_PI)))+"/"+QString::number(precisionRecord->orbit.bulb.foundMult_);
     } break;
     case JuliaPointStore::ResultState::stMaxIter:
-      return "sure="+QString::number(data_store->surehand);
+      return QString("per=")+QString::number(precisionRecord->params.period);
   }
   return "-?-?-";
+}
+
+void JuliaModel::recomputeRoot(int max_effort)
+{
+  precisionRecord->orbit.evaluator.currentParams.epoch=epoch;
+  precisionRecord->orbit.evaluator.workIfEpoch=precisionRecord->orbit.evaluator.busyEpoch;//epoch;
+  precisionRecord->orbit.evaluator.currentParams.pixelIndex=0;
+  precisionRecord->orbit.evaluator.currentParams.first_z.assign(&precisionRecord->orbit.evaluator.currentParams.c);
+  precisionRecord->orbit.evaluator.mandelData.zero(&precisionRecord->orbit.evaluator.currentParams.first_z);
+  precisionRecord->orbit.evaluator.mandelData.store->wstate=MandelPointStore::WorkState::stWorking;
+  precisionRecord->orbit.evaluator.currentParams.breakOnNewNearest=false;
+  precisionRecord->orbit.evaluator.currentParams.maxiter=1<<max_effort;
+  precisionRecord->orbit.evaluator.currentParams.want_extangle=false;
+
+  precisionRecord->orbit.evaluator.thread.syncMandel();
+  if (precisionRecord->orbit.evaluator.mandelData.store->rstate==MandelPointStore::ResultState::stPeriod2 ||
+      precisionRecord->orbit.evaluator.mandelData.store->rstate==MandelPointStore::ResultState::stPeriod3)
+  {
+    precisionRecord->params.period=precisionRecord->orbit.evaluator.mandelData.store->period;
+    precisionRecord->params.root.assign(&precisionRecord->orbit.evaluator.mandelData.root);
+    precisionRecord->orbit.evaluator.currentParams.juliaRoot.assign(&precisionRecord->orbit.evaluator.mandelData.root);
+    precisionRecord->orbit.evaluator.loope.eval_zz(&precisionRecord->orbit.evaluator.tmp, precisionRecord->params.period, &precisionRecord->orbit.evaluator.currentParams.c, &precisionRecord->orbit.evaluator.mandelData.root, false, true);
+    precisionRecord->orbit.evaluator.currentParams.juliaAlpha.assign(&precisionRecord->orbit.evaluator.loope.f_z);
+    //precisionRecord->orbit.evaluator.currentParams.juliaAlpha.recip(&precisionRecord->orbit.evaluator.tmp);
+  }
+  else
+  {
+    precisionRecord->params.period=0;
+    precisionRecord->params.root.zero(0, 0);
+    precisionRecord->orbit.evaluator.currentParams.juliaRoot.zero(0, 0);
+    precisionRecord->orbit.evaluator.currentParams.juliaAlpha.zero(2, 0);
+  }
+  precisionRecord->params.root.assign(&precisionRecord->orbit.evaluator.currentParams.juliaRoot);
+
+  switch (precisionRecord->ntype)
+  {
+    case MandelMath::NumberType::typeEmpty:
+    case MandelMath::NumberType::typeDouble:
+      for (int t=0; t<precisionRecord->threadCount; t++)
+      {
+        ((MandelEvaluator<double> *)precisionRecord->threads[t])->currentParams.c.assign_across(&precisionRecord->orbit.evaluator.currentParams.c);
+        ((MandelEvaluator<double> *)precisionRecord->threads[t])->currentParams.juliaRoot.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaRoot);
+        ((MandelEvaluator<double> *)precisionRecord->threads[t])->currentParams.juliaAlpha.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaAlpha);
+      }
+      break;
+    case MandelMath::NumberType::typeFloat128:
+      for (int t=0; t<precisionRecord->threadCount; t++)
+      {
+        ((MandelEvaluator<__float128> *)precisionRecord->threads[t])->currentParams.c.assign_across(&precisionRecord->orbit.evaluator.currentParams.c);
+        ((MandelEvaluator<__float128> *)precisionRecord->threads[t])->currentParams.juliaRoot.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaRoot);
+        ((MandelEvaluator<__float128> *)precisionRecord->threads[t])->currentParams.juliaAlpha.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaAlpha);
+      }
+      break;
+    case MandelMath::NumberType::typeDDouble:
+      for (int t=0; t<precisionRecord->threadCount; t++)
+      {
+        ((MandelEvaluator<MandelMath::dd_real> *)precisionRecord->threads[t])->currentParams.c.assign_across(&precisionRecord->orbit.evaluator.currentParams.c);
+        ((MandelEvaluator<MandelMath::dd_real> *)precisionRecord->threads[t])->currentParams.juliaRoot.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaRoot);
+        ((MandelEvaluator<MandelMath::dd_real> *)precisionRecord->threads[t])->currentParams.juliaAlpha.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaAlpha);
+      }
+      break;
+    case MandelMath::NumberType::typeQDouble:
+      for (int t=0; t<precisionRecord->threadCount; t++)
+      {
+        ((MandelEvaluator<MandelMath::dq_real> *)precisionRecord->threads[t])->currentParams.c.assign_across(&precisionRecord->orbit.evaluator.currentParams.c);
+        ((MandelEvaluator<MandelMath::dq_real> *)precisionRecord->threads[t])->currentParams.juliaRoot.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaRoot);
+        ((MandelEvaluator<MandelMath::dq_real> *)precisionRecord->threads[t])->currentParams.juliaAlpha.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaAlpha);
+      }
+      break;
+    case MandelMath::NumberType::typeReal642:
+      for (int t=0; t<precisionRecord->threadCount; t++)
+      {
+        ((MandelEvaluator<MandelMath::real642> *)precisionRecord->threads[t])->currentParams.c.assign_across(&precisionRecord->orbit.evaluator.currentParams.c);
+        ((MandelEvaluator<MandelMath::real642> *)precisionRecord->threads[t])->currentParams.juliaRoot.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaRoot);
+        ((MandelEvaluator<MandelMath::real642> *)precisionRecord->threads[t])->currentParams.juliaAlpha.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaAlpha);
+      }
+      break;
+  }
+
 }
 
 void JuliaModel::setParams(ShareableViewInfo viewInfo)
@@ -252,76 +341,20 @@ void JuliaModel::setParams(ShareableViewInfo viewInfo)
   {
     QWriteLocker locker(&threading_mutex);
     epoch=(epoch%2000000000)+1; //invalidate threads while transforming store
-    precisionRecord->params.period=viewInfo.juliaPeriod;
 
-    //if (viewInfo.originalAllocator->worker->ntype()==precisionRecord->currentWorker->ntype())
-    {
-      precisionRecord->params.base.assign_across(&viewInfo.c);
-      precisionRecord->params.root.assign_across(&viewInfo.root);
-    }
-    precisionRecord->orbit.evaluator.currentParams.c.assign_across(&precisionRecord->params.base);
-    precisionRecord->orbit.evaluator.currentParams.juliaRoot.assign_across(&precisionRecord->params.root);
-    switch (precisionRecord->ntype)
-    {
-      case MandelMath::NumberType::typeEmpty:
-      case MandelMath::NumberType::typeDouble:
-        for (int t=0; t<precisionRecord->threadCount; t++)
-        {
-          ((MandelEvaluator<double> *)precisionRecord->threads[t])->currentParams.c.assign_across(&precisionRecord->params.base);
-          ((MandelEvaluator<double> *)precisionRecord->threads[t])->currentParams.juliaRoot.assign_across(&precisionRecord->params.root);
-        }
-        break;
-      case MandelMath::NumberType::typeFloat128:
-        for (int t=0; t<precisionRecord->threadCount; t++)
-        {
-          ((MandelEvaluator<__float128> *)precisionRecord->threads[t])->currentParams.c.assign_across(&precisionRecord->params.base);
-          ((MandelEvaluator<__float128> *)precisionRecord->threads[t])->currentParams.juliaRoot.assign_across(&precisionRecord->params.root);
-        }
-        break;
-      case MandelMath::NumberType::typeDDouble:
-        for (int t=0; t<precisionRecord->threadCount; t++)
-        {
-          ((MandelEvaluator<MandelMath::dd_real> *)precisionRecord->threads[t])->currentParams.c.assign_across(&precisionRecord->params.base);
-          ((MandelEvaluator<MandelMath::dd_real> *)precisionRecord->threads[t])->currentParams.juliaRoot.assign_across(&precisionRecord->params.root);
-        }
-        break;
-      case MandelMath::NumberType::typeQDouble:
-        for (int t=0; t<precisionRecord->threadCount; t++)
-        {
-          ((MandelEvaluator<MandelMath::dq_real> *)precisionRecord->threads[t])->currentParams.c.assign_across(&precisionRecord->params.base);
-          ((MandelEvaluator<MandelMath::dq_real> *)precisionRecord->threads[t])->currentParams.juliaRoot.assign_across(&precisionRecord->params.root);
-        }
-        break;
-      case MandelMath::NumberType::typeReal642:
-        for (int t=0; t<precisionRecord->threadCount; t++)
-        {
-          ((MandelEvaluator<MandelMath::real642> *)precisionRecord->threads[t])->currentParams.c.assign_across(&precisionRecord->params.base);
-          ((MandelEvaluator<MandelMath::real642> *)precisionRecord->threads[t])->currentParams.juliaRoot.assign_across(&precisionRecord->params.root);
-        }
-        break;
-    }
-    /*else
-    {
-      //watch this
-      dbgPoint(); //probably happens quite rarely, let's debug it when it does
-      MandelMath::worker_multi::Type ntype=precisionRecord->currentWorker->ntype();
-      MandelMath::worker_multi *tmpworker=MandelMath::worker_multi::create(ntype, viewInfo.originalAllocator);
-      {
-        MandelMath::worker_multi::Allocator<MandelMath::worker_multi> useTmp(tmpworker->getAllocator(), ShareableViewInfo::LEN);
-        ShareableViewInfo tmpinfo(&useTmp);
-        precisionRecord->params.base.assign(&tmpinfo.c);
-        precisionRecord->params.root.assign(&tmpinfo.root);
-        MandelMath::number_instance<MandelMath::worker_multi>(&precisionRecord->params.nth_fz_limit).assign(tmpinfo.nth_fz_limit.ptr);
-      }
-      delete tmpworker;
-    }*/
-    MandelMath::complex<MandelMath::number_a *> old_c(precisionRecord->ntype);
-    old_c.assign(&precisionRecord->position.center);
+    precisionRecord->orbit.evaluator.currentParams.c.assign_across(&viewInfo.c);
+    precisionRecord->params.c.assign(&precisionRecord->orbit.evaluator.currentParams.c);
+    recomputeRoot(viewInfo.max_root_effort);
+
+    MandelMath::complex<MandelMath::number_a *> old_center(precisionRecord->ntype);
+    old_center.assign(&precisionRecord->position.center);
     int old_step_log=precisionRecord->position.step_log;
 
-    precisionRecord->position.setView(&precisionRecord->params.base, viewInfo.scale);
+    MandelMath::complex<MandelMath::number_a *> view_here(precisionRecord->ntype);
+    view_here.assign_across(&viewInfo.view);
+    precisionRecord->position.setView(&view_here, viewInfo.scale);
 
-    transformStore(precisionRecord->points, pointStore, 0, 0, &old_c,
+    transformStore(precisionRecord->points, pointStore, 0, 0, &old_center,
                    precisionRecord->points, pointStore, imageWidth, imageHeight, &precisionRecord->position.center,
                    precisionRecord->position.step_log-old_step_log, precisionRecord->position.step_log);
 
@@ -689,7 +722,7 @@ void JuliaModel::paintOrbit(ShareableImageWrapper image, int x, int y)
     dbgPoint();
   else if (precisionRecord->orbit.currentWorker->ntype()!=precisionRecord->currentWorker->ntype())
     dbgPoint();*/
-  if (precisionRecord->params.period<=0)
+  if (precisionRecord->params.period<0)
     return;
 
   //JuliaPointStore *resultStore=&pointStore[y*imageWidth+x];
@@ -708,7 +741,7 @@ void JuliaModel::paintOrbit(ShareableImageWrapper image, int x, int y)
     int circ_x, circ_y;
     painter.setBrush(Qt::BrushStyle::NoBrush);
     painter.setPen(QColor(0xff, 0, 0)); //paint c
-    reimToPixel(&circ_x, &circ_y, &precisionRecord->params.base, &tmp);
+    reimToPixel(&circ_x, &circ_y, &precisionRecord->params.c, &tmp);
     if ((circ_x>=-3) && (circ_x<=10003) && (circ_y>=-3) && (circ_y<=10003))
     {
       painter.drawEllipse(circ_x-3, circ_y-3, 2*3, 2*3);
@@ -772,20 +805,21 @@ void JuliaModel::paintOrbit(ShareableImageWrapper image, int x, int y)
   //pointData.f .. not used
   //pointData.fz .. result f'
 
+  MandelEvaluator<MandelMath::number_a *> &evaluator=precisionRecord->orbit.evaluator;
   //TODO: a bit backwards dance with currentParams.c and currentData.f, needs to be straightened
-  precisionRecord->position.pixelXtoRE(x-imageWidth/2, &precisionRecord->orbit.evaluator.currentParams.first_z.re);
-  precisionRecord->position.pixelYtoIM(imageHeight/2-y, &precisionRecord->orbit.evaluator.currentParams.first_z.im);
-  precisionRecord->orbit.evaluator.currentParams.epoch=epoch;
-  precisionRecord->orbit.evaluator.workIfEpoch=precisionRecord->orbit.evaluator.busyEpoch;//epoch;
-  precisionRecord->orbit.evaluator.currentParams.pixelIndex=0;
+  precisionRecord->position.pixelXtoRE(x-imageWidth/2, &evaluator.currentParams.first_z.re);
+  precisionRecord->position.pixelYtoIM(imageHeight/2-y, &evaluator.currentParams.first_z.im);
+  evaluator.currentParams.epoch=epoch;
+  evaluator.workIfEpoch=evaluator.busyEpoch;//epoch;
+  evaluator.currentParams.pixelIndex=0;
   //already 0 precisionRecord->orbit.evaluator.currentParams.nth_fz=0;
-  precisionRecord->orbit.evaluator.juliaData.zero(&precisionRecord->orbit.evaluator.currentParams.first_z);
-  precisionRecord->orbit.evaluator.juliaData.store->wstate=JuliaPointStore::WorkState::stWorking;
-  precisionRecord->orbit.evaluator.currentParams.breakOnNewNearest=true;
-  precisionRecord->orbit.evaluator.currentParams.maxiter=1<<MAX_EFFORT;
-  precisionRecord->orbit.evaluator.currentParams.want_extangle=(_selectedPaintStyle==paintStyleExterAngle) ||
-                                                               (resultStore->rstate==JuliaPointStore::ResultState::stOutAngle);
-  precisionRecord->orbit.evaluator.currentParams.c.assign_across(&precisionRecord->params.base);
+  evaluator.juliaData.zero(&evaluator.currentParams.first_z);
+  evaluator.juliaData.store->wstate=JuliaPointStore::WorkState::stWorking;
+  evaluator.currentParams.breakOnNewNearest=true;
+  evaluator.currentParams.maxiter=1<<MAX_EFFORT;
+  evaluator.currentParams.want_extangle=(_selectedPaintStyle==paintStyleExterAngle) ||
+                                        (resultStore->rstate==JuliaPointStore::ResultState::stOutAngle);
+  evaluator.currentParams.c.assign_across(&precisionRecord->params.c);
 
   //precisionRecord->orbit.evaluator.currentData.root.assign(&precisionRecord->orbit.evaluator.currentParams.c);
   //precisionRecord->orbit.evaluator.loope.help_c.assign_across(&precisionRecord->params.base);
@@ -793,24 +827,24 @@ void JuliaModel::paintOrbit(ShareableImageWrapper image, int x, int y)
     painter.setBrush(Qt::BrushStyle::NoBrush);
     painter.setPen(QColor(0xff, 0xff, 0xff)); //paint path
     int line_sx, line_sy;
-    reimToPixel(&line_sx, &line_sy, &precisionRecord->orbit.evaluator.juliaData.f, &tmp);
-    while ((precisionRecord->orbit.evaluator.juliaData.store->rstate==JuliaPointStore::ResultState::stUnknown) &&
-           (precisionRecord->orbit.evaluator.juliaData.store->iter<(1<<MAX_EFFORT)))
+    reimToPixel(&line_sx, &line_sy, &evaluator.juliaData.f, &tmp);
+    while ((evaluator.juliaData.store->rstate==JuliaPointStore::ResultState::stUnknown) &&
+           (evaluator.juliaData.store->iter<(1<<MAX_EFFORT)))
     {
       int line_ex, line_ey;
 
-      if ((resultStore->rstate==JuliaPointStore::ResultState::stPeriod2 || resultStore->rstate==JuliaPointStore::ResultState::stPeriod3) &&
-          precisionRecord->orbit.evaluator.juliaData.store->iter<resultStore->period)
+      if ((resultStore->rstate==JuliaPointStore::ResultState::stPeriod2 || resultStore->rstate==JuliaPointStore::ResultState::stPeriod3 || resultStore->rstate==JuliaPointStore::ResultState::stMaxIter) &&
+          evaluator.juliaData.store->iter<precisionRecord->params.period+resultStore->near0iter_1)
       { //paint first period fully
-        precisionRecord->orbit.evaluator.currentParams.maxiter=precisionRecord->orbit.evaluator.juliaData.store->iter+1;
+        evaluator.currentParams.maxiter=evaluator.juliaData.store->iter+1;
       }
-      else if (precisionRecord->orbit.evaluator.juliaData.store->lookper_lastGuess==0)
-        precisionRecord->orbit.evaluator.currentParams.maxiter=1<<MAX_EFFORT; //dont't know->run fully
-      else //stop at multiples of lookper, +1
-        precisionRecord->orbit.evaluator.currentParams.maxiter=1+(precisionRecord->orbit.evaluator.juliaData.store->iter/precisionRecord->orbit.evaluator.juliaData.store->lookper_lastGuess+1)*precisionRecord->orbit.evaluator.juliaData.store->lookper_lastGuess;
-      precisionRecord->orbit.evaluator.thread.syncJulia(precisionRecord->params.period);
+      else if (precisionRecord->params.period<=0)
+        evaluator.currentParams.maxiter=evaluator.juliaData.store->iter*2+1;
+      else //stop at multiples of lookper, +near0iter_1
+        evaluator.currentParams.maxiter=resultStore->near0iter_1+((evaluator.juliaData.store->iter-resultStore->near0iter_1)/precisionRecord->params.period+1)*precisionRecord->params.period;
+      evaluator.thread.syncJulia(precisionRecord->params.period);
 
-      reimToPixel(&line_ex, &line_ey, &precisionRecord->orbit.evaluator.juliaData.f, &tmp);
+      reimToPixel(&line_ex, &line_ey, &evaluator.juliaData.f, &tmp);
       if (line_ex>=-3 && line_ex<=10003 && line_ey>=-3 && line_ey<=10003)
       {
         if (line_sx>=-3 && line_sx<=10003 && line_sy>=-3 && line_sy<=10003)
@@ -844,24 +878,24 @@ void JuliaModel::paintOrbit(ShareableImageWrapper image, int x, int y)
     {
       aroundBefore[around].setX(x+offsets[around].x);
       aroundBefore[around].setY(y-offsets[around].y);
-      precisionRecord->position.pixelXtoRE(aroundBefore[around].x()-imageWidth/2, &precisionRecord->orbit.evaluator.loope.sumA.re);
-      precisionRecord->position.pixelYtoIM(imageHeight/2-aroundBefore[around].y(), &precisionRecord->orbit.evaluator.loope.sumA.im);
+      precisionRecord->position.pixelXtoRE(aroundBefore[around].x()-imageWidth/2, &evaluator.loope.sumA.re);
+      precisionRecord->position.pixelYtoIM(imageHeight/2-aroundBefore[around].y(), &evaluator.loope.sumA.im);
 
-      precisionRecord->orbit.evaluator.loope.eval_zz(&precisionRecord->orbit.evaluator.tmp, precisionRecord->params.period*1,
-                                                     &precisionRecord->params.base, &precisionRecord->orbit.evaluator.loope.sumA, false, true);
+      evaluator.loope.eval_zz(&evaluator.tmp, std::max(1, precisionRecord->params.period*1),
+                              &precisionRecord->params.c, &evaluator.loope.sumA, false, true);
 
       int circ_x, circ_y;
-      reimToPixel(&circ_x, &circ_y, &precisionRecord->orbit.evaluator.loope.f, &tmp);
+      reimToPixel(&circ_x, &circ_y, &evaluator.loope.f, &tmp);
       aroundAfter[around].setX(circ_x);
       aroundAfter[around].setY(circ_y);
       if (around==0)
       {
-        f_re=precisionRecord->orbit.evaluator.loope.f.re.toDouble();
-        f_im=precisionRecord->orbit.evaluator.loope.f.im.toDouble();
-        fz_re=precisionRecord->orbit.evaluator.loope.f_z.re.toDouble();
-        fz_im=precisionRecord->orbit.evaluator.loope.f_z.im.toDouble();
-        fzz_re=precisionRecord->orbit.evaluator.loope.f_zz.re.toDouble();
-        fzz_im=precisionRecord->orbit.evaluator.loope.f_zz.im.toDouble();
+        f_re=evaluator.loope.f.re.toDouble();
+        f_im=evaluator.loope.f.im.toDouble();
+        fz_re=evaluator.loope.f_z.re.toDouble();
+        fz_im=evaluator.loope.f_z.im.toDouble();
+        fzz_re=evaluator.loope.f_zz.re.toDouble();
+        fzz_im=evaluator.loope.f_zz.im.toDouble();
         aroundDeriv[0].setX(circ_x);
         aroundDeriv[0].setY(circ_y);
       }
@@ -873,8 +907,8 @@ void JuliaModel::paintOrbit(ShareableImageWrapper image, int x, int y)
         //  =dr*dr*zr-di*di*zr-2*di*dr*zi+i*dr*dr*zi-i*di*di*zi+2*i*di*dr*zr
         double ore=dre*fz_re-dim*fz_im+dre*dre*fzz_re-dim*dim*fzz_re-2*dre*dim*fzz_im;
         double oim=dre*fz_im+dim*fz_re+dre*dre*fzz_im-dim*dim*fzz_im+2*dre*dim*fzz_re;
-        precisionRecord->orbit.evaluator.loope.sumA.zero(f_re+ore, f_im+oim);
-        reimToPixel(&circ_x, &circ_y, &precisionRecord->orbit.evaluator.loope.sumA, &tmp);
+        evaluator.loope.sumA.zero(f_re+ore, f_im+oim);
+        reimToPixel(&circ_x, &circ_y, &evaluator.loope.sumA, &tmp);
         aroundDeriv[around].setX(circ_x);
         aroundDeriv[around].setY(circ_y);
       }
@@ -886,12 +920,12 @@ void JuliaModel::paintOrbit(ShareableImageWrapper image, int x, int y)
     painter.drawPolyline(aroundDeriv, 9);
   }
 
-  if ((precisionRecord->orbit.evaluator.juliaData.store->rstate==JuliaPointStore::ResultState::stPeriod2) ||
-      (precisionRecord->orbit.evaluator.juliaData.store->rstate==JuliaPointStore::ResultState::stPeriod3))
+  if ((evaluator.juliaData.store->rstate==JuliaPointStore::ResultState::stPeriod2) ||
+      (evaluator.juliaData.store->rstate==JuliaPointStore::ResultState::stPeriod3))
   {
     int circ_x, circ_y;
     painter.setPen(QColor(0, 0xff, 0xff)); //paint root
-    reimToPixel(&circ_x, &circ_y, &precisionRecord->orbit.evaluator.juliaData.root, &tmp);
+    reimToPixel(&circ_x, &circ_y, &evaluator.currentParams.juliaRoot, &tmp);
     if ((circ_x>=-3) && (circ_x<=10003) && (circ_y>=-3) && (circ_y<=10003))
     {
       painter.drawEllipse(circ_x-3, circ_y-3, 2*3, 2*3);
@@ -903,58 +937,58 @@ void JuliaModel::paintOrbit(ShareableImageWrapper image, int x, int y)
   };
   //beginning of external ray
   if (_selectedPaintStyle==paintStyle::paintStyleExterAngle &&
-      precisionRecord->orbit.evaluator.juliaData.store->rstate==JuliaPointStore::ResultState::stOutAngle)
+      evaluator.juliaData.store->rstate==JuliaPointStore::ResultState::stOutAngle)
   {
     int circ_x, circ_y;
     painter.setBrush(Qt::BrushStyle::SolidPattern);
 
     painter.setBrush(QBrush(QColor(0xff, 0xff, 0x80)));
-    if (precisionRecord->orbit.evaluator.extangle.dbg.first_guess_valid>0)
+    if (evaluator.extangle.dbg.first_guess_valid>0)
     {
       painter.setPen(QColor(0xff, 0xff, 0xff)); //first guess of first step of external ray
-      reimToPixel(&circ_x, &circ_y, &precisionRecord->orbit.evaluator.extangle.dbg.first_guess_0, &tmp);
+      reimToPixel(&circ_x, &circ_y, &evaluator.extangle.dbg.first_guess_0, &tmp);
       if ((circ_x>=-3) && (circ_x<=10003) && (circ_y>=-3) && (circ_y<=10003))
         painter.drawEllipse(circ_x-2, circ_y-2, 2*2, 2*2);
     };
 
-    if (precisionRecord->orbit.evaluator.extangle.dbg.last_guess_valid>0)
+    if (evaluator.extangle.dbg.last_guess_valid>0)
     {
       painter.setPen(QColor(0xff, 0xff, 0x80)); //last guess of first step of external ray
-      reimToPixel(&circ_x, &circ_y, &precisionRecord->orbit.evaluator.extangle.dbg.last_guess_0, &tmp);
+      reimToPixel(&circ_x, &circ_y, &evaluator.extangle.dbg.last_guess_0, &tmp);
       if ((circ_x>=-3) && (circ_x<=10003) && (circ_y>=-3) && (circ_y<=10003))
         painter.drawEllipse(circ_x-2, circ_y-2, 2*2, 2*2);
     };
 
     painter.setBrush(QBrush(QColor(0xff, 0xc0, 0x80)));
-    if (precisionRecord->orbit.evaluator.extangle.dbg.first_guess_valid>1)
+    if (evaluator.extangle.dbg.first_guess_valid>1)
     {
       painter.setPen(QColor(0xff, 0xc0, 0xff)); //first guess of second step of external ray
-      reimToPixel(&circ_x, &circ_y, &precisionRecord->orbit.evaluator.extangle.dbg.first_guess_1_, &tmp);
+      reimToPixel(&circ_x, &circ_y, &evaluator.extangle.dbg.first_guess_1_, &tmp);
       if ((circ_x>=-3) && (circ_x<=10003) && (circ_y>=-3) && (circ_y<=10003))
         painter.drawEllipse(circ_x-2, circ_y-2, 2*2, 2*2);
     };
 
-    if (precisionRecord->orbit.evaluator.extangle.dbg.last_guess_valid>1)
+    if (evaluator.extangle.dbg.last_guess_valid>1)
     {
       painter.setPen(QColor(0xff, 0xc0, 0x80)); //last guess of second step of external ray
-      reimToPixel(&circ_x, &circ_y, &precisionRecord->orbit.evaluator.extangle.dbg.last_guess_1_, &tmp);
+      reimToPixel(&circ_x, &circ_y, &evaluator.extangle.dbg.last_guess_1_, &tmp);
       if ((circ_x>=-3) && (circ_x<=10003) && (circ_y>=-3) && (circ_y<=10003))
         painter.drawEllipse(circ_x-2, circ_y-2, 2*2, 2*2);
     };
 
     painter.setBrush(QBrush(QColor(0xff, 0x80, 0x80)));
-    if (precisionRecord->orbit.evaluator.extangle.dbg.first_guess_valid>2)
+    if (evaluator.extangle.dbg.first_guess_valid>2)
     {
       painter.setPen(QColor(0xff, 0x80, 0xff)); //first guess of third step of external ray
-      reimToPixel(&circ_x, &circ_y, &precisionRecord->orbit.evaluator.extangle.dbg.first_guess_2, &tmp);
+      reimToPixel(&circ_x, &circ_y, &evaluator.extangle.dbg.first_guess_2, &tmp);
       if ((circ_x>=-3) && (circ_x<=10003) && (circ_y>=-3) && (circ_y<=10003))
         painter.drawEllipse(circ_x-2, circ_y-2, 2*2, 2*2);
     };
 
-    if (precisionRecord->orbit.evaluator.extangle.dbg.last_guess_valid>2)
+    if (evaluator.extangle.dbg.last_guess_valid>2)
     {
       painter.setPen(QColor(0xff, 0x80, 0x80)); //last guess of third step of external ray
-      reimToPixel(&circ_x, &circ_y, &precisionRecord->orbit.evaluator.extangle.dbg.last_guess_2, &tmp);
+      reimToPixel(&circ_x, &circ_y, &evaluator.extangle.dbg.last_guess_2, &tmp);
       if ((circ_x>=-3) && (circ_x<=10003) && (circ_y>=-3) && (circ_y<=10003))
         painter.drawEllipse(circ_x-2, circ_y-2, 2*2, 2*2);
     };
@@ -1165,7 +1199,11 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
               //ok but shouldn't use raw iter int index=periodToIndex(wtiStore->iter % wtiStore->period);
               //ok int index=periodToIndex(wtiStore->nearziter_0 % wtiStore->period); fails with c around -1+0i : all chunks at phase=0
               //int index=periodToIndex(wtiStore->near0iter_1 % wtiStore->period);//also ok?
-              int index=wtiStore->near0iter_1 % wtiStore->period;//also ok?
+              int index;
+              if (precisionRecord->params.period<=0)
+                index=wtiStore->near0iter_1;
+              else
+                index=wtiStore->near0iter_1 % precisionRecord->params.period;//also ok?
               /*if (wtiStore->surehand==0 || wtiStore->surehand%wtiStore->period!=0)
               {
                 image.image->setPixel(x, y, 0xffff0080);
@@ -1247,7 +1285,11 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
             case JuliaPointStore::ResultState::stPeriod2:
             case JuliaPointStore::ResultState::stPeriod3:
             {
-              int index=wtiStore->nearziter_0 % wtiStore->period;//also ok?
+              int index;
+              if (precisionRecord->params.period<=0)
+                index=wtiStore->nearziter_0;
+              else
+                index=wtiStore->nearziter_0 % precisionRecord->params.period;//also ok?
               int r=0x80 | MandelMath::ReverseBits<7,1>(index);
               image.image->setPixel(x, y, 0xff000000+r*0x010101);
               /*
@@ -1335,7 +1377,11 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
             case JuliaPointStore::ResultState::stPeriod2:
             case JuliaPointStore::ResultState::stPeriod3:
             {
-              int index=wtiStore->nearziter_0 % wtiStore->period;//also ok?
+              int index;
+              if (precisionRecord->params.period<=0)
+                index=wtiStore->nearziter_0;
+              else
+                index=wtiStore->nearziter_0 % precisionRecord->params.period;//also ok?
               int r=0x80 | MandelMath::ReverseBits<7,1>(index);
               image.image->setPixel(x, y, 0xff000000+r*0x010101);
               /*
@@ -1437,7 +1483,11 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
             case JuliaPointStore::ResultState::stOutAngle:
             {
               //int ti=wtiStore->nearziter_0;
-              int ti=wtiStore->near0iter_1 % precisionRecord->params.period;
+              int ti;
+              if (precisionRecord->params.period<=0)
+                ti=wtiStore->near0iter_1;
+              else
+                ti=wtiStore->near0iter_1 % precisionRecord->params.period;
               image.image->setPixel(x, y, 0xff000080+(MandelMath::ReverseBits<7,1>(ti)<<0));
               /*if (ti>=0)
               {
@@ -1481,7 +1531,11 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
               image.image->setPixel(x, y, 0xff000000+(r<<16));*/
 
               //int ti=wtiStore->nearziter_0;
-              int ti=wtiStore->near0iter_1 % precisionRecord->params.period;
+              int ti;
+              if (precisionRecord->params.period<=0)
+                ti=wtiStore->near0iter_1;
+              else
+                ti=wtiStore->near0iter_1 % precisionRecord->params.period;
               image.image->setPixel(x, y, 0xff800000+(MandelMath::ReverseBits<7,1>(ti)<<16));
               /*if (ti>0)
               {
@@ -1520,7 +1574,11 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
             case JuliaPointStore::ResultState::stOutAngle:
             {
               //int ti=wtiStore->nearziter_0;
-              int ti=wtiStore->nearziter_0 % precisionRecord->params.period;
+              int ti;
+              if (precisionRecord->params.period<=0)
+                ti=wtiStore->nearziter_0;
+              else
+                ti=wtiStore->nearziter_0 % precisionRecord->params.period;
               image.image->setPixel(x, y, 0xff000080+(MandelMath::ReverseBits<7,1>(ti)<<0));
               /*if (ti>=0)
               {
@@ -1564,7 +1622,11 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
               image.image->setPixel(x, y, 0xff000000+(r<<16));*/
 
               //int ti=wtiStore->nearziter_0;
-              int ti=wtiStore->nearziter_0 % precisionRecord->params.period;
+              int ti;
+              if (precisionRecord->params.period<=0)
+                ti=wtiStore->nearziter_0;
+              else
+                ti=wtiStore->nearziter_0 % precisionRecord->params.period;
               image.image->setPixel(x, y, 0xff800000+(MandelMath::ReverseBits<7,1>(ti)<<16));
               /*if (ti>0)
               {
@@ -1990,16 +2052,16 @@ void JuliaModel::selectedPrecisionChanged()
 }
 
 JuliaModel::Params::Params(MandelMath::NumberType ntype, const Params *source):
-  period(source?source->period:1), base(ntype), root(ntype)
+  period(source?source->period:1), c(ntype), root(ntype)
 {
   if (source)
   {
-    base.assign_across(&source->base);
+    c.assign_across(&source->c);
     root.assign_across(&source->root);
   }
   else
   {
-    base.zero(0, 0);
+    c.zero(0, 0);
     root.zero(0, 0);
   }
 }
