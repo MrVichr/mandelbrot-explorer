@@ -280,6 +280,7 @@ ShareableViewInfo MandelModel::getViewInfo()
   result.nth_fz=precisionRecord->orbit.evaluator.mandelData.store->near0iter_1;/*precisionRecord->orbit.evaluator.currentData.store->period;
   if (result.nth_fz<1)
     result.nth_fz=result.period;*/
+  result.view.assign_across(&precisionRecord->orbit.evaluator.currentParams.c);
   result.scale=precisionRecord->position.step_size;
   result.max_root_effort=MAX_EFFORT;
   /*orbit.worker->init_(&result.re_, &result.re_p);

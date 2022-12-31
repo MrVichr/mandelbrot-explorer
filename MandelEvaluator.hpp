@@ -431,6 +431,8 @@ public:
     static constexpr size_t LEN=iiw__END-iiw__BASE;*/
     MandelMath::complex<BASE> c;
     MandelMath::complex<BASE> juliaRoot;
+    double patchSizeExterior;
+    MandelMath::number<BASE> juliaBailout_; //not quite 4
     MandelMath::complex<BASE> juliaAlpha; // |alpha|<1
     MandelMath::complex<BASE> first_z;
     int epoch;

@@ -108,7 +108,7 @@ public:
   virtual int compare(const number_a &other) const=0; //return -1 if <, 0 if =, +1 if >; std::strong_ordering not in my compiler yet
   virtual bool isequal(const number_a &other) const=0; //return store==other
   virtual bool is0() const=0;
-  virtual bool isle(const number_a &other)=0; //return store<=other
+  virtual bool isle(const number_a &other) const=0; //return store<=other
   virtual bool isle0() const=0; //return store<=0
   virtual bool isl0() const=0; //return store<0
   virtual bool isl1() const=0; //return store<1
@@ -189,8 +189,8 @@ public:
   virtual bool isequal(const number_a &other) const override; //return store==other
   bool isequal(const number<BASE> &other) const; //return store==other
   virtual bool is0() const override;
-  virtual bool isle(const number_a &other) override; //return store<=other
-  bool isle(const number<BASE> &other); //return store<=other
+  virtual bool isle(const number_a &other) const override; //return store<=other
+  bool isle(const number<BASE> &other) const; //return store<=other
   virtual bool isle0() const override; //return store<=0
   virtual bool isl0() const override; //return store<0
   virtual bool isl1() const override; //return store<1

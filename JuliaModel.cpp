@@ -281,6 +281,40 @@ void JuliaModel::recomputeRoot(int max_effort)
     precisionRecord->orbit.evaluator.currentParams.juliaRoot.zero(0, 0);
     precisionRecord->orbit.evaluator.currentParams.juliaAlpha.zero(2, 0);
   }
+
+  //find distance estimate at c (interested in exterior for now)
+  precisionRecord->orbit.evaluator.currentParams.patchSizeExterior=0; //already used by syncJulia()
+  precisionRecord->orbit.evaluator.currentParams.first_z.assign(&precisionRecord->orbit.evaluator.currentParams.c);
+  precisionRecord->orbit.evaluator.juliaData.zero(&precisionRecord->orbit.evaluator.currentParams.first_z);
+  precisionRecord->orbit.evaluator.juliaData.store->wstate=JuliaPointStore::WorkState::stWorking;
+
+  precisionRecord->orbit.evaluator.thread.syncJulia(precisionRecord->params.period);
+  if (precisionRecord->orbit.evaluator.juliaData.store->rstate==JuliaPointStore::ResultState::stOutside ||
+      precisionRecord->orbit.evaluator.juliaData.store->rstate==JuliaPointStore::ResultState::stOutAngle)
+  {
+    //will be comparing .near0 to sqrt(d.e.) is same as .near0m to d.e.
+    if (precisionRecord->orbit.evaluator.juliaData.store->exterior_avoids>=0)
+      precisionRecord->orbit.evaluator.currentParams.patchSizeExterior=precisionRecord->orbit.evaluator.juliaData.store->exterior_avoids;
+      //precisionRecord->orbit.evaluator.currentParams.patchSizeExterior=std::sqrt(precisionRecord->orbit.evaluator.juliaData.store->exterior_avoids);
+  };
+
+  // z^2+c=z*e, for which |z| is |e|>1 ?
+  // for which z is |e|=1?
+  // z^2-e*z+c=0
+  // (e+-sqrt(e^2-4*c))/2=z1[e],z2[e]
+  // |(1+-sqrt(1-4*c/e^2))|/2=|z1|[e],|z2|[e]
+  // worst case |z|=(1+sqrt(1+4*|c|))/2 so everything above (and some below) flies even farther
+  //precisionRecord->orbit.evaluator.currentParams.juliaBailout=MandelMath::sqr_double(1+std::sqrt(1+4*std::sqrt(precisionRecord->orbit.evaluator.currentParams.c.getMag_double())))/4;
+  precisionRecord->orbit.evaluator.currentParams.juliaBailout_.assign(*precisionRecord->orbit.evaluator.currentParams.c.getMag_tmp(&precisionRecord->orbit.evaluator.tmp));
+  precisionRecord->orbit.evaluator.currentParams.juliaBailout_.lshift(2);
+  precisionRecord->orbit.evaluator.currentParams.juliaBailout_.add_double(1);
+  precisionRecord->orbit.evaluator.currentParams.juliaBailout_.sqrt();
+  precisionRecord->orbit.evaluator.currentParams.juliaBailout_.add_double(1);
+  precisionRecord->orbit.evaluator.currentParams.juliaBailout_.lshift(-1);
+  precisionRecord->orbit.evaluator.currentParams.juliaBailout_.sqr();
+
+
+
   precisionRecord->params.root.assign(&precisionRecord->orbit.evaluator.currentParams.juliaRoot);
 
   switch (precisionRecord->ntype)
@@ -289,41 +323,56 @@ void JuliaModel::recomputeRoot(int max_effort)
     case MandelMath::NumberType::typeDouble:
       for (int t=0; t<precisionRecord->threadCount; t++)
       {
-        ((MandelEvaluator<double> *)precisionRecord->threads[t])->currentParams.c.assign_across(&precisionRecord->orbit.evaluator.currentParams.c);
-        ((MandelEvaluator<double> *)precisionRecord->threads[t])->currentParams.juliaRoot.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaRoot);
-        ((MandelEvaluator<double> *)precisionRecord->threads[t])->currentParams.juliaAlpha.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaAlpha);
+        MandelEvaluator<double> *athread=((MandelEvaluator<double> *)precisionRecord->threads[t]);
+        athread->currentParams.c.assign_across(&precisionRecord->orbit.evaluator.currentParams.c);
+        athread->currentParams.juliaRoot.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaRoot);
+        athread->currentParams.juliaAlpha.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaAlpha);
+        athread->currentParams.patchSizeExterior=precisionRecord->orbit.evaluator.currentParams.patchSizeExterior;
+        athread->currentParams.juliaBailout_.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaBailout_);
       }
       break;
     case MandelMath::NumberType::typeFloat128:
       for (int t=0; t<precisionRecord->threadCount; t++)
       {
-        ((MandelEvaluator<__float128> *)precisionRecord->threads[t])->currentParams.c.assign_across(&precisionRecord->orbit.evaluator.currentParams.c);
-        ((MandelEvaluator<__float128> *)precisionRecord->threads[t])->currentParams.juliaRoot.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaRoot);
-        ((MandelEvaluator<__float128> *)precisionRecord->threads[t])->currentParams.juliaAlpha.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaAlpha);
+        MandelEvaluator<__float128> *athread=((MandelEvaluator<__float128> *)precisionRecord->threads[t]);
+        athread->currentParams.c.assign_across(&precisionRecord->orbit.evaluator.currentParams.c);
+        athread->currentParams.juliaRoot.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaRoot);
+        athread->currentParams.juliaAlpha.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaAlpha);
+        athread->currentParams.patchSizeExterior=precisionRecord->orbit.evaluator.currentParams.patchSizeExterior;
+        athread->currentParams.juliaBailout_.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaBailout_);
       }
       break;
     case MandelMath::NumberType::typeDDouble:
       for (int t=0; t<precisionRecord->threadCount; t++)
       {
-        ((MandelEvaluator<MandelMath::dd_real> *)precisionRecord->threads[t])->currentParams.c.assign_across(&precisionRecord->orbit.evaluator.currentParams.c);
-        ((MandelEvaluator<MandelMath::dd_real> *)precisionRecord->threads[t])->currentParams.juliaRoot.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaRoot);
-        ((MandelEvaluator<MandelMath::dd_real> *)precisionRecord->threads[t])->currentParams.juliaAlpha.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaAlpha);
+        MandelEvaluator<MandelMath::dd_real> *athread=((MandelEvaluator<MandelMath::dd_real> *)precisionRecord->threads[t]);
+        athread->currentParams.c.assign_across(&precisionRecord->orbit.evaluator.currentParams.c);
+        athread->currentParams.juliaRoot.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaRoot);
+        athread->currentParams.juliaAlpha.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaAlpha);
+        athread->currentParams.patchSizeExterior=precisionRecord->orbit.evaluator.currentParams.patchSizeExterior;
+        athread->currentParams.juliaBailout_.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaBailout_);
       }
       break;
     case MandelMath::NumberType::typeQDouble:
       for (int t=0; t<precisionRecord->threadCount; t++)
       {
-        ((MandelEvaluator<MandelMath::dq_real> *)precisionRecord->threads[t])->currentParams.c.assign_across(&precisionRecord->orbit.evaluator.currentParams.c);
-        ((MandelEvaluator<MandelMath::dq_real> *)precisionRecord->threads[t])->currentParams.juliaRoot.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaRoot);
-        ((MandelEvaluator<MandelMath::dq_real> *)precisionRecord->threads[t])->currentParams.juliaAlpha.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaAlpha);
+        MandelEvaluator<MandelMath::dq_real> *athread=((MandelEvaluator<MandelMath::dq_real> *)precisionRecord->threads[t]);
+        athread->currentParams.c.assign_across(&precisionRecord->orbit.evaluator.currentParams.c);
+        athread->currentParams.juliaRoot.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaRoot);
+        athread->currentParams.juliaAlpha.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaAlpha);
+        athread->currentParams.patchSizeExterior=precisionRecord->orbit.evaluator.currentParams.patchSizeExterior;
+        athread->currentParams.juliaBailout_.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaBailout_);
       }
       break;
     case MandelMath::NumberType::typeReal642:
       for (int t=0; t<precisionRecord->threadCount; t++)
       {
-        ((MandelEvaluator<MandelMath::real642> *)precisionRecord->threads[t])->currentParams.c.assign_across(&precisionRecord->orbit.evaluator.currentParams.c);
-        ((MandelEvaluator<MandelMath::real642> *)precisionRecord->threads[t])->currentParams.juliaRoot.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaRoot);
-        ((MandelEvaluator<MandelMath::real642> *)precisionRecord->threads[t])->currentParams.juliaAlpha.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaAlpha);
+        MandelEvaluator<MandelMath::real642> *athread=((MandelEvaluator<MandelMath::real642> *)precisionRecord->threads[t]);
+        athread->currentParams.c.assign_across(&precisionRecord->orbit.evaluator.currentParams.c);
+        athread->currentParams.juliaRoot.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaRoot);
+        athread->currentParams.juliaAlpha.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaAlpha);
+        athread->currentParams.patchSizeExterior=precisionRecord->orbit.evaluator.currentParams.patchSizeExterior;
+        athread->currentParams.juliaBailout_.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaBailout_);
       }
       break;
   }
@@ -762,7 +811,7 @@ void JuliaModel::paintOrbit(ShareableImageWrapper image, int x, int y)
       painter.drawLines(l2, 2);
     };
   }
-  switch (resultStore->rstate)
+  switch (resultStore->rstate) //TODO: for debugging it might be better to read from evaluator.juliaData.store (after it's computed)
   {
     case JuliaPointStore::ResultState::stOutside:
     case JuliaPointStore::ResultState::stOutAngle:
@@ -1287,9 +1336,9 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
             {
               int index;
               if (precisionRecord->params.period<=0)
-                index=wtiStore->nearziter_0;
+                index=wtiStore->near0iter_1;
               else
-                index=wtiStore->nearziter_0 % precisionRecord->params.period;//also ok?
+                index=wtiStore->near0iter_1 % precisionRecord->params.period;//also ok?
               int r=0x80 | MandelMath::ReverseBits<7,1>(index);
               image.image->setPixel(x, y, 0xff000000+r*0x010101);
               /*

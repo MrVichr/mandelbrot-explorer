@@ -680,13 +680,13 @@ bool number<double>::is0() const
 }
 
 template<>
-bool number<double>::isle(const number<double> &other)
+bool number<double>::isle(const number<double> &other) const
 {
   return store <= other.store;
 }
 
 template<>
-bool number<double>::isle(const number_a &other)
+bool number<double>::isle(const number_a &other) const
 {
   return isle(*(const number<double> *)&other);
 }
@@ -1184,13 +1184,13 @@ bool number<__float128>::is0() const
 }
 
 template<>
-bool number<__float128>::isle(const number<__float128> &other)
+bool number<__float128>::isle(const number<__float128> &other) const
 {
   return store <= other.store;
 }
 
 template<>
-bool number<__float128>::isle(const number_a &other)
+bool number<__float128>::isle(const number_a &other) const
 {
   return isle(*(const number<__float128> *)&other);
 }
@@ -1618,13 +1618,13 @@ bool number<dd_real>::is0() const
 }
 
 template<>
-bool number<dd_real>::isle(const number<dd_real> &other)
+bool number<dd_real>::isle(const number<dd_real> &other) const
 {
   return store.isle(&other.store);
 }
 
 template<>
-bool number<dd_real>::isle(const number_a &other)
+bool number<dd_real>::isle(const number_a &other) const
 {
   return isle(*(const number<dd_real> *)&other);
 }
@@ -2117,13 +2117,13 @@ bool number<real642>::is0() const
 }
 
 template<>
-bool number<real642>::isle(const number<real642> &other)
+bool number<real642>::isle(const number<real642> &other) const
 {
   return store.val1 <= other.store.val1;
 }
 
 template<>
-bool number<real642>::isle(const number_a &other)
+bool number<real642>::isle(const number_a &other) const
 {
   return isle(*(const number<real642> *)&other);
 }
@@ -2491,13 +2491,13 @@ bool number<number_a *>::is0() const
 }
 
 template<>
-bool number<number_a *>::isle(const number<number_a *> &other)
+bool number<number_a *>::isle(const number<number_a *> &other) const
 {
   return store->isle(*other.store);
 }
 
 template<>
-bool number<number_a *>::isle(const number_a &other)
+bool number<number_a *>::isle(const number_a &other) const
 {
   (void)other;
   dbgPoint();
