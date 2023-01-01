@@ -1,6 +1,7 @@
-import QtQuick 2.12
-import QtQuick.Controls 2.12
+import QtQuick 2.15
+import QtQuick.Controls 2.15
 import QtQuick.Window 2.12
+import Qt.labs.platform 1.1
 
 import com.example.MandelImageCombiner 1.0;
 import com.example.MandelModel 1.0;
@@ -8,8 +9,8 @@ import com.example.JuliaModel 1.0;
 import com.example.LaguerreModel 1.0;
 
 Window {
-    width: 640
-    height: 480
+    width: 640//1280
+    height: 480//800+48
     visible: true
     title: qsTr("Mandelbrot")
     //Keys.forwardTo: mouseArea //can't attach Keys to Window
@@ -83,7 +84,7 @@ Window {
 
     ButtonGroup { id: bgroupView }
     Column {
-        anchors.right: comboColumn.left
+        anchors.right: indicColumn.left
         anchors.top: parent.top;
         id: rgroupView
         RadioButton {
@@ -112,18 +113,31 @@ Window {
     }
 
     Column {
+        id: indicColumn
+        anchors.top: parent.top
+        anchors.right: comboColumn.left
+        Rectangle {
+            id: busyIndicator
+            width: 20
+            height: 20
+            radius: 10
+            color: "blue"
+        }
+        Text {
+            id: busyIndicator2
+            anchors.left: parent.left
+            anchors.right: parent.right
+            horizontalAlignment: Text.AlignHCenter
+            text: "0"
+        }
+    }
+
+    Column {
         id: comboColumn
         anchors.top: parent.top;
         anchors.right: parent.right
         Row {
             anchors.right: parent.right
-            Rectangle {
-                id: busyIndicator
-                width: 20
-                height: 20
-                radius: 10
-                color: "blue"
-            }
             ComboBox {
                 textRole: "text"
                 valueRole: "key"
@@ -179,12 +193,73 @@ Window {
                 onActivated: laguerreModel.selectedPaintStyle=lagu_paintstyle_model.get(currentIndex).key;
             }
         }
+        Button {
+            id: btnOptions
+            text: "Options"
+            onClicked: menuOptionsJulia.open(btnOptions.width, 100)
+            Menu {
+                title: "Options2"
+                id: menuOptionsJulia
+                Menu {
+                    title: "Ext D.E. patch"
+                    id: menuOptionsJuliaEDEpatchAlgo
+                    //text: "Ext D.E. patch"
+                    MenuItemGroup {
+                        id: migJuliaEDEPatching
+                    }
+                    Instantiator
+                    {
+                        onObjectAdded: function(index, object) {menuOptionsJuliaEDEpatchAlgo.insertItem(index, object);}
+                        onObjectRemoved: function(index, object) {menuOptionsJuliaEDEpatchAlgo.removeItem(object);}
+                        model: [
+                            {text: "None", algo: JuliaModel.EedepaNone},
+                            {text: "Always", algo: JuliaModel.EedepaAlways},
+                            {text: "Conditional", algo: JuliaModel.EedepaConditional},
+                            {text: "Blend", algo: JuliaModel.EedepaBlend},
+                            {text: "Verify Hits", algo: JuliaModel.EedepaVerifyH},
+                            {text: "Verify Avoids", algo: JuliaModel.EedepaVerifyA},
+                        ]
+                        MenuItem {
+                            checkable: true
+                            checked: modelData.algo===JuliaModel.EedepaBlend
+                            text: modelData.text
+                            group: migJuliaEDEPatching
+                            onTriggered: { checked=true; juliaModel.selectedEdePatchAlgo=modelData.algo; }
+                        }
+                    }
+                }
+
+                Menu {
+                    title: "Precision"
+                    //text: "Precision"
+                    id: menuOptionsPrecision
+                    MenuItemGroup {
+                        id: migJuliaPrecision
+                    }
+                    Instantiator {
+                        onObjectAdded: function(index, object) {menuOptionsPrecision.insertItem(index, object);}
+                        onObjectRemoved: function(index, object) {menuOptionsPrecision.removeItem(object);}
+                        model: [
+                            { text: "Double", prec: JuliaModel.EprecisionDouble },
+                            { text: "Float128", prec: JuliaModel.EprecisionFloat128 },
+                            { text: "DDouble", prec: JuliaModel.EprecisionDDouble },
+                            { text: "QDouble", prec: JuliaModel.EprecisionQDouble },
+                            { text: "Real642", prec: JuliaModel.EprecisionReal642 },
+                        ]
+                        MenuItem {
+                            checkable: true
+                            text: modelData.text
+                            checked: modelData.prec===JuliaModel.EprecisionDouble
+                            group: migJuliaPrecision
+                            onTriggered: { checked=true; juliaModel.selectedPrecision=modelData.prec; }
+                        }
+                    }
+                }
+            }
+        }
+
         Row {
             anchors.right: parent.right
-            Text {
-                id: busyIndicator2
-                text: "0"
-            }
             ComboBox {
                 textRole: "text"
                 valueRole: "key"
@@ -224,7 +299,7 @@ Window {
             if (event.key===Qt.Key_E)
                 mandelModel.paintOrbit(mandelImageCombiner.getOverlayImage(), mouse.x, mouse.y);
         }
-        onPositionChanged:
+        onPositionChanged: function(mouse)
         {
             if (dragging==1)
             {
@@ -261,8 +336,8 @@ Window {
             //labelCY.text=mouse.y;
             laguerreModel.getTimes();
         }
-        onPressed: {
-            if (mouse.button==Qt.LeftButton)
+        onPressed: function(mouse) {
+            if (mouse.button===Qt.LeftButton)
             {
                 if (rbuttonViewMand.checked)
                   dragging=1;
@@ -274,9 +349,9 @@ Window {
                 drag_last_y=mouse.y;
             };
         }
-        onReleased: {
+        onReleased: function(mouse) {
             dragging=0;
-            if (mouse.button==Qt.LeftButton)
+            if (mouse.button===Qt.LeftButton)
             {
                 if (rbuttonViewMand.checked)
                   mandelModel.paintOrbit(mandelImageCombiner.getOverlayImage(), mouse.x, mouse.y);
@@ -285,13 +360,18 @@ Window {
                 if (rbuttonViewLagu.checked)
                   laguerreModel.paintOrbit(laguerreImageCombiner.getOverlayImage(), mouse.x, mouse.y);
             }
-            if (mouse.button==Qt.RightButton)
+            if (mouse.button===Qt.RightButton)
             {
-                mainPopupMenu.popup(mouse.x, mouse.y);
+                //console.log(mainPopupMenu);
+                //console.log(mainPopupMenu.popup);
+                //cannot set the position to open at, but some magic opens it at mouse coords anyway
+                //mainPopupMenu.x=mouse.x;
+                //mainPopupMenu.y=mouse.y;
+                mainPopupMenu.open();//mouse.x, mouse.y, null);
             }
         }
 
-        onWheel: {
+        onWheel: function(wheel) {
             if (wheel.angleDelta.y>0)
             {
               if (rbuttonViewMand.checked)
@@ -376,6 +456,8 @@ Window {
 
         Menu {
             id: mainPopupMenu
+            //x: 222
+            //y: 111
             /*MenuItem {
                 text: "test1"
                 onTriggered: console.log("clicked test1");
@@ -385,9 +467,12 @@ Window {
                 onTriggered: { laguerreModel.setParams(mandelModel.viewInfo); juliaModel.setParams(mandelModel.viewInfo); }
             }
             Menu {
+                id: menuMandelPresets
                 title: "Presets (M)..."
-                visible:rbuttonViewMand.checked
-                Repeater {
+                visible: rbuttonViewMand.checked
+                Instantiator {
+                    onObjectAdded: function(index, object) {menuMandelPresets.insertItem(index, object);}
+                    onObjectRemoved: function(index, object) {menuMandelPresets.removeItem(object);}
                     model: [
                         {viewRe: -0.5, viewIm: 0, viewZoom: 1/128, caption: 'Main view'},
                         {viewRe: -0.75, viewIm: 0, viewZoom: 1/134217728, caption: 'Zoom on the 1-2 joint'},
@@ -417,16 +502,21 @@ Window {
                 }
             }
             Menu {
+                id: menuJuliaPresets
                 title: "Presets (J)..."
-                visible:rbuttonViewJulia.checked
-                Repeater {
+                visible: rbuttonViewJulia.checked
+                Instantiator {
+                    onObjectAdded: function(index, object) {menuJuliaPresets.insertItem(index, object);}
+                    onObjectRemoved: function(index, object) {menuJuliaPresets.removeItem(object);}
                     model: [
-                        {viewRe: -0.5, viewIm: 0, viewZoom: 1/128, cRe: 0, cIm: 0, period: 1, caption: 'Main view'},
+                        {viewRe:  0,                  viewIm: 0,                  viewZoom: 1/128, cRe: 0, cIm: 0, period: 1, caption: 'Main view'},
                         {viewRe:  0.00439453125,      viewIm: 0.0252380371093750, viewZoom: 1/65536.0, cRe: -0.5289001464843750, cIm: 0.6682891845703125, period: 14, caption: 'curl'},
                         {viewRe: -0.7342796903103590, viewIm: 0.1835422439035028, viewZoom: 1/4294967296.0, cRe: -0.7342796875163913, cIm: 0.1835422653239220, period: 1156, caption: 'Noisy zoom'},
                     ]
                     MenuItem {
                         text: modelData.caption
+                        visible: true
+                        checkable: false
                         onTriggered: juliaModel.setParams(mandelModel.makeViewInfo(modelData));
                     }
                 }

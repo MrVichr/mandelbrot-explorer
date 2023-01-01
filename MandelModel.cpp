@@ -5,6 +5,7 @@
 
 #include "MandelModel.hpp"
 #include "MandelEvaluator.hpp"
+#include "qvariant.h"
 
 #define CURRENT_STORE_DIRECT 0 //either both or none of store and numbers must be direct, can't mix
 #define UPDATE_CACHED_MOD 0 //works until precision doesn't allow

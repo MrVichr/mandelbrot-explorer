@@ -11,12 +11,13 @@
 #define UPDATE_CACHED_MOD 0 //works until precision doesn't allow
 
 JuliaModel::JuliaModel(): QObject(),
-  _extAngleZoom(0), pointStore(nullptr), precisionRecord(nullptr)
+  _extAngleZoom(0), _selectedEdePatchAlgo(ext_de_patch_algo::EedepaBlend), _selectedExteriorColoring(exterior_coloring::EextcolRainbow),
+  pointStore(nullptr), precisionRecord(nullptr)
 {
   unsigned int oldcw; //524319 = 0x8001F = mask all interrupts, 80bit precision
   MandelMath::fpu_fix_start(&oldcw);
   _selectedPaintStyle=paintStyleCls;//Kind;
-  _selectedPrecision=precisionDouble;
+  _selectedPrecision=EprecisionDouble;
   epoch=1;
   imageWidth=0;
   imageHeight=0;
@@ -28,6 +29,12 @@ JuliaModel::JuliaModel(): QObject(),
   QObject::connect(this, &JuliaModel::selectedPrecisionChange,
                    this, &JuliaModel::selectedPrecisionChanged);
   selectedPrecisionChanged();
+  QObject::connect(this, &JuliaModel::selectedEdePatchAlgoChange,
+                   this, &JuliaModel::selectedEdePatchAlgoChanged);
+  selectedEdePatchAlgoChanged();
+  QObject::connect(this, &JuliaModel::selectedExteriorColoringChange,
+                   this, &JuliaModel::selectedExteriorColoringChanged);
+  selectedExteriorColoringChanged();
 }
 
 JuliaModel::~JuliaModel()
@@ -208,6 +215,16 @@ QString JuliaModel::getTextInfoSpec()
   precisionRecord->wtiPoint.readFrom(precisionRecord->points, (orbit_x+imageWidth*orbit_y)*JuliaPoint<MandelMath::number_a *>::LEN);
   //JuliaPoint<MandelMath::number_a *> *data=&precisionRecord->wtiPoint;
 
+  double exterior;
+  switch (_selectedEdePatchAlgo)
+  {
+    case EedepaAlways: exterior=data_store->exterior.always_hits; break;
+    case EedepaConditional: exterior=data_store->exterior.condi_hits; break;
+    case EedepaBlend: exterior=data_store->exterior.blend_hits_; break;
+    case EedepaVerifyH: exterior=data_store->exterior.verify_hits/data_store->exterior.none_hits-1; break;
+    case EedepaVerifyA: exterior=data_store->exterior.verify_avoids/data_store->exterior.none_avoids-1; break;
+    default: exterior=data_store->exterior.none_hits; break;
+  }
   switch (data_store->rstate)
   {
     case JuliaPointStore::ResultState::stUnknown:
@@ -218,10 +235,10 @@ QString JuliaModel::getTextInfoSpec()
       break;
     case JuliaPointStore::ResultState::stOutside:
       return QString("per=")+QString::number(precisionRecord->params.period)+
-             QString(" ext=")+QString::number(data_store->exterior_hits); break;
+             QString(" ext=")+QString::number(exterior); break;
     case JuliaPointStore::ResultState::stOutAngle:
       return QString("per=")+QString::number(precisionRecord->params.period)+
-             QString(" ext=")+QString::number(data_store->exterior_hits)+
+             QString(" ext=")+QString::number(exterior)+
                      " phi="+precisionRecord->wtiPoint.extangle.toString(); break;
     case JuliaPointStore::ResultState::stBoundary:
       return QString("per=")+QString::number(precisionRecord->params.period);
@@ -293,9 +310,14 @@ void JuliaModel::recomputeRoot(int max_effort)
       precisionRecord->orbit.evaluator.juliaData.store->rstate==JuliaPointStore::ResultState::stOutAngle)
   {
     //will be comparing .near0 to sqrt(d.e.) is same as .near0m to d.e.
-    if (precisionRecord->orbit.evaluator.juliaData.store->exterior_avoids>=0)
-      precisionRecord->orbit.evaluator.currentParams.patchSizeExterior=precisionRecord->orbit.evaluator.juliaData.store->exterior_avoids;
-      //precisionRecord->orbit.evaluator.currentParams.patchSizeExterior=std::sqrt(precisionRecord->orbit.evaluator.juliaData.store->exterior_avoids);
+    if (precisionRecord->orbit.evaluator.juliaData.store->exterior.none_avoids>=0)
+    {
+      // for what x does r=d/(2*x) differ from r^2+2xr-d=0 by 10% ?
+      // r1=d/(x+sqrt(x^2+d))  r2=d/(2x)    r1/r2=d/(x+sqrt(x^2+d))/d*2*x=2/(1+sqrt(1+d/x^2))
+      // k=2/(1+sqrt(1+d/x^2))   x=sqrt(d)/sqrt((2/k-1)^2-1))
+      // k=0.828 <- r=sqrt(d); k=0.9 -> 1.423*sqrt(d); k=0.95->2.124*sqrt(d)   k=0.899 <- sqrt(2*d)
+      precisionRecord->orbit.evaluator.currentParams.patchSizeExterior=precisionRecord->orbit.evaluator.juliaData.store->exterior.none_avoids   *2;
+    }
   };
 
   // z^2+c=z*e, for which |z| is |e|>1 ?
@@ -306,6 +328,7 @@ void JuliaModel::recomputeRoot(int max_effort)
   // worst case |z|=(1+sqrt(1+4*|c|))/2 so everything above (and some below) flies even farther
   //precisionRecord->orbit.evaluator.currentParams.juliaBailout=MandelMath::sqr_double(1+std::sqrt(1+4*std::sqrt(precisionRecord->orbit.evaluator.currentParams.c.getMag_double())))/4;
   precisionRecord->orbit.evaluator.currentParams.juliaBailout_.assign(*precisionRecord->orbit.evaluator.currentParams.c.getMag_tmp(&precisionRecord->orbit.evaluator.tmp));
+  precisionRecord->orbit.evaluator.currentParams.juliaBailout_.sqrt();
   precisionRecord->orbit.evaluator.currentParams.juliaBailout_.lshift(2);
   precisionRecord->orbit.evaluator.currentParams.juliaBailout_.add_double(1);
   precisionRecord->orbit.evaluator.currentParams.juliaBailout_.sqrt();
@@ -800,15 +823,18 @@ void JuliaModel::paintOrbit(ShareableImageWrapper image, int x, int y)
       painter.drawLines(l3, 3);
     };
 
-    painter.setBrush(Qt::BrushStyle::NoBrush);
-    painter.setPen(QColor(0xff, 0, 0)); //paint root as +
-    reimToPixel(&circ_x, &circ_y, &precisionRecord->params.root, &tmp);
-    if ((circ_x>=-3) && (circ_x<=10003) && (circ_y>=-3) && (circ_y<=10003))
+    if (precisionRecord->params.period>0)
     {
-      painter.drawEllipse(circ_x-3, circ_y-3, 2*3, 2*3);
-      QLine l2[2]={{circ_x-2, circ_y, circ_x+2, circ_y},
-                   {circ_x, circ_y-2, circ_x, circ_y+2}};
-      painter.drawLines(l2, 2);
+      painter.setBrush(Qt::BrushStyle::NoBrush);
+      painter.setPen(QColor(0xff, 0, 0)); //paint root as +
+      reimToPixel(&circ_x, &circ_y, &precisionRecord->params.root, &tmp);
+      if ((circ_x>=-3) && (circ_x<=10003) && (circ_y>=-3) && (circ_y<=10003))
+      {
+        painter.drawEllipse(circ_x-3, circ_y-3, 2*3, 2*3);
+        QLine l2[2]={{circ_x-2, circ_y, circ_x+2, circ_y},
+                     {circ_x, circ_y-2, circ_x, circ_y+2}};
+        painter.drawLines(l2, 2);
+      };
     };
   }
   switch (resultStore->rstate) //TODO: for debugging it might be better to read from evaluator.juliaData.store (after it's computed)
@@ -819,10 +845,26 @@ void JuliaModel::paintOrbit(ShareableImageWrapper image, int x, int y)
       int exterior;
       painter.setBrush(Qt::BrushStyle::NoBrush);
       painter.setPen(QColor(0xff, 0xff, 0));
-      exterior=qRound(resultStore->exterior_hits/precisionRecord->position.step_size);
+      switch (_selectedEdePatchAlgo)
+      {
+        case EedepaAlways: exterior=qRound(resultStore->exterior.always_hits/precisionRecord->position.step_size); break;
+        case EedepaConditional: exterior=qRound(resultStore->exterior.condi_hits/precisionRecord->position.step_size); break;
+        case EedepaBlend: exterior=qRound(resultStore->exterior.blend_hits_/precisionRecord->position.step_size); break;
+        case EedepaVerifyH: exterior=qRound(resultStore->exterior.verify_hits/precisionRecord->position.step_size); break;
+        case EedepaVerifyA: exterior=qRound(resultStore->exterior.verify_hits/precisionRecord->position.step_size); break;
+        default: exterior=qRound(resultStore->exterior.none_hits/precisionRecord->position.step_size); break;
+      }
       painter.drawEllipse(x-exterior, y-exterior, 2*exterior, 2*exterior);
       painter.setPen(QColor(0xc0, 0xc0, 0));
-      exterior=qRound(resultStore->exterior_avoids/precisionRecord->position.step_size);
+      switch (_selectedEdePatchAlgo)
+      {
+        case EedepaAlways: exterior=qRound(resultStore->exterior.always_avoids/precisionRecord->position.step_size); break;
+        case EedepaConditional: exterior=qRound(resultStore->exterior.condi_avoids/precisionRecord->position.step_size); break;
+        case EedepaBlend: exterior=qRound(resultStore->exterior.blend_avoids/precisionRecord->position.step_size); break;
+        case EedepaVerifyH: exterior=qRound(resultStore->exterior.verify_avoids/precisionRecord->position.step_size); break;
+        case EedepaVerifyA: exterior=qRound(resultStore->exterior.verify_avoids/precisionRecord->position.step_size); break;
+        default: exterior=qRound(resultStore->exterior.none_avoids/precisionRecord->position.step_size); break;
+      }
       painter.drawEllipse(x-exterior, y-exterior, 2*exterior, 2*exterior);
     } break;
     case JuliaPointStore::ResultState::stPeriod2:
@@ -1288,31 +1330,70 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
             case JuliaPointStore::ResultState::stOutside:
             case JuliaPointStore::ResultState::stOutAngle:
             {
-              double tf;
-              if ((wtiStore->exterior_hits>10000) || (wtiStore->exterior_hits<=0))
-                image.image->setPixel(x, y, 0xff9f9f9f);
-              else if (wtiStore->exterior_hits>=1) //10000..1 -> -9999..0
+              double tf, exterior;
+              switch (_selectedEdePatchAlgo)
               {
-                tf=(1-wtiStore->exterior_hits)*1;
-                int g=0x9f+qRound(0x60*sin(tf*10)); //green fastest
-                int b=0x9f+qRound(0x60*sin(tf/10)); //blue slowest
-                int r=0x9f+qRound(0x60*sin(tf)); //red middle
-                if ((r<0) || (r>255) || (g<0) || (g>255) || (b<0) || (b>255))
-                  image.image->setPixel(x, y, 0xffffffff);
-                else
-                  image.image->setPixel(x, y, 0xff000000+(r<<16)+(g<<8)+(b));
+                case EedepaAlways: exterior=wtiStore->exterior.always_hits; break;
+                case EedepaConditional: exterior=wtiStore->exterior.condi_hits; break;
+                case EedepaBlend: exterior=wtiStore->exterior.blend_hits_; break;
+                case EedepaVerifyH: exterior=std::abs(wtiStore->exterior.verify_hits/wtiStore->exterior.none_hits-1); break;
+                case EedepaVerifyA: exterior=std::abs(wtiStore->exterior.verify_avoids/wtiStore->exterior.none_avoids-1); break;
+                default: exterior=wtiStore->exterior.none_hits; break;
               }
-              else //1..0 -> 0..inf
+              if ((exterior>10000) || (exterior<=0))
+                image.image->setPixel(x, y, 0xff9f9f9f);
+              else if (_selectedExteriorColoring==EextcolScaledWaves)
               {
-                tf=-log(wtiStore->exterior_hits);//sqrt(1-log(wtiStore->exterior_avoids))*2-2;
-                //tf=10*(log(1+tf/10));
-                tf=(log(1+tf));
-                int g=0x9f+qRound(0x60*sin(tf*10));
-                int b=0x9f+qRound(0x60*sin(tf/10));
-                //tf=(log(1+tf));
-                int r=0x9f+qRound(0x60*sin(tf));
-                //tf=(log(1+tf));
-                //int b=0x9f+qRound(0x60*sin(tf));
+                if (exterior>=1) //10000..1 -> -9999..0
+                {
+                  tf=(1-exterior)*1;
+                  int g=0x9f+qRound(0x60*sin(tf*10)); //green fastest
+                  int b=0x9f+qRound(0x60*sin(tf/10)); //blue slowest
+                  int r=0x9f+qRound(0x60*sin(tf)); //red middle
+                  if ((r<0) || (r>255) || (g<0) || (g>255) || (b<0) || (b>255))
+                    image.image->setPixel(x, y, 0xffffffff);
+                  else
+                    image.image->setPixel(x, y, 0xff000000+(r<<16)+(g<<8)+(b));
+                }
+                else //1..0 -> 0..inf
+                {
+                  tf=-log(exterior);//sqrt(1-log(wtiStore->exterior_avoids))*2-2;
+                  //tf=10*(log(1+tf/10));
+                  tf=(log(1+tf));
+                  int g=0x9f+qRound(0x60*sin(tf*10));
+                  int b=0x9f+qRound(0x60*sin(tf/10));
+                  //tf=(log(1+tf));
+                  int r=0x9f+qRound(0x60*sin(tf));
+                  //tf=(log(1+tf));
+                  //int b=0x9f+qRound(0x60*sin(tf));
+                  if ((r<0) || (r>255) || (g<0) || (g>255) || (b<0) || (b>255))
+                    image.image->setPixel(x, y, 0xffffffff);
+                  else
+                    image.image->setPixel(x, y, 0xff000000+(r<<16)+(g<<8)+(b));
+                }
+              }
+              else //(_selectedExteriorColoring==EextcolRainbow)
+              {
+                int ti;
+                if (exterior<=0)
+                  ti=0;
+                else if (exterior>=4)
+                  ti=6*0xc0-1-(qRound(log(exterior/4)*300)) % (6*0xc0);
+                else
+                  ti=(qRound(-log(exterior/4)*300)+12*0xc0) % (6*0xc0);
+                int r, g, b;
+                if (ti<0xC0)
+                { r=0x3f+ti; g=0xff; b=0x3f; }                           // + H L
+                else if (ti<2*0xC0)                                      //
+                { r=0xff; g=0xff-(ti-0xc0); b=0x3f; }                    // H - L
+                else if (ti<3*0xC0)                                      //
+                { r=0xff; g=0x3f; b=0x3f+(ti-2*0xc0); }                  // H L +
+                else if (ti<4*0xC0)                                      //
+                { r=0xff-(ti-3*0xc0); g=0x3f; b=0xff; }                  // - L H
+                else if (ti<5*0xC0)                                      //
+                { r=0x3f; g=0x3f+(ti-4*0xc0); b=0xff; }                  // L + H
+                else                                                     //
+                { r=0x3f; g=0xff; b=0xff-(ti-5*0xc0); }                  // L H -
                 if ((r<0) || (r>255) || (g<0) || (g>255) || (b<0) || (b>255))
                   image.image->setPixel(x, y, 0xffffffff);
                 else
@@ -2060,24 +2141,24 @@ void JuliaModel::selectedPrecisionChanged()
   switch (_selectedPrecision)
   {
     using Type=MandelMath::NumberType;
-    case precisionDouble: lolwut:
+    case EprecisionDouble: lolwut:
       newPrecision=Type::typeDouble;
       new_points=MandelMath::number<double>::convert_block(precisionRecord?precisionRecord->ntype:Type::typeEmpty, precisionRecord?precisionRecord->points:nullptr, pointCount*JuliaPoint<double>::LEN);
       break;
 #if !NUMBER_DOUBLE_ONLY
-    case precisionFloat128:
+    case EprecisionFloat128:
       newPrecision=Type::typeFloat128;
       new_points=MandelMath::number<__float128>::convert_block(precisionRecord?precisionRecord->ntype:Type::typeEmpty, precisionRecord?precisionRecord->points:nullptr, pointCount*JuliaPoint<__float128>::LEN);
       break;
-    case precisionDDouble:
+    case EprecisionDDouble:
       newPrecision=Type::typeDDouble;
       new_points=MandelMath::number<MandelMath::dd_real>::convert_block(precisionRecord?precisionRecord->ntype:Type::typeEmpty, precisionRecord?precisionRecord->points:nullptr, pointCount*JuliaPoint<MandelMath::dd_real>::LEN);
       break;
-    case precisionQDouble:
+    case EprecisionQDouble:
       newPrecision=Type::typeQDouble;
       new_points=MandelMath::number<MandelMath::dq_real>::convert_block(precisionRecord?precisionRecord->ntype:Type::typeEmpty, precisionRecord?precisionRecord->points:nullptr, pointCount*JuliaPoint<MandelMath::dq_real>::LEN);
       break;
-    case precisionReal642:
+    case EprecisionReal642:
       newPrecision=Type::typeReal642;
       new_points=MandelMath::number<MandelMath::real642>::convert_block(precisionRecord?precisionRecord->ntype:Type::typeEmpty, precisionRecord?precisionRecord->points:nullptr, pointCount*JuliaPoint<MandelMath::real642>::LEN);
       break;
@@ -2098,6 +2179,16 @@ void JuliaModel::selectedPrecisionChanged()
     QWriteLocker locker(&threading_mutex);
     startNewEpoch();
   }
+}
+
+void JuliaModel::selectedEdePatchAlgoChanged()
+{
+
+}
+
+void JuliaModel::selectedExteriorColoringChanged()
+{
+
 }
 
 JuliaModel::Params::Params(MandelMath::NumberType ntype, const Params *source):

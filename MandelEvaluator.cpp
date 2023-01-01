@@ -231,8 +231,7 @@ void JuliaPointStore::assign(const JuliaPointStore *src)
   //newton_iter=src->newton_iter;
   //period=src->period;
   //surehand=src->surehand;
-  exterior_hits=src->exterior_hits;
-  exterior_avoids=src->exterior_avoids;
+  exterior=src->exterior;
   interior=src->interior;
 }
 
@@ -326,8 +325,7 @@ void JuliaPoint<BASE>::zero(const MandelMath::complex<BASE> *first_z)
   store->rstate=JuliaPointStore::ResultState::stUnknown;
   store->iter=0;
   //store->newton_iter=0;
-  store->exterior_avoids=-1;
-  store->exterior_hits=-1;
+  store->exterior.zero(-1);
   store->interior.zero();
   //store->has_fc_r=false;
   /*
@@ -3975,7 +3973,7 @@ int MandelEvaluator<BASE>::periodCheck(int period/*must =eval.lookper_lastGuess*
   this->interior.fz.assign(&newtres.fz_r);
   interior.fz.re.add_double(1);
   double fz_log=std::log(interior.fz.getMag_double())/2;
-  double ori_over1=interior.fz.getMag1_tmp(&tmp)->toDouble();
+  double ori_over1=interior.fz.getMag1_tmp(&tmp)->toDouble(); //could use (1+r)^2+i^2-1=2*r+r^2+i^2
   //double fz_mag=newtres.fz_r.getMag_double();
   if (ori_over1>0.01)//often we are at long root long period when correct is short/short (inner edge of a bulb) 0.002) //fz_mag>0 && fz_mag*fz_mag>25*currentWorker->eps2())
     return -1;
@@ -4281,17 +4279,33 @@ int MandelEvaluator<BASE>::periodCheck(int period/*must =eval.lookper_lastGuess*
       laguerre(period, c, &bulb.t3, true);
       newtres.fz_r.re.add_double(1);
       double outer_over1=newtres.fz_r.getMag1_tmp(&tmp)->toDouble();
-      if (outer_over1>0 && outer_over1*outer_over1>25*c->re.eps2())
+      bool big_enough1=outer_over1*outer_over1>25*c->re.eps2();
+      bool big_enough2=outer_over1*outer_over1>newtres.accy_multiplier*c->re.eps2();
+      if (big_enough1!=big_enough2)
+        nop();
+      if (outer_over1>0 && big_enough1 && big_enough2)
       { //outer surely repulsive
         nop();//return -1;
       }
-      else if (outer_over1<0 && outer_over1*outer_over1>25*c->re.eps2())
+      else if (outer_over1<0 && big_enough1 && big_enough2)
       { //outer surely attractive
         mandelData.root.assign(&bulb.t3);
         return period;
       }
       else
       {
+#if 0 //worse than just comparing outer_over1>0
+        //last desperate try: Re(f''^m)<0
+        bulb.t1.assign(&newt.fzz_r);
+        bulb.t1.pow_int(loope.multi, &tmp);
+        if (!bulb.t1.re.isl0())
+          nop();//return -1;
+        else
+        {
+          mandelData.root.assign(&bulb.t3);
+          return period;
+        }
+#else
         if (outer_over1>0) //bulb.bulbe.f_z.mag_cmp_1()>0);
           nop();//return -1;
         else
@@ -4299,6 +4313,7 @@ int MandelEvaluator<BASE>::periodCheck(int period/*must =eval.lookper_lastGuess*
           mandelData.root.assign(&bulb.t3);
           return period;
         }
+#endif
       }
     }
 
@@ -5036,12 +5051,11 @@ void MandelEvaluator<BASE>::evaluateJulia(int juliaPeriod)
       {
         //currentWorker->zero(&currentData.exterior_avoids, 0);
         //currentWorker->zero(&currentData.exterior_hits, 0);
-        juliaData.store->exterior_avoids=0;
-        juliaData.store->exterior_hits=0;
+        juliaData.store->exterior.zero(0);
       }
       else
       { //from https://en.wikipedia.org/wiki/Julia_set#Using_DEM/J
-#if 1 //standard exterior distance estimate
+        //standard exterior distance estimate
         double fm=juliaData.f.getMag_double();
         double fcm=juliaData.fz_z_mag.toDouble();
         //double fcm=juliaData.fz_z.getMag_double();
@@ -5056,8 +5070,8 @@ void MandelEvaluator<BASE>::evaluateJulia(int juliaPeriod)
         // ln(z)*z/z'/z^(1/2^iter)/2 <= dist <= 2*ln(z)*z/z'
         // ln(z)*z/z'/2 <= dist <= ln(z)*z/z'*2      with z^(1/2^iter)~1 happens close to fractal because high iter, small z
 
-        juliaData.store->exterior_hits=x2*sqrt(fm/fcm);
-        juliaData.store->exterior_avoids=juliaData.store->exterior_hits*0.25;
+        juliaData.store->exterior.verify_hits=x2*sqrt(fm/fcm);
+        juliaData.store->exterior.verify_avoids=juliaData.store->exterior.verify_hits*0.25;
         if (juliaData.store->iter>71)
         { }
         else
@@ -5065,8 +5079,8 @@ void MandelEvaluator<BASE>::evaluateJulia(int juliaPeriod)
           double G=ldexp(x2, -1-juliaData.store->iter); //log(fm)/2/2^iter
           if (juliaData.store->iter>26)
           {
-            juliaData.store->exterior_hits+=G*G/6*juliaData.store->exterior_hits;
-            juliaData.store->exterior_avoids+=G*(G*2/3-1)*juliaData.store->exterior_avoids;
+            juliaData.store->exterior.verify_hits+=G*G/6*juliaData.store->exterior.verify_hits;
+            juliaData.store->exterior.verify_avoids+=G*(G*2/3-1)*juliaData.store->exterior.verify_avoids;
           }
           else
           {
@@ -5074,26 +5088,16 @@ void MandelEvaluator<BASE>::evaluateJulia(int juliaPeriod)
             //currentData.store->exterior_hits*=(ex-1/ex)/x/2;
             //currentData.store->exterior_avoids*=(1-1/(ex*ex))/x/2;
             //(exp(x*(2^-iter))-1/exp(x*(2^-iter)))/x*2^iter   (exp(a)-1/exp(a))/a~(1+a-1+a)/a=2
-            juliaData.store->exterior_hits=ldexp((exp(G)-1/exp(G))*sqrt(fm/fcm), juliaData.store->iter);
-            juliaData.store->exterior_avoids=ldexp((1-1/exp(2*G))*sqrt(fm/fcm), juliaData.store->iter-2);
+            juliaData.store->exterior.verify_hits=ldexp((exp(G)-1/exp(G))*sqrt(fm/fcm), juliaData.store->iter);
+            juliaData.store->exterior.verify_avoids=ldexp((1-1/exp(2*G))*sqrt(fm/fcm), juliaData.store->iter-2);
           }
         }
-#endif
+
 #if 1 //using glue at near0
         bool use_glue=(currentParams.patchSizeExterior>0 && juliaData.near0m.toDouble()<currentParams.patchSizeExterior);
         //1. find d.e. at near0+1
-        int iter_p2;
-        double fcm_p2;
-        if (use_glue)
-        {
-          fcm_p2=juliaData.since0fzm.toDouble();
-          iter_p2=juliaData.store->iter-juliaData.store->near0iter_1;
-        }
-        else
-        {
-          fcm_p2=juliaData.fz_z_mag.toDouble();
-          iter_p2=juliaData.store->iter;
-        }
+        int iter_p2=juliaData.store->iter-juliaData.store->near0iter_1;;
+        double fcm_p2=juliaData.since0fzm.toDouble();
         double fm_p2=juliaData.f.getMag_double();
         double x2_p2=std::log(fm_p2);
         double exterior_p2_hits=x2_p2*sqrt(fm_p2/fcm_p2);
@@ -5103,10 +5107,10 @@ void MandelEvaluator<BASE>::evaluateJulia(int juliaPeriod)
         else
         {
           double G=ldexp(x2_p2, -1-iter_p2); //log(fm)/2/2^iter
-          if (iter_p2>26)
+          if (iter_p2>26) //G^4/120=1e-19 for G<6e-5 for iter_p2>19; G^3/3=1e-19 for iter_p2>=26
           {
-            exterior_p2_hits+=G*G/6*exterior_p2_hits;
-            exterior_p2_avoids+=G*(G*2/3-1)*exterior_p2_avoids;
+            exterior_p2_hits+=G*G/6*exterior_p2_hits; //2G+G^3/3+G^5/60+...=2G*(G^2/6+ G^4/120+...)
+            exterior_p2_avoids+=G*(G*2/3-1)*exterior_p2_avoids; //2G-2G^2+4G^3/3 -2G^4/3...=2G*(1-G+2G^2/3 -G^3/3...)
           }
           else
           {
@@ -5119,130 +5123,132 @@ void MandelEvaluator<BASE>::evaluateJulia(int juliaPeriod)
           }
         }
 
-        if (!use_glue)
+        //2. walk 1 iteration backward
+        //double exterior_p1_hits, exterior_p1_avoids;
+        double near0=std::sqrt(juliaData.near0m.toDouble());
+        juliaData.store->exterior.none_hits=exterior_p2_hits/2/near0; //preview of simple scaling
+        juliaData.store->exterior.none_avoids=exterior_p2_avoids/2/near0;
+
+        // r=dist estimate of previous step "d.e.before"
+        // (x+r exp(i t))^2+c=x*x+2*x*r exp(i t)+r*r*exp(2 i t)+c
+        //     2|x|r+r^2=d.e.after
+        //     for r << |x| :
+        //     d.e.before=d.e.after/2/|x|
+        MandelMath::real_double_quadratic(&juliaData.store->exterior.always_hits, 1, near0, -exterior_p2_hits); //actual quad step
+        MandelMath::real_double_quadratic(&juliaData.store->exterior.always_avoids, 1, near0, -exterior_p2_avoids);
+
+        //trying to track the sinh during glue step, seems to actually hurt
+        double glue_scale, glue_scale_avoids;
+        if (iter_p2>68) //(x2>>68)+1 ~ 1
         {
-          juliaData.store->exterior_hits=exterior_p2_hits;
-          juliaData.store->exterior_avoids=exterior_p2_avoids;
+          glue_scale=1;
+          glue_scale_avoids=1;
+        }
+        else if (iter_p2>35) //with z<37 (bailout 10^8), z^2*(1/a^2)/6=1e-6 for a=2^14; 1e-19 for a=2^36 (actually should check 2nd term but who cares)
+        { //sinh(x/a)/sinh(x/b)*a/b=1+z^2*(1/a^2-1/b^2)/6+O(z^4);
+          double glue_g1=ldexp(x2_p2, -1-(iter_p2));
+          double glue_g2=ldexp(x2_p2, -1-(iter_p2+1));
+          glue_scale=1+(glue_g1*glue_g1-glue_g2*glue_g2)/6;
+          double glue_t1=-ldexp(1, -iter_p2-1);//ldexp(1, -iter_p2-1)-ldexp(1, -iter_p2);  err~(x2_p2/2*glue_t1)^2/2 -> glue_t1<2^-36 for err~1e-19
+          glue_scale_avoids=1+x2_p2/2*glue_t1;
         }
         else
         {
-          //2. walk 1 iteration backward
-          double exterior_p1_hits, exterior_p1_avoids;
-          double near0=std::sqrt(juliaData.near0m.toDouble());
-          exterior_p1_hits=exterior_p2_hits/2/near0; //preview of simple scaling
-          exterior_p1_avoids=exterior_p2_avoids/2/near0;
-#if 0 //no blend
-          // r=dist estimate of previous step "d.e.before"
-          // (x+r exp(i t))^2+c=x*x+2*x*r exp(i t)+r*r*exp(2 i t)+c
-          //     2|x|r+r^2=d.e.after
-          //     for r << |x| :
-          //     d.e.before=d.e.after/2/|x|
-          MandelMath::real_double_quadratic(&exterior_p1_hits, 1, near0, -exterior_p2_hits); //actual quad step
-          MandelMath::real_double_quadratic(&exterior_p1_avoids, 1, near0, -exterior_p2_avoids);
+          double glue_g1=ldexp(x2_p2, -1-(iter_p2));
+          double glue_g2=ldexp(x2_p2, -1-(iter_p2+1));
+          glue_scale=std::sinh(glue_g1)/std::sinh(glue_g2)/2;
+          double glue_t1=-ldexp(1, -iter_p2-1);//ldexp(1, -iter_p2-1)-ldexp(1, -iter_p2);
+          glue_scale_avoids=exp(x2_p2/2*glue_t1);
+        }
+        glue_scale_avoids=1/(glue_scale*glue_scale_avoids);
+        glue_scale=1/glue_scale;
 
-#elif 0 //blend by varying "a"
+        juliaData.store->exterior.none_hits*=glue_scale;
+        juliaData.store->exterior.none_avoids*=glue_scale_avoids;
+
+        if (!use_glue)
+        {
+          juliaData.store->exterior.condi_hits=juliaData.store->exterior.none_hits;
+          juliaData.store->exterior.condi_avoids=juliaData.store->exterior.none_avoids;
+          juliaData.store->exterior.blend_hits_=juliaData.store->exterior.none_hits;
+          juliaData.store->exterior.blend_avoids=juliaData.store->exterior.none_avoids;
+        }
+        else
+        {
+          juliaData.store->exterior.condi_hits=juliaData.store->exterior.always_hits;
+          juliaData.store->exterior.condi_avoids=juliaData.store->exterior.always_avoids;
+#if 0 //blend by varying "a"
           double weight=juliaData.near0m.toDouble()/currentParams.patchSizeExterior;
-          MandelMath::real_double_quadratic(&exterior_p1_hits, 1-(weight), near0, -exterior_p2_hits); //actual quad step
-          MandelMath::real_double_quadratic(&exterior_p1_avoids, 1-(weight), near0, -exterior_p2_avoids);
+          MandelMath::real_double_quadratic(&juliaData.store->exterior.blend_hits_, 1-(weight), near0, -exterior_p2_hits); //actual quad step
+          MandelMath::real_double_quadratic(&juliaData.store->exterior.blend_avoids, 1-(weight), near0, -exterior_p2_avoids);
 
 #elif 1 //(p2/(2*near0)*(near0m/patch)+p1*(1-near0m/patch)) = (p2/2*near0+p1*(patch-near0m))/patch
 //looks best of the 3
           double help=currentParams.patchSizeExterior-juliaData.near0m.toDouble();
-          MandelMath::real_double_quadratic(&exterior_p1_hits, 1, near0, -exterior_p2_hits); //actual quad step
-          MandelMath::real_double_quadratic(&exterior_p1_avoids, 1, near0, -exterior_p2_avoids);
-          exterior_p1_hits=(exterior_p2_hits/2*near0+exterior_p1_hits*help)/currentParams.patchSizeExterior;
-          exterior_p1_avoids=(exterior_p2_avoids/2*near0+exterior_p1_avoids*help)/currentParams.patchSizeExterior;
+          //MandelMath::real_double_quadratic(&exterior_p1_hits, 1, near0, -exterior_p2_hits); //actual quad step
+          //MandelMath::real_double_quadratic(&exterior_p1_avoids, 1, near0, -exterior_p2_avoids);
+          juliaData.store->exterior.blend_hits_=(exterior_p2_hits/2*near0*glue_scale+juliaData.store->exterior.always_hits*help)/currentParams.patchSizeExterior;
+          juliaData.store->exterior.blend_avoids=(exterior_p2_avoids/2*near0*glue_scale_avoids+juliaData.store->exterior.always_avoids*help)/currentParams.patchSizeExterior;
 
 #else   //(p2/(2*near0)*(near0m/patch)^2+p1*(1-(near0m/patch)^2)) = (p2/2*near0*near0m+p1*(patch^2-near0m^2))/patch^2
           double help=MandelMath::sqr_double(currentParams.patchSizeExterior)-MandelMath::sqr_double(juliaData.near0m.toDouble());
-          MandelMath::real_double_quadratic(&exterior_p1_hits, 1, std::sqrt(juliaData.near0m.toDouble()), -exterior_p2_hits); //actual quad step
-          MandelMath::real_double_quadratic(&exterior_p1_avoids, 1, std::sqrt(juliaData.near0m.toDouble()), -exterior_p2_avoids);
-          exterior_p1_hits=(exterior_p2_hits/2*near0*juliaData.near0m.toDouble() + exterior_p1_hits*help)/(currentParams.patchSizeExterior*currentParams.patchSizeExterior);
-          exterior_p1_avoids=(exterior_p2_avoids/2*near0*juliaData.near0m.toDouble()+exterior_p1_avoids*help)/(currentParams.patchSizeExterior*currentParams.patchSizeExterior);
+          juliaData.store->exterior.blend_hits_=(exterior_p2_hits/2*near0*juliaData.near0m.toDouble()*glue_scale + juliaData.store->exterior.always_hits*help)/(currentParams.patchSizeExterior*currentParams.patchSizeExterior);
+          juliaData.store->exterior.blend_avoids=(exterior_p2_avoids/2*near0*juliaData.near0m.toDouble()*glue_scale_avoids + juliaData.store->exterior.always_avoids*help)/(currentParams.patchSizeExterior*currentParams.patchSizeExterior);
 #endif
-          //exterior_p1_hits=exterior_p2_hits;
-          //exterior_p1_avoids=exterior_p2_avoids;
+        }
 
-#if 0     //standard step instead of glue
-          double glue_g1=ldexp(x2_p2, -1-(iter_p2));
-          double glue_g2=ldexp(x2_p2, -1-(iter_p2+1));
-          double glue_scale=std::sinh(glue_g1)/std::sinh(glue_g2)/2;
-          glue_scale*=std::sqrt(juliaData.near0m.toDouble())*2;
-          double glue_t1=-ldexp(1, -iter_p2-1);//ldexp(1, -iter_p2-1)-ldexp(1, -iter_p2);
-          double glue_t2=exp(x2_p2/2*glue_t1);
-          exterior_p1_hits=exterior_p2_hits/glue_scale;
-          exterior_p1_avoids=exterior_p2_avoids/glue_scale/glue_t2;
-#elif 1   //trying to track the sinh during glue step, seems to actually hurt
-          double glue_scale, glue_scale_avoids;
-          if (iter_p2>68) //(x2>>68)+1 ~ 1
-          {
-            glue_scale=1;
-            glue_scale_avoids=1;
-          }
-          else if (iter_p2>14) //with z<37 (bailout 10^8), z^2*(1/a^2)/6=1e-6 for a=2^14
-          { //sinh(x/a)/sinh(x/b)*a/b=1+z^2*(1/a^2-1/b^2)/6+O(z^4);
-            double glue_g1=ldexp(x2_p2, -1-(iter_p2));
-            double glue_g2=ldexp(x2_p2, -1-(iter_p2+1));
-            glue_scale=1+(glue_g1*glue_g1-glue_g2*glue_g2)/6;
-            double glue_t1=-ldexp(1, -iter_p2-1);//ldexp(1, -iter_p2-1)-ldexp(1, -iter_p2);
-            glue_scale_avoids=1+x2_p2/2*glue_t1;
-          }
-          else
-          {
-            double glue_g1=ldexp(x2_p2, -1-(iter_p2));
-            double glue_g2=ldexp(x2_p2, -1-(iter_p2+1));
-            glue_scale=std::sinh(glue_g1)/std::sinh(glue_g2)/2;
-            double glue_t1=-ldexp(1, -iter_p2-1);//ldexp(1, -iter_p2-1)-ldexp(1, -iter_p2);
-            glue_scale_avoids=exp(x2_p2/2*glue_t1);
-          }
-          //glue_scale*=std::sqrt(juliaData.near0m.toDouble())*2;
-          exterior_p1_hits=exterior_p1_hits/glue_scale;
-          exterior_p1_avoids=exterior_p1_avoids/glue_scale/glue_scale_avoids;
-          //blend of both
-          //exterior_p1_hits/=glue_scale;
-          //exterior_p1_avoids/=glue_scale*glue_t2;
-#endif
+        /*juliaData.store->exterior.always_hits*=glue_scale;
+        juliaData.store->exterior.always_avoids*=glue_scale_avoids;
+        juliaData.store->exterior.condi_hits*=glue_scale;
+        juliaData.store->exterior.condi_avoids*=glue_scale_avoids;
+        juliaData.store->exterior.blend_hits*=glue_scale;
+        juliaData.store->exterior.blend_avoids*=glue_scale_avoids;*/
 
-          //3. scale to the beginning
-          //  full d.e. at iter==I with end at z, iter K; z'=z'[0..K]
-          //  avoids = sinh(ln(z)/2^(K-I))/z'[I..K]*z*2^(K-I)/z^(1/2^(K-I))/2
-          //  hits = 2*sinh(ln(z)/2^(K-I))/z'[I..K]*z*2^(K-I)
-          // avoids[J]/avoids[I]=sinh(ln(z)/2^(K-J))/z'[J..K]*z*2^(K-J)/z^(1/2^(K-J))/2 / ( sinh(ln(z)/2^(K-I))/z'[I..K]*z*2^(K-I)/z^(1/2^(K-I))/2 )
-          //                    =sinh(ln(z)/2^(K-J))/sinh(ln(z)/2^(K-I)) *z'[I..K]/z'[J..K] *2^(K-J)/2^(K-I) *z^(1/2^(K-I))/z^(1/2^(K-J))
-          //                    =sinh(ln(z)/2^(K-J))/sinh(ln(z)/2^(K-I)) *z'[I..J] *2^(I-J) *z^(1/2^(K-I)-1/2^(K-J))
-          //                    =sinh(ln(z)/2^(K-J))/sinh(ln(z)/2^(K-I)) *2^(I-J) *z'[I..J] *z^(2^(I-K)-2^(J-K))
-          //iter_p2--;
-          double phase1_scale, phase1_scale_avoids;
-          if (iter_p2>68)
-          {
-            phase1_scale=std::sqrt(juliaData.near0fzm.toDouble());//     *juliaData.near0m.toDouble())*2;
-            phase1_scale_avoids=1;
-          }
-          else if (iter_p2>14)
-          {
-            double avoids_g1=ldexp(x2_p2, -1-(iter_p2+1));
-            double avoids_g2=ldexp(x2_p2, -1-juliaData.store->iter);
-            phase1_scale=1+(avoids_g1*avoids_g1-avoids_g2*avoids_g2)/6;
-            phase1_scale*=std::sqrt(juliaData.near0fzm.toDouble());//     *juliaData.near0m.toDouble())*2;
-            double avoids_t1=ldexp(1, -juliaData.store->iter)-ldexp(1, -iter_p2-1);
-            phase1_scale_avoids=1+x2_p2/2*avoids_t1;
-          }
-          else
-          {
-            double avoids_g1=ldexp(x2_p2, -1-(iter_p2+1));
-            double avoids_g2=ldexp(x2_p2, -1-juliaData.store->iter);
-            phase1_scale=std::sinh(avoids_g1)/std::sinh(avoids_g2)*ldexp(1, 1-juliaData.store->near0iter_1);
-            phase1_scale*=std::sqrt(juliaData.near0fzm.toDouble());//     *juliaData.near0m.toDouble())*2;
-            double avoids_t1=ldexp(1, -juliaData.store->iter)-ldexp(1, -iter_p2-1);
-            phase1_scale_avoids=exp(x2_p2/2*avoids_t1);
-          }
-          double exterior_hits=exterior_p1_hits/phase1_scale;
-          double exterior_avoids=exterior_p1_avoids/phase1_scale/phase1_scale_avoids;
-          juliaData.store->exterior_hits=exterior_hits;
-          juliaData.store->exterior_avoids=exterior_avoids;
-          //juliaData.store->exterior_hits=juliaData.store->exterior_hits/exterior_hits-1;
-          //juliaData.store->exterior_avoids=juliaData.store->exterior_avoids/exterior_avoids-1;
-        } //do patch/glue
+        //3. scale to the beginning
+        //  full d.e. at iter==I with end at z, iter K; z'=z'[0..K]
+        //  avoids = sinh(ln(z)/2^(K-I))/z'[I..K]*z*2^(K-I)/z^(1/2^(K-I))/2
+        //  hits = 2*sinh(ln(z)/2^(K-I))/z'[I..K]*z*2^(K-I)
+        // avoids[J]/avoids[I]=sinh(ln(z)/2^(K-J))/z'[J..K]*z*2^(K-J)/z^(1/2^(K-J))/2 / ( sinh(ln(z)/2^(K-I))/z'[I..K]*z*2^(K-I)/z^(1/2^(K-I))/2 )
+        //                    =sinh(ln(z)/2^(K-J))/sinh(ln(z)/2^(K-I)) *z'[I..K]/z'[J..K] *2^(K-J)/2^(K-I) *z^(1/2^(K-I))/z^(1/2^(K-J))
+        //                    =sinh(ln(z)/2^(K-J))/sinh(ln(z)/2^(K-I)) *z'[I..J] *2^(I-J) *z^(1/2^(K-I)-1/2^(K-J))
+        //                    =sinh(ln(z)/2^(K-J))/sinh(ln(z)/2^(K-I)) *2^(I-J) *z'[I..J] *z^(2^(I-K)-2^(J-K))
+        //iter_p2--;
+        double phase1_scale, phase1_scale_avoids;
+        if (iter_p2>68)
+        {
+          phase1_scale=std::sqrt(juliaData.near0fzm.toDouble());//     *juliaData.near0m.toDouble())*2;
+          phase1_scale_avoids=1;
+        }
+        else if (iter_p2>35)
+        {
+          double avoids_g1=ldexp(x2_p2, -1-(iter_p2+1));
+          double avoids_g2=ldexp(x2_p2, -1-juliaData.store->iter);
+          phase1_scale=1+(avoids_g1*avoids_g1-avoids_g2*avoids_g2)/6;
+          phase1_scale*=std::sqrt(juliaData.near0fzm.toDouble());//     *juliaData.near0m.toDouble())*2;
+          double avoids_t1=ldexp(1, -juliaData.store->iter)-ldexp(1, -iter_p2-1);
+          phase1_scale_avoids=1+x2_p2/2*avoids_t1;
+        }
+        else
+        {
+          double avoids_g1=ldexp(x2_p2, -1-(iter_p2+1));
+          double avoids_g2=ldexp(x2_p2, -1-juliaData.store->iter);
+          phase1_scale=std::sinh(avoids_g1)/std::sinh(avoids_g2)*ldexp(1, 1-juliaData.store->near0iter_1);
+          phase1_scale*=std::sqrt(juliaData.near0fzm.toDouble());//     *juliaData.near0m.toDouble())*2;
+          double avoids_t1=ldexp(1, -juliaData.store->iter)-ldexp(1, -iter_p2-1);
+          phase1_scale_avoids=exp(x2_p2/2*avoids_t1);
+        }
+        phase1_scale_avoids=1/(phase1_scale*phase1_scale_avoids);
+        phase1_scale=1/phase1_scale;
+        juliaData.store->exterior.none_hits*=phase1_scale;
+        juliaData.store->exterior.none_avoids*=phase1_scale_avoids;
+        juliaData.store->exterior.always_hits*=phase1_scale;
+        juliaData.store->exterior.always_avoids*=phase1_scale_avoids;
+        juliaData.store->exterior.condi_hits*=phase1_scale;
+        juliaData.store->exterior.condi_avoids*=phase1_scale_avoids;
+        juliaData.store->exterior.blend_hits_*=phase1_scale;
+        juliaData.store->exterior.blend_avoids*=phase1_scale_avoids;
+        //juliaData.store->exterior_hits=juliaData.store->exterior_hits/exterior_hits-1;
+        //juliaData.store->exterior_avoids=juliaData.store->exterior_avoids/exterior_avoids-1;
 #endif
       }
       break;
@@ -5251,16 +5257,14 @@ void MandelEvaluator<BASE>::evaluateJulia(int juliaPeriod)
     if (fz_z_mag1>1e57)
     {
       juliaData.store->rstate=JuliaPointStore::ResultState::stBoundary;
-      juliaData.store->exterior_avoids=0;
-      juliaData.store->exterior_hits=0;
+      juliaData.store->exterior.zero(0);
       break;
     };
     double fz_z_mag2=juliaData.fz_z_mag.toDouble();
     if (fz_z_mag2>1e60)
     {
       juliaData.store->rstate=JuliaPointStore::ResultState::stDiverge;
-      juliaData.store->exterior_avoids=0;
-      juliaData.store->exterior_hits=0;
+      juliaData.store->exterior.zero(0);
       break;
     };
     //fz_z:=2*f*fz_z

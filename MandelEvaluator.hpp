@@ -134,7 +134,15 @@ struct JuliaPointStore
   //int period;
   //int surehand;
   int iter;
-  double exterior_hits, exterior_avoids; //upper and lower bound
+  struct
+  {
+    double verify_hits, verify_avoids; //official estimate in one go
+    double none_hits, none_avoids; //upper and lower bound; should==verify
+    double always_hits, always_avoids;
+    double condi_hits, condi_avoids;
+    double blend_hits_, blend_avoids;
+    void zero(double x) {verify_hits=x; verify_avoids=x; none_hits=x; none_avoids=x; always_hits=x; always_avoids=x; condi_hits=x; condi_avoids=x; blend_hits_=x; blend_avoids=x; }
+  } exterior;
   struct
   {
     double hits;

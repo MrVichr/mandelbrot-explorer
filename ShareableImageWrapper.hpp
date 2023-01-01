@@ -1,6 +1,7 @@
 #ifndef SHAREABLEIMAGEWRAPPER_H
 #define SHAREABLEIMAGEWRAPPER_H
 
+#include <QMetaType>
 #include <QImage>
 
 class ShareableImageWrapper

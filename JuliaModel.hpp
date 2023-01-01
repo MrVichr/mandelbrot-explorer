@@ -12,10 +12,10 @@ class JuliaModel: public QObject
 {
   Q_OBJECT
 protected:
-  enum IndexIntoWorker
+  /*enum IndexIntoWorker
   {
     iiw_reImToPixel=10
-  };
+  };*/
 public:
   JuliaModel();
   ~JuliaModel();
@@ -79,12 +79,12 @@ public:
 
   enum precision
   {
-    precisionDouble=0,
+    EprecisionDouble=0,
 #if !ONLY_DOUBLE_WORKER
-    precisionFloat128=1,
-    precisionDDouble=2,
-    precisionQDouble=3,
-    precisionReal642=4
+    EprecisionFloat128=1,
+    EprecisionDDouble=2,
+    EprecisionQDouble=3,
+    EprecisionReal642=4
 #endif
   };
   Q_ENUM(precision);
@@ -98,6 +98,32 @@ public:
   int getextAngleZoom() { return _extAngleZoom; }
   void setextAngleZoom(int zoom) { _extAngleZoom=zoom; }
 
+  enum ext_de_patch_algo
+  { //the Internet says that enum names need to start with a capital letter to be accessible from QML :-?
+    EedepaNone=0,
+    EedepaAlways=1,
+    EedepaConditional=2,
+    EedepaBlend=3,
+    EedepaVerifyH=4,
+    EedepaVerifyA=5,
+  };
+  Q_ENUM(ext_de_patch_algo);
+  ext_de_patch_algo _selectedEdePatchAlgo;
+  Q_PROPERTY(ext_de_patch_algo selectedEdePatchAlgo READ getselectedEdePatchAlgo WRITE setselectedEdePatchAlgo NOTIFY selectedEdePatchAlgoChange)
+  ext_de_patch_algo getselectedEdePatchAlgo() { return _selectedEdePatchAlgo; }
+  void setselectedEdePatchAlgo(ext_de_patch_algo ps) { _selectedEdePatchAlgo=ps; emit selectedEdePatchAlgoChange(); }
+
+  enum exterior_coloring
+  {
+    EextcolScaledWaves=0,
+    EextcolRainbow=1,
+  };
+  Q_ENUM(exterior_coloring);
+  exterior_coloring _selectedExteriorColoring;
+  Q_PROPERTY(exterior_coloring selectedExteriorColoring READ getselectedExteriorColoring WRITE setselectedExteriorColoring NOTIFY selectedExteriorColoringChange)
+  exterior_coloring getselectedExteriorColoring() { return _selectedExteriorColoring; }
+  void setselectedExteriorColoring(exterior_coloring ps) { _selectedExteriorColoring=ps; emit selectedExteriorColoringChange(); }
+
   QVector<int> periodToIndexCache;
   int periodToIndex(int period);
 protected:
@@ -109,9 +135,13 @@ protected:
 public slots:
   void doneWorkInThread(MandelEvaluatorThread *me);
   void selectedPrecisionChanged();
+  void selectedEdePatchAlgoChanged();
+  void selectedExteriorColoringChanged();
 signals:
   void selectedPaintStyleChanged();
   void selectedPrecisionChange();
+  void selectedEdePatchAlgoChange();
+  void selectedExteriorColoringChange();
   void extAngleZoomChange();
   void triggerJuliaThreaded(int epoch, int juliaPeriod);
 protected:
