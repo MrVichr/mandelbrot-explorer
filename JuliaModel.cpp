@@ -1378,9 +1378,9 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
                 if (exterior<=0)
                   ti=0;
                 else if (exterior>=4)
-                  ti=6*0xc0-1-(qRound(log(exterior/4)*300)) % (6*0xc0);
+                  ti=6*0xc0-1-(qRound(log(exterior/4)*600)) % (6*0xc0);
                 else
-                  ti=(qRound(-log(exterior/4)*300)+12*0xc0) % (6*0xc0);
+                  ti=(qRound(-log(exterior/4)*600)+12*0xc0) % (6*0xc0);
                 int r, g, b;
                 if (ti<0xC0)
                 { r=0x3f+ti; g=0xff; b=0x3f; }                           // + H L

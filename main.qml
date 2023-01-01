@@ -203,7 +203,7 @@ Window {
                 Menu {
                     title: "Ext D.E. patch"
                     id: menuOptionsJuliaEDEpatchAlgo
-                    //text: "Ext D.E. patch"
+                    visible: rbuttonViewJulia.checked
                     MenuItemGroup {
                         id: migJuliaEDEPatching
                     }
@@ -230,6 +230,31 @@ Window {
                 }
 
                 Menu {
+                    title: "Ext D.E. coloring"
+                    id: menuOptionsJuliaExtColoring
+                    visible: rbuttonViewJulia.checked
+                    MenuItemGroup {
+                        id: migJuliaExtColoring
+                    }
+                    Instantiator
+                    {
+                        onObjectAdded: function(index, object) {menuOptionsJuliaExtColoring.insertItem(index, object);}
+                        onObjectRemoved: function(index, object) {menuOptionsJuliaExtColoring.removeItem(object);}
+                        model: [
+                            {text: "Scaled waves", algo: JuliaModel.EextcolScaledWaves},
+                            {text: "Rainbow", algo: JuliaModel.EextcolRainbow},
+                        ]
+                        MenuItem {
+                            checkable: true
+                            checked: modelData.algo===JuliaModel.EextcolRainbow
+                            text: modelData.text
+                            group: migJuliaExtColoring
+                            onTriggered: { checked=true; juliaModel.selectedExteriorColoring=modelData.algo; }
+                        }
+                    }
+                }
+
+                Menu {
                     title: "Precision"
                     //text: "Precision"
                     id: menuOptionsPrecision
@@ -251,7 +276,12 @@ Window {
                             text: modelData.text
                             checked: modelData.prec===JuliaModel.EprecisionDouble
                             group: migJuliaPrecision
-                            onTriggered: { checked=true; juliaModel.selectedPrecision=modelData.prec; }
+                            onTriggered: {
+                                checked=true;
+                                mandelModel.selectedPrecision=modelData.prec;
+                                juliaModel.selectedPrecision=modelData.prec;
+                                laguerreModel.selectedPrecision=modelData.prec;
+                            }
                         }
                     }
                 }
