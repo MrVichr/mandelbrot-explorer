@@ -14,7 +14,10 @@ Window {
     visible: true
     title: qsTr("Mandelbrot")
     //Keys.forwardTo: mouseArea //can't attach Keys to Window
-    Component.onCompleted: { mandelModel.startRunning(); juliaModel.startRunning(); laguerreModel.startRunning(); }
+    property var listOfMCR: [{m: mandelModel, c: mandelImageCombiner, r: rbuttonViewMand},
+                             {m: juliaModel, c: juliaImageCombiner, r: rbuttonViewJulia},
+                             {m: laguerreModel, c: laguerreImageCombiner, r: rbuttonViewLagu},]
+    Component.onCompleted: { for (let {m} of listOfMCR) { m.startRunning(); } }
 
     Column {
         anchors.left: parent.left;
@@ -278,9 +281,12 @@ Window {
                             group: migJuliaPrecision
                             onTriggered: {
                                 checked=true;
-                                mandelModel.selectedPrecision=modelData.prec;
-                                juliaModel.selectedPrecision=modelData.prec;
-                                laguerreModel.selectedPrecision=modelData.prec;
+                                console.log(listOfMCR);
+                                for (let {m, c, r} of listOfMCR)
+                                {
+                                    console.log(m);
+                                    m.selectedPrecision=modelData.prec;
+                                }
                             }
                         }
                     }
@@ -288,7 +294,7 @@ Window {
             }
         }
 
-        Row {
+        /*Row {
             anchors.right: parent.right
             ComboBox {
                 textRole: "text"
@@ -310,7 +316,7 @@ Window {
                     laguerreModel.selectedPrecision=prec;
                 }
             }
-        }
+        }*/
     }
 
     MouseArea {
@@ -321,7 +327,7 @@ Window {
         anchors.bottom: parent.bottom;
         hoverEnabled: true;
         acceptedButtons: Qt.LeftButton | Qt.RightButton
-        property int dragging: 0;
+        property var dragging: null;
         property int drag_last_x;
         property int drag_last_y;
         Keys.onPressed: { //never triggers
@@ -331,64 +337,39 @@ Window {
         }
         onPositionChanged: function(mouse)
         {
-            if (dragging==1)
+            if (dragging!=null)
             {
-                mandelModel.drag(mouse.x-drag_last_x, mouse.y-drag_last_y);
+                dragging.drag(mouse.x-drag_last_x, mouse.y-drag_last_y);
                 drag_last_x=mouse.x;
                 drag_last_y=mouse.y;
             };
-            if (dragging==2)
-            {
-                juliaModel.drag(mouse.x-drag_last_x, mouse.y-drag_last_y);
-                drag_last_x=mouse.x;
-                drag_last_y=mouse.y;
-            };
-            if (dragging==3)
-            {
-                laguerreModel.drag(mouse.x-drag_last_x, mouse.y-drag_last_y);
-                drag_last_x=mouse.x;
-                drag_last_y=mouse.y;
-            };
-            //TODO: else copy from    ((mandel.mousePt.c.re<>view.orbit.re) or (mandel.mousePt.c.im<>view.orbit.im)) then
-            //labelCX.text=mandelModel.pixelXtoRE_str(mouse.x);
-            //labelCY.text=mandelModel.pixelYtoIM_str(mouse.y);
-            if (rbuttonViewMand.checked)
-              mandelModel.paintOrbit(mandelImageCombiner.getOverlayImage(), mouse.x, mouse.y);
-            if (rbuttonViewJulia.checked)
-              juliaModel.paintOrbit(juliaImageCombiner.getOverlayImage(), mouse.x, mouse.y);
-            if (rbuttonViewLagu.checked)
-            {
-              laguerreModel.paintOrbit(laguerreImageCombiner.getOverlayImage(), mouse.x, mouse.y);
-              if (laguerreModel==null)
-                console.log("laguModel missing in action");
-            }
-            //labelCX.text=mouse.x;
-            //labelCY.text=mouse.y;
-            laguerreModel.getTimes();
+            for (let {m, c, r} of listOfMCR)
+              if (r.checked)
+              {
+                m.paintOrbit(c.getOverlayImage(), mouse.x, mouse.y);
+                if (m==null)
+                  console.log("model missing in action");
+                else
+                  m.getTimes();
+              }
         }
         onPressed: function(mouse) {
             if (mouse.button===Qt.LeftButton)
             {
-                if (rbuttonViewMand.checked)
-                  dragging=1;
-                if (rbuttonViewJulia.checked)
-                  dragging=2;
-                if (rbuttonViewLagu.checked)
-                  dragging=3;
-                drag_last_x=mouse.x;
-                drag_last_y=mouse.y;
+              for (let {m, r} of listOfMCR)
+                if (r.checked)
+                  dragging=m;
+              drag_last_x=mouse.x;
+              drag_last_y=mouse.y;
             };
         }
         onReleased: function(mouse) {
-            dragging=0;
+            dragging=null;
             if (mouse.button===Qt.LeftButton)
             {
-                if (rbuttonViewMand.checked)
-                  mandelModel.paintOrbit(mandelImageCombiner.getOverlayImage(), mouse.x, mouse.y);
-                if (rbuttonViewJulia.checked)
-                  juliaModel.paintOrbit(mandelImageCombiner.getOverlayImage(), mouse.x, mouse.y);
-                if (rbuttonViewLagu.checked)
-                  laguerreModel.paintOrbit(laguerreImageCombiner.getOverlayImage(), mouse.x, mouse.y);
+              for (let {m, c, r} of listOfMCR)
+                if (r.checked)
+                  m.paintOrbit(c.getOverlayImage(), mouse.x, mouse.y);
             }
             if (mouse.button===Qt.RightButton)
             {
@@ -402,53 +383,35 @@ Window {
         }
 
         onWheel: function(wheel) {
-            if (wheel.angleDelta.y>0)
-            {
-              if (rbuttonViewMand.checked)
-                mandelModel.zoom(wheel.x, wheel.y, +1);
-              else if (rbuttonViewJulia.checked)
-                juliaModel.zoom(wheel.x, wheel.y, +1);
-              else if (rbuttonViewLagu.checked)
-                laguerreModel.zoom(wheel.x, wheel.y, +1);
-            }
-            else if (wheel.angleDelta.y<0)
-            {
-              if (rbuttonViewMand.checked)
-                mandelModel.zoom(wheel.x, wheel.y, -1);
-              else if (rbuttonViewJulia.checked)
-                juliaModel.zoom(wheel.x, wheel.y, -1);
-              else if (rbuttonViewLagu.checked)
-                laguerreModel.zoom(wheel.x, wheel.y, -1);
-            }
+            for (let {m, r} of listOfMCR)
+              if (r.checked)
+              {
+                if (wheel.angleDelta.y>0)
+                  m.zoom(wheel.x, wheel.y, +1)
+                else if (wheel.angleDelta.y<0)
+                  m.zoom(wheel.x, wheel.y, -1)
+              }
             wheel.accepted=true;
         }
         onHeightChanged: {
-            mandelImageCombiner.resetBgImage(width, height, 0xff000000);
-            mandelModel.setImageSize(width, height);
-            mandelModel.writeToImage(mandelImageCombiner.getBaseImage());
-            mandelImageCombiner.update();
-            juliaImageCombiner.resetBgImage(width, height, 0xff000000);
-            juliaModel.setImageSize(width, height);
-            juliaModel.writeToImage(juliaImageCombiner.getBaseImage());
-            juliaImageCombiner.update();
-            laguerreImageCombiner.resetBgImage(width, height, 0xff000000);
-            laguerreModel.setImageSize(width, height);
-            laguerreModel.writeToImage(laguerreImageCombiner.getBaseImage());
-            laguerreImageCombiner.update();
+            for (let {m,c} of listOfMCR)
+            {
+                //console.log("m=",m,"c=",c);
+                c.resetBgImage(width, height, 0xff000000);
+                m.setImageSize(width, height);
+                m.writeToImage(c.getBaseImage());
+                c.update();
+            }
         }
         onWidthChanged: {
-            mandelImageCombiner.resetBgImage(width, height, 0xff000000);
-            mandelModel.setImageSize(width, height);
-            mandelModel.writeToImage(mandelImageCombiner.getBaseImage());
-            mandelImageCombiner.update();
-            juliaImageCombiner.resetBgImage(width, height, 0xff000000);
-            juliaModel.setImageSize(width, height);
-            juliaModel.writeToImage(juliaImageCombiner.getBaseImage());
-            juliaImageCombiner.update();
-            laguerreImageCombiner.resetBgImage(width, height, 0xff000000);
-            laguerreModel.setImageSize(width, height);
-            laguerreModel.writeToImage(laguerreImageCombiner.getBaseImage());
-            laguerreImageCombiner.update();
+            for (let {m,c} of listOfMCR)
+            {
+                //console.log("m=",m,"c=",c);
+                c.resetBgImage(width, height, 0xff000000);
+                m.setImageSize(width, height);
+                m.writeToImage(c.getBaseImage());
+                c.update();
+            }
         }
 
         MandelImageCombiner {
@@ -573,60 +536,27 @@ Window {
         repeat: true;
         running: true;
         onTriggered: {
-            if (rbuttonViewMand.checked)
+            for (let {m, c, r} of listOfMCR)
             {
-              mandelModel.writeToImage(mandelImageCombiner.getBaseImage());
-              mandelImageCombiner.update();
-              labelXY.text=mandelModel.getTextXY();
-              labelInfoGen.text=mandelModel.getTextInfoGen();
-              labelInfoSpec.text=mandelModel.getTextInfoSpec();
-              mandelModel.getTimes();
-              if (mandelModel.threadsWorking===0)
-                busyIndicator.color="green";
-              else if (mandelModel.threadsWorking<mandelModel.threadsMax)
-                busyIndicator.color="yellow";
-              //else if (mandelModel.threadsWorking>mandelModel.threadsMax)
-              //  busyIndicator.color="blue"; //up to 2*threads during dragging... or more
-              else
-                busyIndicator.color="red";
-              busyIndicator2.text=mandelModel.threadsWorking
-            };
-            if (rbuttonViewJulia.checked)
-            {
-              juliaModel.writeToImage(juliaImageCombiner.getBaseImage());
-              juliaImageCombiner.update();
-              labelXY.text=juliaModel.getTextXY();
-              labelInfoGen.text=juliaModel.getTextInfoGen();
-              labelInfoSpec.text=juliaModel.getTextInfoSpec();
-              juliaModel.getTimes();
-              if (juliaModel.threadsWorking===0)
-                busyIndicator.color="green";
-              else if (juliaModel.threadsWorking<juliaModel.threadsMax)
-                busyIndicator.color="yellow";
-              //else if (mandelModel.threadsWorking>mandelModel.threadsMax)
-              //  busyIndicator.color="blue"; //up to 2*threads during dragging... or more
-              else
-                busyIndicator.color="red";
-              busyIndicator2.text=juliaModel.threadsWorking;
-            };
-            if (rbuttonViewLagu.checked)
-            {
-              laguerreModel.getTimes();
-              laguerreModel.writeToImage(laguerreImageCombiner.getBaseImage());
-              laguerreImageCombiner.update();
-              labelXY.text=laguerreModel.getTextXY();
-              labelInfoGen.text=laguerreModel.getTextInfoGen();
-              labelInfoSpec.text=laguerreModel.getTextInfoSpec();
-              if (laguerreModel.threadsWorking===0)
-                busyIndicator.color="green";
-              else if (laguerreModel.threadsWorking<laguerreModel.threadsMax)
-                busyIndicator.color="yellow";
-              //else if (laguerreModel.threadsWorking>laguerreModel.threadsMax)
-              //  busyIndicator.color="blue"; //up to 2*threads during dragging... or more
-              else
-                busyIndicator.color="red";
-              busyIndicator2.text=laguerreModel.threadsWorking;
-            };
+              if (r.checked)
+              {
+                m.writeToImage(c.getBaseImage());
+                c.update();
+                labelXY.text=m.getTextXY();
+                labelInfoGen.text=m.getTextInfoGen();
+                labelInfoSpec.text=m.getTextInfoSpec();
+                m.getTimes();
+                if (m.threadsWorking===0)
+                  busyIndicator.color="green";
+                else if (m.threadsWorking<m.threadsMax)
+                  busyIndicator.color="yellow";
+                //else if (m.threadsWorking>m.threadsMax)
+                //  busyIndicator.color="blue"; //up to 2*threads during dragging... or more
+                else
+                  busyIndicator.color="red";
+                busyIndicator2.text=m.threadsWorking;
+              }
+            }
         }
     }
 }
