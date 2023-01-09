@@ -457,7 +457,11 @@ Window {
             }*/
             MenuItem {
                 text: "set Lagu"
-                onTriggered: { laguerreModel.setParams(mandelModel.viewInfo); juliaModel.setParams(mandelModel.viewInfo); }
+                onTriggered: {
+                    var vi=mandelModel.viewInfo;
+                    laguerreModel.setParams(vi);
+                    juliaModel.setParams(vi);
+                }
             }
             Menu {
                 id: menuMandelPresets

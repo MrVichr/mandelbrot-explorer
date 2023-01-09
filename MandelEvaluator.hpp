@@ -329,6 +329,8 @@ public:
                 int period, const MandelMath::complex<BASE> *c, const MandelMath::complex<BASE> *z);  //->f, f_z, f_zz, f_c, f_zc, f_cc, f_zzc
   bool eval_multi(typename MandelMath::complex<BASE>::Scratchpad *tmp,
                   int period, const MandelMath::complex<BASE> *c, const MandelMath::complex<BASE> *z, const MandelMath::complex<BASE> *f_z_target, double dist_tolerance); //->f, f_z, f_zz, multi, first_multi
+  bool eval_near0(typename MandelMath::complex<BASE>::Scratchpad *tmp,
+                  int period, const MandelMath::complex<BASE> *c); //->near0iter_1
   bool eval_ext_mandMJ(typename MandelMath::complex<BASE>::Scratchpad *tmp, double mandel,
                     const MandelMath::complex<BASE> *c, const MandelMath::complex<BASE> *z, int iter); //
 
@@ -348,9 +350,10 @@ public:
   MandelMath::complex<BASE> f_zzc;
   int multi;
   MandelMath::complex<BASE> first_multi;
+  int near0iter_1;
   MandelMath::complex<BASE> sumA;
   MandelMath::number<BASE> f_z_mag;
-  MandelMath::number<BASE> f_z_minmag;
+  MandelMath::number<BASE> f_z_minmag; //also near0mag
 
   //temporary
 protected:
@@ -550,8 +553,10 @@ public:
     MandelMath::complex<BASE> t3;
     MandelMath::complex<BASE> deltac;
     MandelMath::complex<BASE> deltar;
-    MandelMath::complex<BASE> dbg_first_cb;
+    MandelMath::complex<BASE> first_cb;
+    double firstStep;
     MandelMath::complex<BASE> dbg_first_rb;
+    MandelMath::complex<BASE> prev_rb;
     MandelMath::complex<BASE> target_f_z;
 
     MandelMath::complex<BASE> res_cb;

@@ -12,7 +12,7 @@
   //1 tries newton fewer times
   //0 tries newton with smaller periods that are sometimes correct, thanks to restarts
 
-void nop(); //dfined in MandelMath
+void nop(); //defined in MandelMath
 
 LaguerrePointStore::LaguerrePointStore(): state(State::stUnknown),
   firstM(0), firstStep_re(0), firstStep_im(0), iter(0)
@@ -864,7 +864,7 @@ template<typename BASE>
 MandelLoopEvaluator<BASE>::MandelLoopEvaluator(MandelMath::NumberType ntype):
   f(ntype), f_z(ntype), f_c(ntype),
   f_zz(ntype), f_zc(ntype), f_cc(ntype), f_zzc(ntype),
-  multi(0), first_multi(ntype), sumA(ntype), f_z_mag(ntype), f_z_minmag(ntype),
+  multi(0), first_multi(ntype), near0iter_1(0), sumA(ntype), f_z_mag(ntype), f_z_minmag(ntype),
   s1(ntype), s2(ntype)
 {
 }
@@ -1207,7 +1207,7 @@ bool MandelLoopEvaluator<BASE>::eval_multi(typename MandelMath::complex<BASE>::S
       s1.mul(&f_z, tmp);
       s2.assign(&f);
       s2.mul(f_z_target, tmp);
-      s2.rsub(&s1);
+      s2.rsub(&s1); //z*f_z-f*f_z_target
       s1.assign(&f_z);
       s1.sub(f_z_target);
       s1.recip(tmp);
@@ -1346,6 +1346,47 @@ bool MandelLoopEvaluator<BASE>::eval_multi(typename MandelMath::complex<BASE>::S
   }*/
   else
     multi=0;
+  return true;
+}
+
+template <typename BASE>
+bool MandelLoopEvaluator<BASE>::eval_near0(typename MandelMath::complex<BASE>::Scratchpad *tmp, int period, const MandelMath::complex<BASE> *c)
+{
+  f.assign(c);
+  f_z.zero(1, 0); //are they even needed?
+  f_zz.zero(0, 0);
+  near0iter_1=1;
+  f_z_minmag.assign(*c->getMag_tmp(tmp));
+  for (int i=0; i<period; i++)
+  {
+    double m_sum=f.getMag_double()+
+                 f_z.getMag_double()+
+                 f_zz.getMag_double();
+    if (m_sum>MandelEvaluator<BASE>::LARGE_FLOAT2)
+      return false;
+    //f_zz:=2*(f_z*f_z + f*f_zz)
+    f_zz.mul(&f, tmp);
+    s2.assign(&f_z);
+    s2.sqr(tmp);
+    f_zz.add(&s2);
+    f_zz.lshift(1);
+    //f_z:=2*f*f_z
+    f_z.mul(&f, tmp);
+    f_z.lshift(1);
+    //f:=f^2+c
+    f.sqr(tmp);
+    f.add(c);
+
+    if (i+2<period)
+    {
+      const MandelMath::number<BASE> *fmag=f.getMag_tmp(tmp);
+      if (!f_z_minmag.isle(*fmag)) //fmag<near0mag
+      {
+        near0iter_1=i+2;
+        f_z_minmag.assign(*fmag);
+      };
+    };
+  }
   return true;
 }
 
@@ -1893,7 +1934,7 @@ void MandelEvaluator<BASE>::Bulb::findBulbBase(typename MandelMath::complex<BASE
   //note: cb, rb, xc are not this->cb, rb, xc when called from Orbit
   if (period2==1)
   {
-    dbg_first_cb.zero(0.25, 0);
+    first_cb.zero(0.25, 0);
     dbg_first_rb.zero(0.5, 0);
     res_cb.zero(0.25, 0);
     res_rb.zero(0.5, 0);
@@ -1902,7 +1943,7 @@ void MandelEvaluator<BASE>::Bulb::findBulbBase(typename MandelMath::complex<BASE
     res_baseCC.zero(0, 0);
     res_baseFz.zero(0, 0);
     res_card=true;
-    res_foundMult=2;
+    res_foundMult=1;//other atoms say 0/1   2;
     res_valid=true;
     return;// true;
   };
@@ -1943,8 +1984,7 @@ void MandelEvaluator<BASE>::Bulb::findBulbBase(typename MandelMath::complex<BASE
         return;// false;
       }
       double g_mag=loope->f.getMag_double();
-      //ideally copy the Lagu code from newton() but newton should be enough
-      //we know multiplicity==2: first double newton's step, then solve for f'=0 using x:=x-f'/f''
+      //we know multiplicity==2: first twice the newton's step, then solve for f'=0 using x:=x-f'/f''
       double g_c_mag=loope->f_c.getMag_tmp(tmp)->toDouble();
       double g_cc_mag;
       if (g_mag>c->re.eps2()*1000)
@@ -2136,8 +2176,9 @@ void MandelEvaluator<BASE>::Bulb::findBulbBase(typename MandelMath::complex<BASE
   //so let's find r0, c0 aka rb, cb
   res_rb.assign(&res_xc);
   res_cb.assign(&res_xc);
+  firstStep=0;
   //double test_x0_mag=0;
-  for (int cycle=0; cycle<5; cycle++)
+  for (int cycle=0; cycle<6; cycle++)
   {
 #if 0 //attempt at 2-nd order approximation... quite a fail, and not needed any more since we reduce period later
     bulb.bulbe.eval2zzc(period, cb, rb);
@@ -2321,7 +2362,7 @@ void MandelEvaluator<BASE>::Bulb::findBulbBase(typename MandelMath::complex<BASE
     s1.recip();
     deltar.mul(&s1); //R
 #else //4-card c~-0.154723+I*1.031046 r~-0.153526+I*1.029663
-    loope->eval2(tmp, period, &res_cb, &res_rb, true); //TODO: dont' need f_cc here
+    loope->eval2(tmp, period, &res_cb, &res_rb, true); //TODO: don't need f_cc here
     if (cycle==0)
     { //test if period needs a cleanup
       //https://www.researchgate.net/publication/337838756_The_size_of_Mandelbrot_bulbs
@@ -2412,7 +2453,7 @@ void MandelEvaluator<BASE>::Bulb::findBulbBase(typename MandelMath::complex<BASE
     deltar.assign(&deltac); // fc/fz
     deltac.mul(&loope->f_zz, tmp);
     deltac.rsub(&loope->f_zc);
-    {
+    { //check fzc-fc/fz*fzz before .recip()
       double mag=deltac.getMag_tmp(tmp)->toDouble();
       if (mag<1e-8)
       {
@@ -2470,6 +2511,22 @@ void MandelEvaluator<BASE>::Bulb::findBulbBase(typename MandelMath::complex<BASE
       currentWorker->assign(deltar.im_s, s2_.im_s);*/
       deltac.lshift(-1);
     }
+    else if (cycle>0)
+    {
+      t3.assign(&res_cb);
+      t3.sub(&deltac);
+      if (t3.dist2_double(&first_cb, tmp)>firstStep/16)
+      { //either wrong reduction of period, or reduced all the way to previous bulb - so we're done
+        dbgPoint(); //should be caught at the end of last cycle
+        res_rb.assign(&prev_rb);
+        //TODO: baseZC, baseCC are wrong as well
+        break;
+      };
+    }
+    else
+    {
+      firstStep=deltac.getMag_double();
+    }
 
 
 
@@ -2499,7 +2556,22 @@ void MandelEvaluator<BASE>::Bulb::findBulbBase(typename MandelMath::complex<BASE
     res_rb.sub(&deltar);
     if (cycle==0)
     {
-      dbg_first_cb.assign(&res_cb);
+      //try to snap to the central root, makes everything work
+      loope->eval_near0(tmp, period, &res_cb);
+      int step=MandelMath::gcd(period, loope->near0iter_1);
+      //loope->first_multi.zero(0, 0);
+      loope->eval_zz(tmp, 0, &res_cb, &res_cb, false, true);
+      loope->sumA.assign(&res_cb);
+      for (int i=step; i<period; i+=step)
+      {
+        loope->eval_zz(tmp, step, &res_cb, &loope->first_multi, false, false);
+        loope->sumA.add(&loope->f);
+      }
+      loope->sumA.mul_double(step/double(period));
+      res_rb.assign(&loope->sumA);
+
+
+      first_cb.assign(&res_cb);
       dbg_first_rb.assign(&res_rb);
     };
 
@@ -2528,7 +2600,7 @@ solve [0=0+d*C+e*R*C+f*C^2/2+g*R^3/6+h*R^2*C/2, -1=e*C+g*R^2/2+h*R*C, -124.79612
       //x=a^(1/5) |y=x/a| a*y=a^(1/5) y=a^(-4/5)  y^5=a^-4  y:=y-(y^5-a^-4)/(5y^4)  y:=(4/5)*y+a^-4/(5y^4)
       //                                          y^-5=a^4  y:=y-(y^-5-a^4)/(-5*y^-6)=y*(6-a^4*y^5)/5   x=a*y
       if (!loope->eval_zz(tmp, period, &res_cb, &res_rb, true))
-      { //happens way too ofter... deltar guess suks
+      { //happens way too often... deltar guess suks
         res_foundMult=1;
         res_valid=false;
         return;// false;
@@ -2603,34 +2675,46 @@ solve [0=0+d*C+e*R*C+f*C^2/2+g*R^3/6+h*R^2*C/2, -1=e*C+g*R^2/2+h*R*C, -124.79612
         nop();
     };
 
-    double f_error, fz_error;
+    prev_rb.assign(&res_rb);
+
+    double f_error, fz_error, fz_error_fromr;
     t2.assign(&loope->f_z);
-    t2.sub(&target_f_z);
     t2.re.add_double(1);
+    fz_error_fromr=c->re.eps2()/t2.getMag_double()/4*loope->f_zz.getMag_double();//error in (prev)r~eps2/fz_error; error in fz~err(r)^2/2*f_zz~eps2/fz_error/2*f_zz
+    t2.sub(&target_f_z);
     f_error=loope->f.getMag_double(); //supposed to be 0 but just in case
     fz_error=t2.getMag_double();
     if (!res_card && f_error<1e-15 && fz_error<1e-4) //close enough to bulb base to start trying
     {
+#if 0
       if (!loope->eval_multi(tmp, period, &res_cb, &res_rb, &target_f_z, 0)) //toler=0, here we get close to base so the iterations should eventually be in a circle
       {
         res_foundMult=1;
         res_valid=false;
         return;// false;
       };
+#else
+      if (!loope->eval_near0(tmp, period, &res_cb))
+      {
+        res_foundMult=1;
+        res_valid=false;
+        return;// false;
+      };
+      if (loope->near0iter_1<1)
+        loope->multi=1;
+      else
+      {
+        loope->multi=period/MandelMath::gcd(period, loope->near0iter_1);
+        loope->sumA.assign(&res_rb);
+      }
+#endif
       if (loope->multi>1)
       {
         res_rb.assign(&loope->sumA);
-        /* don't need them anyway
-        currentWorker->sub(f.re_s, rb->re_s);
-        currentWorker->sub(f.im_s, rb->im_s);
-        currentWorker->add_double(f_z.re_s, -1);
-        */
         //reduce period
-        res_foundMult *= loope->multi;
         period /= loope->multi;
-        did_reduce_period=true;
 
-        //fix rb after moving to guessed root position, we rely on f(cb, rb)==0
+        //fix rb after moving to guessed root position, have to maintain f(cb, rb)==0
         for (int lcycle=0; lcycle<7; lcycle++)
         {
           //x^5=1 -> x:=x-(x^5-1)/(5*x^4)   NestList[#-(#^5-1)/(5*#^4) &, 0.6+0.8I, 10]
@@ -2652,7 +2736,7 @@ solve [0=0+d*C+e*R*C+f*C^2/2+g*R^3/6+h*R^2*C/2, -1=e*C+g*R^2/2+h*R*C, -124.79612
             res_valid=false;
             return;// false;
           };
-          res_rb.sub(&lagu.step);
+          res_rb.sub(&lagu.step); //no dist from eval_near0 //TODO: fail if (first) step >smallest..average dist from eval_multi
           if (loope->f.getMag_double()<3*c->re.eps2())
             break;
         }
@@ -2662,23 +2746,124 @@ solve [0=0+d*C+e*R*C+f*C^2/2+g*R^3/6+h*R^2*C/2, -1=e*C+g*R^2/2+h*R*C, -124.79612
         //or rather new_target^multi=old_target
         //starting from bulb.bulbe.first_multi
         //"next_target" = "bulbe.first_multi"
+
+        //current loope->f_z should be a much better guess for first_multi
+        loope->first_multi.assign(&loope->f_z);
+        loope->first_multi.re.add_double(1);
+
+        //there has to be a better way to tell if this was a refinement, or a jump to previous bulb/atom
+        //easy: 2nd time always quit
+        t3.assign(&loope->first_multi);
+        if (abs(t3.getMag1_tmp(tmp)->toDouble())>1e-2) //more like sqrt(fz_error)/multi
+        {
+          res_rb.assign(&prev_rb);
+          //TODO: baseZC, baseCC are wrong as well
+          break;
+        };
+        t3.pow_int(loope->multi, tmp);
+        double fz1_error=t3.getDist1_tmp(tmp)->toDouble();
+        bool primary=did_reduce_period;
+        if ((fz1_error>1.46*fz_error) != primary) //bulb p=22032 xc=-0.1744832996+i0.6619272216 mult=2 res_c=-0.1744832974710202+i0.6619272205853156 -> fz_error=2.48e-11,1.78e-11 fz1_error=2.5840570306057777e-11=1.0418,1.4504 fz_error
+          nop(); //happens rarely, still tuning the constant
+        if ((fz1_error>1.46*fz_error+fz_error_fromr) != primary)
+          nop(); //fz_error_fromr doesn't help
+        if (primary)
+        { //how close do we get on legit exits?
+          if (fz1_error<5*fz_error)
+            nop(); //not hit yet
+          if (fz1_error<50*fz_error)
+            nop(); //not hit yet
+          if (fz1_error<500*fz_error)
+            nop(); //not hit yet
+          if (fz1_error<5000*fz_error)
+            nop(); //not hit yet
+          if (fz1_error<50000*fz_error)
+            nop(); //not hit yet
+          /* testing against a constant will not work, ever
+          if (fz1_error<1e-6)
+            nop(); //3.6e-9 at (1/2)*(1/52360)
+          if (fz1_error<1e-4)
+            nop(); //gets hit at (1/231)*(1/2)
+          if (fz1_error<1e-3)
+            nop(); //gets hit at (1/2)*(1/111), ...   */
+          double k=fz1_error*res_foundMult*loope->multi;
+          (void)k;
+          /* seems k gets arbitrarily small
+          if (k<0.1)
+            nop(); //gets hit a lot
+          if (k<0.03)
+            nop(); //not any more //gets hit at (1/2)*(1/111), ...
+          if (k<0.01)
+            nop(); //not any more //gets hit at (1/2)*(1/111), ...
+          if (k<0.003)
+            nop(); //3.8e-4 at (1/2)*(1/52360)*/
+          double kk=fz1_error*res_foundMult*loope->multi*res_foundMult*loope->multi;
+          if (kk<4.0)
+            nop(); //not hit yet
+          if (kk<1.0)
+            nop(); //not hit yet
+          if (kk<0.1)
+            nop(); //not hit yet
+          if (kk<0.01)
+            nop(); //not hit yet
+          if (kk<0.001)
+            nop(); //not hit yet
+          res_rb.assign(&prev_rb);
+          //TODO: baseZC, baseCC are wrong as well
+          break;
+        }
+        else
+        {
+          if (fz1_error>1.01*fz_error)
+            nop(); //not hit yet
+          if (fz1_error>1.003*fz_error)
+            nop(); //not hit yet
+          if (fz1_error>1.001*fz_error)
+            nop(); //1.00101 at ...11016*(1/2)
+          /* testing against a constant will not work, ever
+          if (fz1_error>1e-4)
+            nop(); //gets as close to 1e-4 as fz_error
+          if (fz1_error>1.01e-4)
+            nop(); //
+          if (fz1_error>1.1e-4)
+            nop(); // */
+          double k=fz1_error*res_foundMult*loope->multi;
+          if (k>0.1)
+            nop(); //not hit yet
+          if (k>0.03)
+            nop(); //not hit yet
+          if (k>0.01)
+            nop(); //not hit yet
+          if (k>0.003)
+            nop(); //not hit yet
+          double kk=fz1_error*res_foundMult*loope->multi*res_foundMult*loope->multi;
+          if (kk>1.0)
+            nop(); //not hit yet
+          if (kk>0.1)
+            nop(); //not hit yet
+          if (kk>0.01)
+            nop(); //not hit yet
+          if (kk>0.003)
+            nop(); //0.0032 at 7/18, 0.0039 at 1/10
+        }
+
+        res_foundMult *= loope->multi;
+        if (did_reduce_period)
+          nop(); //did refine twice
+        else
+          did_reduce_period=true;
         loope->first_multi.sign(tmp); //help Newton a little
         for (int multicyc=0; multicyc<10; multicyc++)
         {
           //a=target_f_z  y=next_target  y:=y+y*(1-a^4*y^5)/5   x=a*y
           t3.assign(&loope->first_multi);
           t3.mul(&target_f_z, tmp);
-          t2.assign(&t3);
-          for (int i=2; i<loope->multi; i++)
-            t3.mul(&t2, tmp);
+          //t2.assign(&t3);
+          t3.pow_int(loope->multi-1, tmp);
           t3.mul(&loope->first_multi, tmp); //a^4*y^5
           t3.chs();
           t3.re.add_double(1); //(1-a^4*y^5)
-          /*t2.re.zero(bulbe.multi);
-          currentWorker->recip(t2.re);
-          currentWorker->mul(t3.re, t2.re);
-          currentWorker->mul(t3.im, t2.re); //(1-a^4*y^5)/5 */
-          t3.mul_double(1/loope->multi); //(1-a^4*y^5)/5
+          t3.mul_double(1.0/loope->multi); //(1-a^4*y^5)/5
           double dist1=t3.getMag_double();
           t3.mul(&loope->first_multi, tmp); //y*(1-a^4*y^5)/5
           loope->first_multi.add(&t3); //y+=y*(1-a^4*y^5)/5
@@ -2864,7 +3049,7 @@ MandelEvaluator<BASE>::Bulb::Bulb(MandelMath::NumberType ntype, MandelLoopEvalua
   loope(loope),
   baseZC(ntype), baseCC(ntype),
   t1(ntype), t2(ntype), t3(ntype), deltac(ntype), deltar(ntype),
-  dbg_first_cb(ntype), dbg_first_rb(ntype),
+  first_cb(ntype), firstStep(0), dbg_first_rb(ntype), prev_rb(ntype),
   target_f_z(ntype),
   res_cb(ntype), res_rb(ntype), res_xc(ntype),
   res_baseZC(ntype), res_baseCC(ntype),
@@ -5353,6 +5538,7 @@ void MandelEvaluator<BASE>::evaluateJulia(int juliaPeriod)
     if (need_reset_check==1)
       {
         juliaData.store->rstate=JuliaPointStore::ResultState::stPeriod2;
+        #if 0 //disable interior completely
         /*
         loope.eval_zz(&tmp, juliaPeriod, &currentParams.c, &currentParams.first_z, false, true); //this is the same for all points...
         interior.inte_abs.assign(*loope.f_z.getMag_tmp(&tmp));
@@ -5685,6 +5871,7 @@ void MandelEvaluator<BASE>::evaluateJulia(int juliaPeriod)
         juliaData.store->interior.cycles_until_root=didcycles;
         //currentWorker->assign(&currentData.fc_c_re, &eval.fz_r_re);
         //currentWorker->assign(&currentData.fc_c_im, &eval.fz_r_im);
+        #endif //disable interior completely
         break;
       };
     if (need_reset_check==1+100)

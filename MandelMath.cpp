@@ -2233,7 +2233,7 @@ void number<number_a *>::constructLateBecauseQtIsAwesome(NumberType ntype)
 template<>
 number<number_a *>::~number()
 {
-  nop();
+  //nop();
   delete store;
   store=nullptr;
 }
@@ -2750,7 +2750,7 @@ void complex<BASE>::sqrt(Scratchpad *tmp)
 template<typename BASE>
 void complex<BASE>::pow_int(int n, Scratchpad *tmp)
 {
-  if (is0() || n==1)
+  if (n==1 || is0())
     return;
   if (n<=0)
   {
@@ -2765,10 +2765,15 @@ void complex<BASE>::pow_int(int n, Scratchpad *tmp)
   tmp->tmp3.assign(re);
   tmp->tmp4.assign(im);
 
-  unsigned int mask=1<<31;
-  while ((n&mask)==0)
-    mask>>=1;
-  mask>>=1;
+  //works for n>=2
+  int n2=n>>2;
+  unsigned int mask=1;
+  while (n2)
+  {
+    mask<<=1;
+    n2>>=1;
+  }
+
   while (mask>0)
   {
     sqr(tmp);
@@ -2929,7 +2934,8 @@ double complex<BASE>::dist2_double(const complex *other, Scratchpad *tmp) const
   tmp->tmp2.sqr();
   tmp->tmp1.add(tmp->tmp2);
   return tmp->tmp1.toDouble();*/
-  return sqr_double(tmp->tmp1.toDouble())+sqr_double(tmp->tmp2.toDouble());
+  double result=sqr_double(tmp->tmp1.toDouble())+sqr_double(tmp->tmp2.toDouble());
+  return result;
 }
 
 template<typename BASE>

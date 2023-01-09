@@ -33,6 +33,13 @@ int ctz16(int x);
 template <int total, int block> int ReverseBits(int val);
 bool is2kof(int big, int small); //big == small*2^k
 
+template <typename E, E ...vals>
+bool enum_is_one_of(E value)
+{
+  return ((value==vals) || ...);
+}
+
+
 enum NumberType { typeEmpty
 #if NUMBER_DOUBLE_EXISTS
             , typeDouble

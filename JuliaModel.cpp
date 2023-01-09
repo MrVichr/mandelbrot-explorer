@@ -285,9 +285,18 @@ void JuliaModel::recomputeRoot(int max_effort)
       precisionRecord->orbit.evaluator.mandelData.store->rstate==MandelPointStore::ResultState::stPeriod3)
   {
     precisionRecord->params.period=precisionRecord->orbit.evaluator.mandelData.store->period;
-    precisionRecord->params.root.assign(&precisionRecord->orbit.evaluator.mandelData.root);
     precisionRecord->orbit.evaluator.currentParams.juliaRoot.assign(&precisionRecord->orbit.evaluator.mandelData.root);
-    precisionRecord->orbit.evaluator.loope.eval_zz(&precisionRecord->orbit.evaluator.tmp, precisionRecord->params.period, &precisionRecord->orbit.evaluator.currentParams.c, &precisionRecord->orbit.evaluator.mandelData.root, false, true);
+    precisionRecord->params.root.assign(&precisionRecord->orbit.evaluator.currentParams.juliaRoot);
+    precisionRecord->orbit.evaluator.loope.eval_zz(&precisionRecord->orbit.evaluator.tmp, precisionRecord->params.period, &precisionRecord->orbit.evaluator.currentParams.c, &precisionRecord->orbit.evaluator.currentParams.juliaRoot, false, true);
+    precisionRecord->orbit.evaluator.currentParams.juliaAlpha.assign(&precisionRecord->orbit.evaluator.loope.f_z);
+    //precisionRecord->orbit.evaluator.currentParams.juliaAlpha.recip(&precisionRecord->orbit.evaluator.tmp);
+  }
+  else if (precisionRecord->orbit.evaluator.mandelData.store->rstate==MandelPointStore::ResultState::stMaxIter)
+  {
+    precisionRecord->params.period=precisionRecord->orbit.evaluator.mandelData.store->near0iter_1;
+    precisionRecord->orbit.evaluator.currentParams.juliaRoot.assign(&precisionRecord->orbit.evaluator.mandelData.f);
+    precisionRecord->params.root.assign(&precisionRecord->orbit.evaluator.currentParams.juliaRoot);
+    precisionRecord->orbit.evaluator.loope.eval_zz(&precisionRecord->orbit.evaluator.tmp, precisionRecord->params.period, &precisionRecord->orbit.evaluator.currentParams.c, &precisionRecord->orbit.evaluator.currentParams.juliaRoot, false, true);
     precisionRecord->orbit.evaluator.currentParams.juliaAlpha.assign(&precisionRecord->orbit.evaluator.loope.f_z);
     //precisionRecord->orbit.evaluator.currentParams.juliaAlpha.recip(&precisionRecord->orbit.evaluator.tmp);
   }
@@ -924,7 +933,11 @@ void JuliaModel::paintOrbit(ShareableImageWrapper image, int x, int y)
     {
       int line_ex, line_ey;
 
-      if ((resultStore->rstate==JuliaPointStore::ResultState::stPeriod2 || resultStore->rstate==JuliaPointStore::ResultState::stPeriod3 || resultStore->rstate==JuliaPointStore::ResultState::stMaxIter) &&
+      if (MandelMath::enum_is_one_of<JuliaPointStore::ResultState,
+                          JuliaPointStore::ResultState::stPeriod2,
+                          JuliaPointStore::ResultState::stPeriod3,
+                          JuliaPointStore::ResultState::stUnknown,
+                          JuliaPointStore::ResultState::stMaxIter>(resultStore->rstate) &&
           evaluator.juliaData.store->iter<precisionRecord->params.period+resultStore->near0iter_1)
       { //paint first period fully
         evaluator.currentParams.maxiter=evaluator.juliaData.store->iter+1;
@@ -942,6 +955,24 @@ void JuliaModel::paintOrbit(ShareableImageWrapper image, int x, int y)
           painter.drawLine(line_sx, line_sy, line_ex, line_ey);
         line_sx=line_ex;
         line_sy=line_ey;
+      };
+
+      if (evaluator.juliaData.store->iter<=precisionRecord->params.period)
+      {
+        evaluator.bulb.t1.assign(&evaluator.currentParams.first_z);
+        evaluator.bulb.t1.mul(&evaluator.juliaData.fz_z, &evaluator.tmp);
+        evaluator.bulb.t2.assign(&evaluator.juliaData.f);
+        //f_z_target=1 evaluator.bulb.t2.mul(f_z_target, tmp);
+        evaluator.bulb.t2.rsub(&evaluator.bulb.t1); //z*f_z-f*f_z_target
+        evaluator.bulb.t1.assign(&evaluator.juliaData.fz_z);
+        evaluator.bulb.t1.re.add_double(-1); //evaluator.bulb.t1.sub(f_z_target);
+        evaluator.bulb.t1.recip(&evaluator.tmp);
+        evaluator.bulb.t1.mul(&evaluator.bulb.t2, &evaluator.tmp); //s1=A
+        reimToPixel(&line_ex, &line_ey, &evaluator.bulb.t1, &tmp);
+        if (line_ex>=-3 && line_ex<=10003 && line_ey>=-3 && line_ey<=10003)
+        {
+          painter.drawEllipse(line_ex-1, line_ey-1, 3, 3);
+        };
       };
     }
   }

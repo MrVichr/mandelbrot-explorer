@@ -883,7 +883,7 @@ void MandelModel::paintOrbit(ShareableImageWrapper image, int x, int y)
     if (precisionRecord->orbit.evaluator.bulb.res_valid)
     {
       painter.setBrush(QBrush(QColor(0, 0xff, 0xff)));
-      reimToPixel(&circ_x, &circ_y, &precisionRecord->orbit.evaluator.bulb.dbg_first_cb, &tmp);
+      reimToPixel(&circ_x, &circ_y, &precisionRecord->orbit.evaluator.bulb.first_cb, &tmp);
       if ((circ_x>=-3) && (circ_x<=10003) && (circ_y>=-3) && (circ_y<=10003))
       {
         painter.setPen(QColor(0, 0x80, 0)); //bulb base c

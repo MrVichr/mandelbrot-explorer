@@ -232,6 +232,11 @@ void LaguerreModel::recomputeRoot(int max_effort)
     precisionRecord->params.period=precisionRecord->orbit.evaluator.mandelData.store->near0iter_1;//period;
     precisionRecord->params.root.assign(&precisionRecord->orbit.evaluator.mandelData.root);
   }
+  else if (precisionRecord->orbit.evaluator.mandelData.store->rstate==MandelPointStore::ResultState::stMaxIter)
+  {
+    precisionRecord->params.period=precisionRecord->orbit.evaluator.mandelData.store->near0iter_1;
+    precisionRecord->params.root.assign(&precisionRecord->orbit.evaluator.mandelData.f);
+  }
   else
   {
     precisionRecord->params.period=1;
