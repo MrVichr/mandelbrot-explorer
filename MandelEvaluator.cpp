@@ -228,6 +228,7 @@ void JuliaPointStore::assign(const JuliaPointStore *src)
   //lookper_nearr_dist_touched=src->lookper_nearr_dist_touched;
   near0iter_1=src->near0iter_1;
   nearziter_0=src->nearziter_0;
+  bigfzfzziter=src->bigfzfzziter;
   //newton_iter=src->newton_iter;
   //period=src->period;
   //surehand=src->surehand;
@@ -237,11 +238,11 @@ void JuliaPointStore::assign(const JuliaPointStore *src)
 
 template<typename BASE>
 JuliaPoint<BASE>::JuliaPoint(JuliaPointStore *store, MandelMath::NumberType ntype):
-  store(store), f(ntype), fz_z(ntype), fz_z_mag(ntype),
+  store(store), f(ntype), fz_z(ntype), fzz_z(ntype), fz_z_mag(ntype),
   //sure_fz_mag(ntype), sure_startf(ntype), lookper_startf(ntype),
   lookper_distr(ntype), lookper_fz(ntype),
   //lookper_nearr_dist(ntype), lookper_totalFzmag(ntype),
-  nearzm(ntype), near0fzm(ntype), near0m(ntype), since0fzm(ntype), extangle(ntype)
+  nearzm(ntype), near0fzm(ntype), near0m(ntype), since0fzm(ntype), bigfzfzzm(ntype), shrinkfactor(ntype), extangle(ntype)
 {
 }
 
@@ -266,14 +267,17 @@ void JuliaPoint<BASE>::readFrom(void *storage, int index)
 {
   //store->assign(src.store);
   f.readFrom(storage, index+iiw_f_);
-  fz_z.readFrom(storage, index+iiw_fc_c);
-  fz_z_mag.readFrom(storage, index+iiw_fz_c_mag);
+  fz_z.readFrom(storage, index+iiw_fz_z);
+  fzz_z.readFrom(storage, index+iiw_fzz_z);
+  fz_z_mag.readFrom(storage, index+iiw_fz_z_mag);
   lookper_distr.readFrom(storage, index+iiw_lookper_distr);
   lookper_fz.readFrom(storage, index+iiw_lookper_fz);
   near0m.readFrom(storage, index+iiw_near0m);
   nearzm.readFrom(storage, index+iiw_nearzm);
   near0fzm.readFrom(storage, index+iiw_near0fzm);
   since0fzm.readFrom(storage, index+iiw_since0fzm);
+  bigfzfzzm.readFrom(storage, index+iiw_bigfzfzzm);
+  shrinkfactor.readFrom(storage, index+iiw_shrinkfactor);
   extangle.readFrom(storage, index+iiw_extangle);
 }
 
@@ -282,14 +286,17 @@ void JuliaPoint<BASE>::writeTo(void *storage, int index)
 {
   //store->assign(src.store);
   f.writeTo(storage, index+iiw_f_);
-  fz_z.writeTo(storage, index+iiw_fc_c);
-  fz_z_mag.writeTo(storage, index+iiw_fz_c_mag);
+  fz_z.writeTo(storage, index+iiw_fz_z);
+  fzz_z.writeTo(storage, index+iiw_fzz_z);
+  fz_z_mag.writeTo(storage, index+iiw_fz_z_mag);
   lookper_distr.writeTo(storage, index+iiw_lookper_distr);
   lookper_fz.writeTo(storage, index+iiw_lookper_fz);
   near0m.writeTo(storage, index+iiw_near0m);
   nearzm.writeTo(storage, index+iiw_nearzm);
   near0fzm.writeTo(storage, index+iiw_near0fzm);
   since0fzm.writeTo(storage, index+iiw_since0fzm);
+  bigfzfzzm.writeTo(storage, index+iiw_bigfzfzzm);
+  shrinkfactor.writeTo(storage, index+iiw_shrinkfactor);
   extangle.writeTo(storage, index+iiw_extangle);
 }
 
@@ -306,14 +313,18 @@ void JuliaPoint<BASE>::zero(const MandelMath::complex<BASE> *first_z)
   nearzm.zero(20);//assign(near0m);
   near0fzm.zero(1);
   since0fzm.zero(1);
+  bigfzfzzm.zero(0);
+  shrinkfactor.zero(1, 0);
 
   fz_z.zero(1, 0);
   fz_z_mag.zero(1);
+  fzz_z.zero(0, 0);
   //lookper resets at first iter
   //lookper_distr
   //lookper_fz
   store->near0iter_1=1;
   store->nearziter_0=1;
+  store->bigfzfzziter=0;
 
   //near0m.assign(f.getMag_tmp(tmp));
 
@@ -2763,9 +2774,9 @@ solve [0=0+d*C+e*R*C+f*C^2/2+g*R^3/6+h*R^2*C/2, -1=e*C+g*R^2/2+h*R*C, -124.79612
         t3.pow_int(loope->multi, tmp);
         double fz1_error=t3.getDist1_tmp(tmp)->toDouble();
         bool primary=did_reduce_period;
-        if ((fz1_error>1.46*fz_error) != primary) //bulb p=22032 xc=-0.1744832996+i0.6619272216 mult=2 res_c=-0.1744832974710202+i0.6619272205853156 -> fz_error=2.48e-11,1.78e-11 fz1_error=2.5840570306057777e-11=1.0418,1.4504 fz_error
-          nop(); //happens rarely, still tuning the constant
-        if ((fz1_error>1.46*fz_error+fz_error_fromr) != primary)
+        if ((fz1_error>2.42*fz_error) != primary) //bulb p=22032 xc=-0.1744832996+i0.6619272216 mult=2 res_c=-0.1744832974710202+i0.6619272205853156 -> fz_error=2.48e-11,1.78e-11 fz1_error=2.5840570306057777e-11=1.0418,1.4504 fz_error
+          nop(); //happens rarely, still tuning the constant   2.42 at c=-0.56221793769583428+I*0.6768911909908297 p=4680->1560
+        if ((fz1_error>2.42*fz_error+fz_error_fromr) != primary)
           nop(); //fz_error_fromr doesn't help
         if (primary)
         { //how close do we get on legit exits?
@@ -2815,11 +2826,11 @@ solve [0=0+d*C+e*R*C+f*C^2/2+g*R^3/6+h*R^2*C/2, -1=e*C+g*R^2/2+h*R*C, -124.79612
         else
         {
           if (fz1_error>1.01*fz_error)
-            nop(); //not hit yet
+            nop(); //1.2595 at c=-0.5622179376996712+I*0.67689119098929496 p=8970->390
           if (fz1_error>1.003*fz_error)
-            nop(); //not hit yet
+            nop(); //1.003369 at c=-0.56221793788427021+I*0.6768911909821327 p=260->130
           if (fz1_error>1.001*fz_error)
-            nop(); //1.00101 at ...11016*(1/2)
+            nop(); //1.00101 at preset "11016"*(1/2)
           /* testing against a constant will not work, ever
           if (fz1_error>1e-4)
             nop(); //gets as close to 1e-4 as fz_error
@@ -3217,6 +3228,7 @@ int MandelEvaluator<BASE>::laguerre(int period, const MandelMath::complex<BASE> 
   int lastm=1;
   double lastm_err=0;
   int prevm=1;
+  bool last_was_newton=true;
   //double prevm_err=10;
   bool triedZeroGzrm=false;
   /*struct //instead, implement the last case in periodCheck()
@@ -3325,19 +3337,50 @@ int MandelEvaluator<BASE>::laguerre(int period, const MandelMath::complex<BASE> 
 
       bool cond1=prevm==lastm && lastm_err<0.125;//we don't *really* need prevm_err small   && prevm_err<0.125;
       //even better: once step<eps^(3/4), choose between previous and current root and that's it
+      double step_limit;
+      if (lastm_err<=0 || //==0 really, just in case
+          lastm!=1 || !cond1 || period<=1) //no need to compute step_limit
+        step_limit=c->re.eps234();
+      else if (last_was_newton)
+      {
+        step_limit=c->re.eps2()/(lastm_err)*4; //rel. error after Newton step ~ sqrt(lastm_err)/2  (for lastm==1)
+        if (step_limit>c->re.eps234())
+          step_limit=c->re.eps234();
+        double step=newt.newtX.getMag_double();
+        if ((step<step_limit) && !(newt.newtX.getMag_double()<c->re.eps234()))
+          nop(); //we stop now and continued before
+        else if (!(step<step_limit) && (newt.newtX.getMag_double()<c->re.eps234()))
+          nop(); //we continue now and stopped before
+      }
+      else
+      {
+        step_limit=c->re.eps2()/MandelMath::sqr_double(lastm_err*4); //rel. error after Ostrowski step ~ lastm_err/4
+        if (step_limit>c->re.eps234())
+          step_limit=c->re.eps234();
+        double step=newt.newtX.getMag_double();
+        if ((step<step_limit) && !(newt.newtX.getMag_double()<c->re.eps234()))
+          nop(); //we stop now and continued before
+        else if (!(step<step_limit) && (newt.newtX.getMag_double()<c->re.eps234()))
+          nop(); //we continue now and stopped before
+      }
       bool stepgood=lastm==1 && cond1 &&
-                    (newt.newtX.getMag_double()<c->re.eps234() ||
+                    (newt.newtX.getMag_double()<step_limit ||
                      period<=1 || //with some luck, we did a Laguerre step and that hits the root in one step (period=1 .. degree=2)
                      //when gz_r_mag<eps^(1/4), we won't make steps smaller than eps234
                      //newt.newtX.getMag_double()<currentWorker->eps234()*newtres.accy_multiplier || //covers newt.newtX.getMag_double()<currentWorker->eps234()
                      prev_grmag<2*c->re.eps2()); //hopefully better than currentWorker->eps234()*newtres.accy_multiplier
-
       //for multiple root, step never gets small, but value does
       //bool ggood=prev_grmag<currentWorker->eps234();
       //if prevm==2 we arrive at the middle of the 2 roots and we're not quite done yet
       //for prevm>2 there is actually a root in the middle so all is good
       //before unleashing the full power of prevm>lastm, lemme try
       bool ggood=lastm>1 && cond1 && prev_grmag<c->re.eps234();
+      //sometimes lastm says 3 but in reality it's 1; crosscheck by f/f' small (ideally just f small && f' small, but what limit?)
+      //since lastm>1, we know f'' is not small; since lastm is of order ~1, we know f/f' ~ f'/f''
+      //so check f'/f'' instead of f/f'
+      bool ggood2=gz_r_mag*(lastm*lastm)<loope.f_zz.getMag_double()*c->re.eps234();
+      if (ggood && !ggood2)
+        ggood=false; //quite rare but helps
       if (newtonCycle>0 && (stepgood || ggood))
       {
         if (g_r_mag>prev_grmag)
@@ -3596,7 +3639,7 @@ int MandelEvaluator<BASE>::laguerre(int period, const MandelMath::complex<BASE> 
     newt.fzzf.assign(&newt.fzz_r);
     newt.fzzf.mul(&newt.tmp1, &tmp); //f''/f
 
-    // laguH=laguG^2^2-fzzf
+    // laguH=laguG^2-fzzf
     // m=Round( Re(G^2*H^T)/mag(H) )
     // a=1/(G/n +- sqrt( (1/m-1/n)*(G^2-fzzf-G^2/n) ))
     newt.laguG2.assign(&newt.laguG);
@@ -4051,6 +4094,7 @@ int MandelEvaluator<BASE>::laguerre(int period, const MandelMath::complex<BASE> 
         newtres.first_guess_lagu.sub(&newt.laguX);
       };
     };
+    last_was_newton=true;
     if (!newt_valid)
     {
       if (!lagu_valid)
@@ -4061,6 +4105,7 @@ int MandelEvaluator<BASE>::laguerre(int period, const MandelMath::complex<BASE> 
       {
         movedOff=true;
         newt.newtX.assign(&newt.laguX);
+        last_was_newton=false;
       }
       else
         return 0;
@@ -4074,6 +4119,7 @@ int MandelEvaluator<BASE>::laguerre(int period, const MandelMath::complex<BASE> 
           (fastHoming && (newtonCycle<2) && (lastm>1)))
       {
         newt.newtX.assign(&newt.laguX);
+        last_was_newton=false;
       }
       else
       {//take the smaller of newton and laguerre to a) avoid Newton's jumps when moving off the real axis, b) avoid Laguerre skipping to far root
@@ -4082,6 +4128,7 @@ int MandelEvaluator<BASE>::laguerre(int period, const MandelMath::complex<BASE> 
         if (N_mag*1.05>L_mag) //5% will do no harm, and switch to Lagu can speed up convergence
         {
           newt.newtX.assign(&newt.laguX);
+          last_was_newton=false;
         };
       }
     }
@@ -4661,7 +4708,8 @@ int MandelEvaluator<BASE>::estimateInterior(int period, const MandelMath::comple
   //  of derivatives<1 -> would refine period
 
   newt.tmp2.assign(loope.f_z_mag);
-  newt.tmp2.add_double(-1);
+  //newt.tmp2.sqrt(); //(1-|fz|)/(...) same at centers, touches near edges; official formula overlaps 2x near edges
+  newt.tmp2.add_double(-1); //|fz|^2-1
   /*if (abs(newt.tmp2.toDouble())<6e-18) //for c=0.25+0.5i we find r=0.0002615+0.5000231 -> f_z_mag=1.00009284... (per=4/1)
   { //parabolic point
     dbgPoint();
@@ -5209,15 +5257,9 @@ void MandelEvaluator<BASE>::evaluateJulia(int juliaPeriod)
          (juliaData.store->rstate==JuliaPointStore::ResultState::stUnknown) &&
          this->workIfEpoch==this->busyEpoch;
        juliaData.store->iter++)
-  { //? near0iter gives cycle offset, near_first_z_iter gives period; for mandel near0iter+1=near_first_z_iter //not really ;also we know julia period in advance
-    // peri   1   2   3  jul   jul
-    // near0  1   2   3   1     2
-    // nearz  1   2   3   3     3
-    // test   0       0   0     0
-    // test   3       9  7,10  8,11
-    // test   6      18 16,19 17,20
-    // test  12      36 34,37 35,38
-    //no worky, can't really find period from nearz and near0
+  {
+    //can't really find period from nearz and near0
+    //so we use the result of mandel()
     if (juliaData.store->iter==0)
     {
       juliaData.store->lookper_startiter=juliaData.store->iter;
@@ -5226,7 +5268,7 @@ void MandelEvaluator<BASE>::evaluateJulia(int juliaPeriod)
       juliaData.lookper_distr.sub(&currentParams.juliaRoot);
     };
     const MandelMath::number<BASE> *f_mag1=juliaData.f.getMag_tmp(&tmp);
-    if (!f_mag1->isle(currentParams.juliaBailout_))
+    if (!f_mag1->isle(currentParams.juliaBailout))
     {
       juliaData.store->rstate=JuliaPointStore::ResultState::stOutside;
       //theory says the relative error in estimate is less than 3/bailout for large bailout
@@ -5255,8 +5297,8 @@ void MandelEvaluator<BASE>::evaluateJulia(int juliaPeriod)
         // ln(z)*z/z'/z^(1/2^iter)/2 <= dist <= 2*ln(z)*z/z'
         // ln(z)*z/z'/2 <= dist <= ln(z)*z/z'*2      with z^(1/2^iter)~1 happens close to fractal because high iter, small z
 
-        juliaData.store->exterior.verify_hits=x2*sqrt(fm/fcm);
-        juliaData.store->exterior.verify_avoids=juliaData.store->exterior.verify_hits*0.25;
+        juliaData.store->exterior.verify_mixed=x2*sqrt(fm/fcm);
+        juliaData.store->exterior.verify_empty=juliaData.store->exterior.verify_mixed*0.25;
         if (juliaData.store->iter>71)
         { }
         else
@@ -5264,8 +5306,8 @@ void MandelEvaluator<BASE>::evaluateJulia(int juliaPeriod)
           double G=ldexp(x2, -1-juliaData.store->iter); //log(fm)/2/2^iter
           if (juliaData.store->iter>26)
           {
-            juliaData.store->exterior.verify_hits+=G*G/6*juliaData.store->exterior.verify_hits;
-            juliaData.store->exterior.verify_avoids+=G*(G*2/3-1)*juliaData.store->exterior.verify_avoids;
+            juliaData.store->exterior.verify_mixed+=G*G/6*juliaData.store->exterior.verify_mixed;
+            juliaData.store->exterior.verify_empty+=G*(G*2/3-1)*juliaData.store->exterior.verify_empty;
           }
           else
           {
@@ -5273,8 +5315,8 @@ void MandelEvaluator<BASE>::evaluateJulia(int juliaPeriod)
             //currentData.store->exterior_hits*=(ex-1/ex)/x/2;
             //currentData.store->exterior_avoids*=(1-1/(ex*ex))/x/2;
             //(exp(x*(2^-iter))-1/exp(x*(2^-iter)))/x*2^iter   (exp(a)-1/exp(a))/a~(1+a-1+a)/a=2
-            juliaData.store->exterior.verify_hits=ldexp((exp(G)-1/exp(G))*sqrt(fm/fcm), juliaData.store->iter);
-            juliaData.store->exterior.verify_avoids=ldexp((1-1/exp(2*G))*sqrt(fm/fcm), juliaData.store->iter-2);
+            juliaData.store->exterior.verify_mixed=ldexp((exp(G)-1/exp(G))*sqrt(fm/fcm), juliaData.store->iter);
+            juliaData.store->exterior.verify_empty=ldexp((1-1/exp(2*G))*sqrt(fm/fcm), juliaData.store->iter-2);
           }
         }
 
@@ -5285,8 +5327,8 @@ void MandelEvaluator<BASE>::evaluateJulia(int juliaPeriod)
         double fcm_p2=juliaData.since0fzm.toDouble();
         double fm_p2=juliaData.f.getMag_double();
         double x2_p2=std::log(fm_p2);
-        double exterior_p2_hits=x2_p2*sqrt(fm_p2/fcm_p2);
-        double exterior_p2_avoids=exterior_p2_hits*0.25;
+        double exterior_p2_mixed=x2_p2*sqrt(fm_p2/fcm_p2);
+        double exterior_p2_empty=exterior_p2_mixed*0.25;
         if (iter_p2>71)
         { }
         else
@@ -5294,8 +5336,8 @@ void MandelEvaluator<BASE>::evaluateJulia(int juliaPeriod)
           double G=ldexp(x2_p2, -1-iter_p2); //log(fm)/2/2^iter
           if (iter_p2>26) //G^4/120=1e-19 for G<6e-5 for iter_p2>19; G^3/3=1e-19 for iter_p2>=26
           {
-            exterior_p2_hits+=G*G/6*exterior_p2_hits; //2G+G^3/3+G^5/60+...=2G*(G^2/6+ G^4/120+...)
-            exterior_p2_avoids+=G*(G*2/3-1)*exterior_p2_avoids; //2G-2G^2+4G^3/3 -2G^4/3...=2G*(1-G+2G^2/3 -G^3/3...)
+            exterior_p2_mixed+=G*G/6*exterior_p2_mixed; //2G+G^3/3+G^5/60+...=2G*(G^2/6+ G^4/120+...)
+            exterior_p2_empty+=G*(G*2/3-1)*exterior_p2_empty; //2G-2G^2+4G^3/3 -2G^4/3...=2G*(1-G+2G^2/3 -G^3/3...)
           }
           else
           {
@@ -5303,31 +5345,30 @@ void MandelEvaluator<BASE>::evaluateJulia(int juliaPeriod)
             //currentData.store->exterior_hits*=(ex-1/ex)/x/2;
             //currentData.store->exterior_avoids*=(1-1/(ex*ex))/x/2;
             //(exp(x*(2^-iter))-1/exp(x*(2^-iter)))/x*2^iter   (exp(a)-1/exp(a))/a~(1+a-1+a)/a=2
-            exterior_p2_hits=ldexp((exp(G)-1/exp(G))*sqrt(fm_p2/fcm_p2), iter_p2);
-            exterior_p2_avoids=ldexp((1-1/exp(2*G))*sqrt(fm_p2/fcm_p2), iter_p2-2);
+            exterior_p2_mixed=ldexp((exp(G)-1/exp(G))*sqrt(fm_p2/fcm_p2), iter_p2);
+            exterior_p2_empty=ldexp((1-1/exp(2*G))*sqrt(fm_p2/fcm_p2), iter_p2-2);
           }
         }
 
         //2. walk 1 iteration backward
-        //double exterior_p1_hits, exterior_p1_avoids;
         double near0=std::sqrt(juliaData.near0m.toDouble());
-        juliaData.store->exterior.none_hits=exterior_p2_hits/2/near0; //preview of simple scaling
-        juliaData.store->exterior.none_avoids=exterior_p2_avoids/2/near0;
+        juliaData.store->exterior.none_mixed=exterior_p2_mixed/2/near0; //preview of simple scaling
+        juliaData.store->exterior.none_empty=exterior_p2_empty/2/near0;
 
         // r=dist estimate of previous step "d.e.before"
         // (x+r exp(i t))^2+c=x*x+2*x*r exp(i t)+r*r*exp(2 i t)+c
         //     2|x|r+r^2=d.e.after
         //     for r << |x| :
         //     d.e.before=d.e.after/2/|x|
-        MandelMath::real_double_quadratic(&juliaData.store->exterior.always_hits, 1, near0, -exterior_p2_hits); //actual quad step
-        MandelMath::real_double_quadratic(&juliaData.store->exterior.always_avoids, 1, near0, -exterior_p2_avoids);
+        MandelMath::real_double_quadratic(&juliaData.store->exterior.always_mixed, 1, near0, -exterior_p2_mixed); //actual quad step
+        MandelMath::real_double_quadratic(&juliaData.store->exterior.always_empty, 1, near0, -exterior_p2_empty);
 
         //trying to track the sinh during glue step, seems to actually hurt
-        double glue_scale, glue_scale_avoids;
+        double glue_scale, glue_scale_empty;
         if (iter_p2>68) //(x2>>68)+1 ~ 1
         {
           glue_scale=1;
-          glue_scale_avoids=1;
+          glue_scale_empty=1;
         }
         else if (iter_p2>35) //with z<37 (bailout 10^8), z^2*(1/a^2)/6=1e-6 for a=2^14; 1e-19 for a=2^36 (actually should check 2nd term but who cares)
         { //sinh(x/a)/sinh(x/b)*a/b=1+z^2*(1/a^2-1/b^2)/6+O(z^4);
@@ -5335,7 +5376,7 @@ void MandelEvaluator<BASE>::evaluateJulia(int juliaPeriod)
           double glue_g2=ldexp(x2_p2, -1-(iter_p2+1));
           glue_scale=1+(glue_g1*glue_g1-glue_g2*glue_g2)/6;
           double glue_t1=-ldexp(1, -iter_p2-1);//ldexp(1, -iter_p2-1)-ldexp(1, -iter_p2);  err~(x2_p2/2*glue_t1)^2/2 -> glue_t1<2^-36 for err~1e-19
-          glue_scale_avoids=1+x2_p2/2*glue_t1;
+          glue_scale_empty=1+x2_p2/2*glue_t1;
         }
         else
         {
@@ -5343,42 +5384,49 @@ void MandelEvaluator<BASE>::evaluateJulia(int juliaPeriod)
           double glue_g2=ldexp(x2_p2, -1-(iter_p2+1));
           glue_scale=std::sinh(glue_g1)/std::sinh(glue_g2)/2;
           double glue_t1=-ldexp(1, -iter_p2-1);//ldexp(1, -iter_p2-1)-ldexp(1, -iter_p2);
-          glue_scale_avoids=exp(x2_p2/2*glue_t1);
+          glue_scale_empty=exp(x2_p2/2*glue_t1);
         }
-        glue_scale_avoids=1/(glue_scale*glue_scale_avoids);
+        glue_scale_empty*=glue_scale;
+        glue_scale_empty=1/glue_scale_empty;
         glue_scale=1/glue_scale;
 
-        juliaData.store->exterior.none_hits*=glue_scale;
-        juliaData.store->exterior.none_avoids*=glue_scale_avoids;
+        juliaData.store->exterior.none_mixed*=glue_scale;
+        juliaData.store->exterior.none_empty*=glue_scale_empty;
+        //did I forget to scale always_ or was it on purpose? who knows...
+        //for small iter_p2~1..5 it sucks both ways
+        //for large iter_p2 it's 0.999 and similar
+        //seems best to scale empty but not mixed
+        //juliaData.store->exterior.always_mixed*=glue_scale;
+        //juliaData.store->exterior.always_empty*=glue_scale_empty;
 
         if (!use_glue)
         {
-          juliaData.store->exterior.condi_hits=juliaData.store->exterior.none_hits;
-          juliaData.store->exterior.condi_avoids=juliaData.store->exterior.none_avoids;
-          juliaData.store->exterior.blend_hits_=juliaData.store->exterior.none_hits;
-          juliaData.store->exterior.blend_avoids=juliaData.store->exterior.none_avoids;
+          juliaData.store->exterior.condi_mixed=juliaData.store->exterior.none_mixed;
+          juliaData.store->exterior.condi_empty=juliaData.store->exterior.none_empty;
+          juliaData.store->exterior.blend_mixed=juliaData.store->exterior.none_mixed;
+          juliaData.store->exterior.blend_empty=juliaData.store->exterior.none_empty;
         }
         else
         {
-          juliaData.store->exterior.condi_hits=juliaData.store->exterior.always_hits;
-          juliaData.store->exterior.condi_avoids=juliaData.store->exterior.always_avoids;
+          juliaData.store->exterior.condi_mixed=juliaData.store->exterior.always_mixed;
+          juliaData.store->exterior.condi_empty=juliaData.store->exterior.always_empty;
 #if 0 //blend by varying "a"
           double weight=juliaData.near0m.toDouble()/currentParams.patchSizeExterior;
-          MandelMath::real_double_quadratic(&juliaData.store->exterior.blend_hits_, 1-(weight), near0, -exterior_p2_hits); //actual quad step
-          MandelMath::real_double_quadratic(&juliaData.store->exterior.blend_avoids, 1-(weight), near0, -exterior_p2_avoids);
+          MandelMath::real_double_quadratic(&juliaData.store->exterior.blend_mixed, 1-(weight), near0, -exterior_p2_mixed); //actual quad step
+          MandelMath::real_double_quadratic(&juliaData.store->exterior.blend_empty, 1-(weight), near0, -exterior_p2_empty);
 
 #elif 1 //(p2/(2*near0)*(near0m/patch)+p1*(1-near0m/patch)) = (p2/2*near0+p1*(patch-near0m))/patch
 //looks best of the 3
           double help=currentParams.patchSizeExterior-juliaData.near0m.toDouble();
           //MandelMath::real_double_quadratic(&exterior_p1_hits, 1, near0, -exterior_p2_hits); //actual quad step
           //MandelMath::real_double_quadratic(&exterior_p1_avoids, 1, near0, -exterior_p2_avoids);
-          juliaData.store->exterior.blend_hits_=(exterior_p2_hits/2*near0*glue_scale+juliaData.store->exterior.always_hits*help)/currentParams.patchSizeExterior;
-          juliaData.store->exterior.blend_avoids=(exterior_p2_avoids/2*near0*glue_scale_avoids+juliaData.store->exterior.always_avoids*help)/currentParams.patchSizeExterior;
+          juliaData.store->exterior.blend_mixed=(exterior_p2_mixed/2*near0*glue_scale+juliaData.store->exterior.always_mixed*help)/currentParams.patchSizeExterior;
+          juliaData.store->exterior.blend_empty=(exterior_p2_empty/2*near0*glue_scale_empty+juliaData.store->exterior.always_empty*help)/currentParams.patchSizeExterior;
 
 #else   //(p2/(2*near0)*(near0m/patch)^2+p1*(1-(near0m/patch)^2)) = (p2/2*near0*near0m+p1*(patch^2-near0m^2))/patch^2
           double help=MandelMath::sqr_double(currentParams.patchSizeExterior)-MandelMath::sqr_double(juliaData.near0m.toDouble());
-          juliaData.store->exterior.blend_hits_=(exterior_p2_hits/2*near0*juliaData.near0m.toDouble()*glue_scale + juliaData.store->exterior.always_hits*help)/(currentParams.patchSizeExterior*currentParams.patchSizeExterior);
-          juliaData.store->exterior.blend_avoids=(exterior_p2_avoids/2*near0*juliaData.near0m.toDouble()*glue_scale_avoids + juliaData.store->exterior.always_avoids*help)/(currentParams.patchSizeExterior*currentParams.patchSizeExterior);
+          juliaData.store->exterior.blend_mixed=(exterior_p2_mixed/2*near0*juliaData.near0m.toDouble()*glue_scale + juliaData.store->exterior.always_mixed*help)/(currentParams.patchSizeExterior*currentParams.patchSizeExterior);
+          juliaData.store->exterior.blend_empty=(exterior_p2_empty/2*near0*juliaData.near0m.toDouble()*glue_scale_empty + juliaData.store->exterior.always_empty*help)/(currentParams.patchSizeExterior*currentParams.patchSizeExterior);
 #endif
         }
 
@@ -5424,20 +5472,27 @@ void MandelEvaluator<BASE>::evaluateJulia(int juliaPeriod)
         }
         phase1_scale_avoids=1/(phase1_scale*phase1_scale_avoids);
         phase1_scale=1/phase1_scale;
-        juliaData.store->exterior.none_hits*=phase1_scale;
-        juliaData.store->exterior.none_avoids*=phase1_scale_avoids;
-        juliaData.store->exterior.always_hits*=phase1_scale;
-        juliaData.store->exterior.always_avoids*=phase1_scale_avoids;
-        juliaData.store->exterior.condi_hits*=phase1_scale;
-        juliaData.store->exterior.condi_avoids*=phase1_scale_avoids;
-        juliaData.store->exterior.blend_hits_*=phase1_scale;
-        juliaData.store->exterior.blend_avoids*=phase1_scale_avoids;
+        juliaData.store->exterior.none_mixed*=phase1_scale;
+        juliaData.store->exterior.none_empty*=phase1_scale_avoids;
+        juliaData.store->exterior.always_mixed*=phase1_scale;
+        juliaData.store->exterior.always_empty*=phase1_scale_avoids;
+        juliaData.store->exterior.condi_mixed*=phase1_scale;
+        juliaData.store->exterior.condi_empty*=phase1_scale_avoids;
+        juliaData.store->exterior.blend_mixed*=phase1_scale;
+        juliaData.store->exterior.blend_empty*=phase1_scale_avoids;
         //juliaData.store->exterior_hits=juliaData.store->exterior_hits/exterior_hits-1;
         //juliaData.store->exterior_avoids=juliaData.store->exterior_avoids/exterior_avoids-1;
 #endif
       }
       break;
     };
+    //fzz=2*(f*fzz+fz^2)
+    juliaData.fzz_z.mul(&juliaData.f, &tmp);
+    eval.fz_r.assign(&juliaData.fz_z);
+    eval.fz_r.sqr(&tmp);
+    juliaData.fzz_z.add(&eval.fz_r);
+    juliaData.fzz_z.lshift(1);
+
     double fz_z_mag1=juliaData.fz_z.getMag_double();
     if (fz_z_mag1>1e57)
     {
@@ -5469,6 +5524,11 @@ void MandelEvaluator<BASE>::evaluateJulia(int juliaPeriod)
     //f'=2*f'*f, f'_mag=4*f'_mag*f_mag
     juliaData.fz_z_mag.mul(tmp.tmp2);
     juliaData.since0fzm.mul(tmp.tmp2);
+    /*if (juliaData.biggest_fzm.isle(juliaData.fz_z_mag))
+    {
+      juliaData.biggest_fzm.assign(juliaData.fz_z_mag);
+      juliaData.store->bigfzm_iter=juliaData.store->iter;
+    }*/
     //currentData.fz_c_mag.lshift(2);
     juliaData.lookper_fz.mul(&juliaData.f, &tmp);
     juliaData.lookper_fz.lshift(1);
@@ -5479,6 +5539,26 @@ void MandelEvaluator<BASE>::evaluateJulia(int juliaPeriod)
     //currentData.iter++;
 
     //from here, iter should be iter+1
+
+    //find iter where f'/f'' is biggest
+    bulb.t1.re.assign(*juliaData.fzz_z.getMag_tmp(&tmp));
+    bulb.t1.re.recip();
+    bulb.t1.re.mul(juliaData.fz_z_mag);
+    if (juliaData.bigfzfzzm.isle(bulb.t1.re))
+    {
+      juliaData.bigfzfzzm.assign(bulb.t1.re);
+      juliaData.store->bigfzfzziter=juliaData.store->iter+1;
+    };
+
+    //find cumulative shrink factor S*=1+f_z^2/(f*f_zz)
+    bulb.t1.assign(&juliaData.fzz_z);
+    bulb.t1.mul(&juliaData.f, &tmp);
+    bulb.t1.recip(&tmp);
+    bulb.t1.mul(&juliaData.fz_z, &tmp);
+    bulb.t1.mul(&juliaData.fz_z, &tmp);
+    bulb.t1.re.add_double(1);
+    juliaData.shrinkfactor.mul(&bulb.t1, &tmp);
+
     int need_reset_check=0; //1..check and reset; 2..reset
     if (juliaData.store->near0iter_1==juliaData.store->iter+1)
     {
@@ -5487,7 +5567,7 @@ void MandelEvaluator<BASE>::evaluateJulia(int juliaPeriod)
     };
 
     const MandelMath::number<BASE> *f_mag3=juliaData.f.getMag_tmp(&tmp);
-    if (!juliaData.near0m.isle(*f_mag3)) //f_mag<near0m
+    if (!juliaData.near0m.isle(*f_mag3)) //f.mag<near0.mag
     {
       juliaData.store->near0iter_1=juliaData.store->iter+2;
       juliaData.near0m.assign(*f_mag3);
@@ -5530,7 +5610,7 @@ void MandelEvaluator<BASE>::evaluateJulia(int juliaPeriod)
     {
       bulb.t1.assign(&juliaData.lookper_fz);
       bulb.t1.sub(&currentParams.juliaAlpha);
-      double safety=std::sqrt(bulb.t1.getMag_double())/-currentParams.juliaAlpha.getMag1_tmp(&tmp)->toDouble();
+      double safety=std::sqrt(bulb.t1.getMag_double())/-currentParams.juliaAlpha.getMag1_tmp(&tmp)->toDouble(); // |fz-alpha|/(1-|alpha|)
       if (safety>1.0) //1.0 seems enough //0.5 seems enough
         need_reset_check=2;
     };
@@ -5538,6 +5618,244 @@ void MandelEvaluator<BASE>::evaluateJulia(int juliaPeriod)
     if (need_reset_check==1)
       {
         juliaData.store->rstate=JuliaPointStore::ResultState::stPeriod2;
+        loope.f.assign(&juliaData.f);
+        loope.f_z.assign(&juliaData.fz_z);
+        loope.f_zz.assign(&juliaData.fzz_z);
+        newt.newtX.zero(0, 0);
+        //need (iter-near0iter_1)%juliaPeriod=0  (n-i)%p=-(i-n)%p=(p-(i-n)%p)%p=(p-1-(i-n+1)%p)%p=p-1-(i-n+1)%p
+        // //if (-1)%2==1 int need_iters=(juliaData.store->near0iter_1-juliaData.store->iter)%juliaPeriod;
+        //int need_iters=juliaPeriod-1-(juliaData.store->iter-juliaData.store->near0iter_1+1)%juliaPeriod; //if (-1)%2==-1
+        //actually we need (iter+1-near0iter_1)%juliaPeriod=0 because iter is lagging behind juliaData
+        int need_iters=juliaPeriod-1-(juliaData.store->iter-juliaData.store->near0iter_1)%juliaPeriod; //if (-1)%2==-1
+        if (need_iters!=0)
+           dbgPoint(); //need to advance juliaData.f,fz,fzz too
+        if (!loope.eval_zz(&tmp, need_iters, &currentParams.c, &newt.newtX, false, false))
+        {
+          interior.inte.zero(0, 0);
+          interior.inte_abs.zero(0);
+        }
+        else
+        {
+          juliaData.store->iter+=need_iters;
+          //phi=alpha^iter/(f-r)    alpha1=2*r0*alpha0  phi0=alpha0/(f0-r0)  phi1=2*f0*alpha0/(f1-r1)   f1=f0^2+c  r1=r0^2+c
+          //phi1=2*r0*alpha0/(f0^2-r0^2)=2*r0*alpha0/(f0-r0)/(f0+r0)=2*r0/(f0+r0)*phi0    2*r0/(f0+r0)=r0/((f0-r0)/2+r0)=1/(1+(f0-r0)/r0/2)=2/(1+q)=1/(1+w)  q=f0/r0   w=(q-1)/2  w2=f0/r0-1
+          //phi0'=-alpha0*f0'/(f0-r0)^2   phi1'=-alpha1*f1'/(f1-r1)^2   f1'=2*f0*f0'
+          //phi1'=-2*r0*alpha0*2*f0*f0'/(f0+r0)^2/(f0-r0)^2=4*r0*f0/(f0+r0)^2*phi0'=4/(f0/r0+1)/(1+r0/f0)*phi0'=4*q/(1+q)^2*phi0'=(1+w2)/(1+w2/2)^2*phi0'
+          //phi1/phi1'=2*r0/(f0+r0)*phi0 / -2/r0/alpha0/2/f0/f0'*(f0+r0)^2*(f0-r0)^2=
+          //          =r0/(f0+r0)*phi0 /r0/2/f0*(f0+r0)^2/-alpha0/f0'*(f0-r0)^2=1/2*(f0+r0)/f0*phi0/phi0'
+          //phi1/phi1'=1/2*(1+(r0-f0)/f0+f0/f0)*phi0/phi0'=(1-(f0-r0)/f0/2)*phi0/phi0'   =(1+1/q)/2*phi0/phi0'=(1+w)/(1+2*w)*phi0/phi0'
+
+          //phi0''=-alpha0*(f0''/(f0-r0)^2-2*f0'^2/(f0-r0)^3)  f1''=2*(f0'^2+f0*f0'')
+          //phi1''=-alpha1*(f1''/(f1-r1)^2-2*f1'^2/(f1-r1)^3) = -2*r0*alpha0*(2*(f0'^2+f0*f0'')/(f0^2-r0^2)^2-2*(2*f0*f0')^2/(f0^2-r0^2)^3)
+          //nope phi1''/phi0''=4*r0*((r0^2-f0^2)*(f0*f0''+f0'^2)+4*f0^2*f0'^2) )/((r0+f0)^3*(f0''*(r0-f0)+2*f0'^2))
+          //phi1''/(-2*r0*alpha0)=2*(f0'^2+f0*f0'')/(f0^2-r0^2)^2-2*(2*f0*f0')^2/(f0^2-r0^2)^3
+          //                     =2*f0'^2/(f0^2-r0^2)^2 + 2*f0*f0''/(f0^2-r0^2)^2 -8*f0^2*f0'^2/(f0^2-r0^2)^3=
+          //                     =2*f0*(f0''/(f0^2-r0^2)^2) +4*f0^2*(-2*f0'^2/(f0^2-r0^2)^3) +2*f0'^2/(f0^2-r0^2)^2
+          //       phi0'' nowhere to be found
+          //phi1''/phi0''=4*r0*( (1-f0/r0)*(r0+f0)*(f0*f0''+f0'^2)+4*f0^2*f0'^2/r0) )/((r0+f0)^3*(f0''*(1-f0/r0)+2*f0'^2/r0))
+          //phi1''/phi0''=4*r0*( (1-f0/r0)*((r0+f0)*(f0*f0''+f0'^2)-4*f0*f0'^2)+4*f0*f0'^2) )/((r0+f0)^3*(f0''*(1-f0/r0)+2*f0'^2/r0))
+          //phi1''/phi0''=4*r0*( 4*f0*f0'^2 + (1-f0/r0)*((r0+f0)*(f0*f0''+f0'^2)-4*f0*f0'^2)) )/((r0+f0)^3*(2*f0'^2/r0 + (1-f0/r0)*f0''))
+          //lim[f0->r0] phi1''/phi0''=8*(f0/r0)/(1+f0/r0)^3
+          //phi1''/phi0''=4*r0/(f0+r0)^2 * ( f0-(f0-r0)^2*f0'^2/(f0+r0)/((f0-r0)*f0''-2*f0'^2) )
+          //    (f0-r0)^2=(f0+r0)^2-4*f0*r0
+          //phi1''/phi0''=4*r0/(f0+r0)^2 * ( f0 -(f0+r0)*f0'^2/((f0-r0)*f0''-2*f0'^2) +4*f0*r0*f0'^2/(f0+r0)/((f0-r0)*f0''-2*f0'^2) )
+          //phi1''/phi0''=4*r0/(f0+r0)^2 * ( f0*(1 -f0'^2/((f0-r0)*f0''-2*f0'^2))  +r0*f0'^2*(4*f0/(f0+r0)-1)/((f0-r0)*f0''-2*f0'^2) )
+          //phi1''/phi0''=4*r0/(f0+r0)^2 * ( f0*((f0-r0)*f0''-3*f0'^2)  +r0*f0'^2*(3*f0-r0)/(f0+r0) )/((f0-r0)*f0''-2*f0'^2)
+          //v=(f0-r0)*f0''/f0'^2
+          //phi1''/phi0''=4*r0/(f0+r0)^2 * ( f0*(v-3)  +r0*(3*f0-r0)/(f0+r0) )/(v-2)
+          //phi1''/phi0''=4*r0/(f0+r0)^2 * ( f0*(v-2)  +4*f0*r0/(f0+r0) -f0-r0 )/(v-2)
+          //phi1''/phi0''=4*r0/(f0+r0)^2 * ( f0  +(f0^2+r0^2)/(f0+r0)/(2-v) )
+
+          //again:
+          //phi1''/phi0''=4 r0 ((r0^2+f0^2) - r0 v f0 + (2-v) f0^2)/((2 - v) (r0 + f0)^3)
+          //u=f0/r0=1+w   u-1=w
+          //phi1''/phi0''=4 * ((1+u^2) - v u + (2-v) u^2)/((2 - v) (1 + u)^3)
+          //phi1''/phi0''=(4 (u^2 (v - 3) + u v - 1))/((u + 1)^3 (v - 2))
+          //phi1''/phi0''=4 ((3w-v*(1+w)) (2+w) + 4)/((2-v)(2+w)^3)
+          interior.alphak.assign(&currentParams.juliaAlpha);
+          //actually, if we get the power off by one it doesn't matter because it cancels on phi/phi'
+          interior.alphak.pow_int((juliaData.store->iter+1)/juliaPeriod, &tmp);
+          //actually^2, it's way more complicated
+          //interior.alphak.pow_int((juliaData.store->iter+1-juliaData.store->near0iter_1)/juliaPeriod, &tmp);
+          //interior.alphak.pow_int((juliaData.store->iter+1-juliaData.store->bigfzm_iter)/juliaPeriod, &tmp);
+          MandelMath::complex<BASE> &phi=bulb.t1;
+          MandelMath::complex<BASE> &phi_z=bulb.t2;
+          phi.assign(&loope.f);
+          phi.sub(&currentParams.juliaRoot);
+          phi.recip(&tmp);
+          phi_z.assign(&phi);
+          phi.mul(&interior.alphak, &tmp); //phi=alpha^iter/(f-r)
+          phi_z.mul(&phi, &tmp);
+          phi_z.mul(&loope.f_z, &tmp);
+          phi_z.chs(); //phi'=-alpha^iter*f'/(f-r)^2
+          interior.inte.assign(&phi_z);
+          interior.inte.recip(&tmp);
+          interior.inte.mul(&phi, &tmp); //d.e.=phi/phi'
+          MandelMath::complex<BASE> &w2=bulb.t3;
+          MandelMath::complex<BASE> &recipr=newt.laguG;
+          MandelMath::complex<BASE> &root=interior.fz;
+          root.assign(&currentParams.juliaRoot);
+          int didcycles=0;
+          for (;didcycles<5*juliaPeriod;)
+          {
+            recipr.assign(&root);
+            recipr.recip(&tmp);
+            w2.assign(&loope.f);
+            w2.sub(&root);
+            w2.mul(&recipr, &tmp);   //(f-r)/r
+            double test=w2.getMag_double();
+            if (!(test*test>loope.f.re.eps2())) //break if test is nan
+              break;
+            recipr.assign(&w2);
+            recipr.lshift(-1);
+            recipr.re.add_double(1);
+            recipr.recip(&tmp);
+            phi.mul(&recipr, &tmp); //phi*=1/(1+w2/2)
+            recipr.sqr(&tmp);
+            phi_z.mul(&recipr, &tmp);
+            recipr.assign(&w2);
+            recipr.re.add_double(1);
+            phi_z.mul(&recipr, &tmp); //phi'*=(1+w2)/(1+w2/2)^2 = 1/(1+w2^2/4/(1+w2)) ~ 1
+            recipr.assign(&w2);
+            recipr.re.add_double(1);
+            recipr.recip(&tmp);
+            recipr.re.add_double(1);
+            recipr.lshift(-1);
+            interior.inte.mul(&recipr, &tmp); //inte*=(1+1/(1+w2))/2
+
+            //fzz=2*(f*fzz+fz^2)
+            /* completely f...mixed up juliaData, eval and loope
+            juliaData.fzz_z.mul(&loope.f, &tmp);
+            eval.fz_r.assign(&juliaData.fz_z);
+            eval.fz_r.sqr(&tmp);
+            juliaData.fzz_z.add(&eval.fz_r);
+            juliaData.fzz_z.lshift(1);
+            //fz_z:=2*f*fz_z
+            juliaData.fz_z.mul(&loope.f, &tmp);
+            juliaData.fz_z.lshift(1);
+            //f:=f^2+c
+            loope.f.sqr(&tmp);
+            loope.f.add(&currentParams.c);*/
+            loope.eval_zz(&tmp, 1, &currentParams.c, &newt.newtX, false, false);
+            //r:=r^2+c
+            root.sqr(&tmp);
+            root.add(&currentParams.c);
+            didcycles++;
+          }
+#if 0
+          //keep phi/phi'
+#elif 0
+          //recompute phi/phi'
+          interior.inte.assign(&phi_z);
+          interior.inte.recip(&tmp);
+          interior.inte.mul(&phi, &tmp);
+#elif 0
+          //linearization through exp(x)-1: phi/phi' -> (exp(phi)-1)/(exp(phi)-1)'=(exp(phi)-1)/(exp(phi)*phi')=(1-exp(-phi))/phi'
+          interior.inte.assign(&phi_z);
+          interior.inte.recip(&tmp);
+          w2.assign(&phi);
+          w2.chs();
+          w2.exp_approx();
+          w2.chs();
+          w2.re.add_double(1);
+          interior.inte.mul(&w2, &tmp);
+#elif 0
+          //linearization through exp(-x)-1: phi/phi' -> (exp(-phi)-1)/(exp(-phi)-1)'=(exp(-phi)-1)/(-exp(-phi)*phi')=(exp(phi)-1)/phi'
+          interior.inte.assign(&phi_z);
+          interior.inte.recip(&tmp);
+          w2.assign(&phi);
+          w2.exp_approx();
+          w2.re.add_double(-1);
+          interior.inte.mul(&w2, &tmp);
+#elif 0
+          //linearization through exp(-|x|)-1: phi/phi' -> (exp(-|phi|)-1)/(exp(-|phi|)-1)'=(exp(|phi|)-1)/|phi'|
+          interior.inte.sign(&tmp);
+          double phiabs=std::sqrt(phi.getMag_double());
+          interior.inte.mul_double((std::exp(phiabs)-1)/std::sqrt(phi_z.getMag_double()));
+#elif 0
+          //linearization through 1-1/(1+|x|) = 1/(1+1/|x|): phi/phi' -> (1-1/(1+|phi|))/(1-1/(1+|phi|))'=(|phi|+1)*|phi|/|phi'|
+          double phiabs=std::sqrt(phi.getMag_double());
+          interior.inte.mul_double(1+phiabs);
+#elif 1
+          //lin(0)=0 lin(eps)=eps lin(phi(r+eps))/(lin(phi(r+eps)))'=1/jas
+          //phi(r+eps)~1/eps     and use lin(x)=Rx/(R+x)
+          //need lin(1/eps)/(lin(1/eps))'=1/jas   -(1-R*eps)/R=-1/R  R=-jas
+          //linearization through Rx/(R+x): phi/phi' -> (1+phi/R)*phi/phi'(x)
+          //for first_z in juliaRoot's pool, we want d.e.=1/jas^2
+          //more precisely, d.e.[r0]=(1/jas-2*r0)   d.e.[r1]=(1/jas)*(1/jas-2*r0)
+          double phiabs=phi.getMag_double();
+          //otherwise, scale by one more juliaAlpha. Don't ask why, it's complicated
+          //if ((juliaData.store->iter+1)%juliaPeriod !=0)
+          //  phiabs*=currentParams.juliaAlpha.getMag_double();
+
+          //scale such that 2*f'*P+f''/2*P^2=R=1/jas^2   ... with f'~0 ... bigger of the 2 roots so find 1/P
+          // p=-1/P   2*f'*p-f''/2+p^2/jas^2=0
+          double rde;
+          //f'/f'' seems to converge to a value, what is it?
+          //  2*f'/f'' = first_z-first_r
+          //rde=2*sqrt(juliaData.fz_z.getMag_double()/juliaData.fzz_z.getMag_double());
+          //rde*=currentParams.juliaAlphaShort.getMag_double();
+          //MandelMath::real_double_quadratic(&rde, 1/currentParams.juliaAlphaShort.getMag_double(),
+          //MandelMath::real_double_quadratic(&rde, interior.alphak.getMag_double()/currentParams.juliaAlphaShort.getMag_double(),
+          if (didcycles%juliaPeriod!=0)
+            dbgPoint(); //who knows what to do... more cycles until it's 0?
+          //MandelMath::real_double_quadratic(&rde, interior.alphak.getMag_double()*std::pow(currentParams.juliaAlpha.getMag_double(), didcycles/juliaPeriod)/currentParams.juliaAlphaShort.getMag_double(),
+          //                                        sqrt(loope.f_z.getMag_double()),
+          //                                        -sqrt(loope.f_zz.getMag_double())/2);
+          MandelMath::real_double_quadratic(&rde, interior.alphak.getMag_double()*std::pow(currentParams.juliaAlpha.getMag_double(), didcycles/juliaPeriod)/currentParams.juliaAlphaShort.getMag_double(),
+                                                  sqrt(loope.f_z.getMag_double()),
+                                                  -sqrt(loope.f_zz.getMag_double())/2);
+          //interior.inte.mul_double(1+std::sqrt(phiabs)/currentParams.juliaAlphaShort.getMag_double());
+          interior.inte.mul_double(1+std::sqrt(phiabs)/rde);
+#else
+          //w2.assign(&juliaData.f);
+          //w2.ln_approx();
+          //interior.inte.mul(&w2, &tmp);
+#endif
+
+          interior.inte_abs.assign(*interior.inte.getMag_tmp(&tmp));
+          interior.inte_abs.sqrt();
+
+          juliaData.store->interior.mixed_=interior.inte_abs.toDouble();
+          juliaData.store->interior.full=juliaData.store->interior.mixed_/4;
+          juliaData.store->interior.mixed_re=interior.inte.re.toDouble();
+          juliaData.store->interior.mixed_im=interior.inte.im.toDouble();
+          juliaData.store->interior.phi_re=phi.re.toDouble();
+          juliaData.store->interior.phi_im=phi.im.toDouble();
+          juliaData.store->interior.phi1_re=phi_z.re.toDouble();
+          juliaData.store->interior.phi1_im=phi_z.im.toDouble();
+          // phi_z =-alpha^iter*f_z*(f-r)^-2
+          // phi_zz=-alpha^iter*(f_zz*(f-r)^-2-2*f_z^2*(f-r)^-3)
+          // phi_z/phi_zz=1 / ((f_zz/f_z-2*f_z/(f-r)))
+          // another root est=2*phi_z/phi_zz=1/ ((f_zz/f_z/2-f_z/(f-r))) so if we neglect fzz/fz, we're back to (f-r)/f'
+          bulb.t1.assign(&loope.f_z);
+          bulb.t1.recip(&tmp);
+          bulb.t1.mul(&loope.f_zz, &tmp);
+          bulb.t2.assign(&loope.f);
+          bulb.t2.sub(&currentParams.juliaRoot);
+          bulb.t2.recip(&tmp);
+          bulb.t2.mul(&loope.f_z, &tmp);
+          bulb.t1.lshift(-1);
+          bulb.t1.sub(&bulb.t2);
+          bulb.t1.recip(&tmp);
+          //bulb.t1.chs();
+          juliaData.store->interior.phi2_re=bulb.t1.re.toDouble();//the_fzz.re.toDouble();
+          juliaData.store->interior.phi2_im=bulb.t1.im.toDouble();//the_fzz.im.toDouble();
+
+          /*same bulb.t1.assign(&loope.f);
+          bulb.t2.assign(&loope.f_z);
+          bulb.t3.assign(&loope.f_zz);
+          loope.eval_zz(&tmp,juliaData.store->iter+didcycles+1, &currentParams.c, &currentParams.first_z, false, true);
+          bulb.t1.sub(&loope.f);
+          bulb.t2.sub(&loope.f_z);
+          bulb.t3.sub(&loope.f_zz);*/
+
+          juliaData.shrinkfactor.mul(&currentParams.juliaAlphaShort, &tmp);
+          juliaData.shrinkfactor.recip(&tmp);
+          juliaData.store->interior.phi2_re=juliaData.shrinkfactor.re.toDouble();
+          juliaData.store->interior.phi2_im=juliaData.shrinkfactor.im.toDouble();
+          juliaData.store->interior.cycles_until_root=didcycles;
+        }
         #if 0 //disable interior completely
         /*
         loope.eval_zz(&tmp, juliaPeriod, &currentParams.c, &currentParams.first_z, false, true); //this is the same for all points...
@@ -5879,9 +6197,10 @@ void MandelEvaluator<BASE>::evaluateJulia(int juliaPeriod)
       juliaData.store->rstate=JuliaPointStore::ResultState::stPeriod2;
       interior.inte.zero(0.3, 0);
       interior.inte_abs.zero(0.3);
-      juliaData.store->interior.hits=0.3;
-      juliaData.store->interior.hits_re=0.3;
-      juliaData.store->interior.hits_im=0;
+      juliaData.store->interior.mixed_=0.3;
+      juliaData.store->interior.full=0.25;
+      juliaData.store->interior.mixed_re=0.3;
+      juliaData.store->interior.mixed_im=0;
       juliaData.store->interior.phi_re=0.3;
       juliaData.store->interior.phi_im=0;
       juliaData.store->interior.phi1_re=0.3;
@@ -5928,11 +6247,22 @@ void MandelEvaluator<BASE>::evaluateJulia(int juliaPeriod)
 
 template<typename BASE>
 MandelEvaluator<BASE>::ComputeParams::ComputeParams(MandelMath::NumberType ntype):
-  c(ntype), juliaRoot(ntype), patchSizeExterior(0), juliaBailout_(ntype), juliaAlpha(ntype), first_z(ntype),
+  c(ntype), juliaRoot(ntype), patchSizeExterior(0), juliaBailout(ntype), juliaAlphaShort(ntype), juliaAlpha(ntype), first_z(ntype),
   epoch(-1), pixelIndex(-1), maxiter(1), breakOnNewNearest(false), want_fc_r(false), want_extangle(false),
   nth_fz(0)
 {
-  juliaBailout_.zero(4);
+  juliaBailout.zero(4);
+}
+
+template<class BASE> template<typename BASE_OTHER>
+void MandelEvaluator<BASE>::ComputeParams::assignJulia(const typename MandelEvaluator<BASE_OTHER>::ComputeParams &src)
+{
+  c.assign_across(&src.c);
+  juliaRoot.assign_across(&src.juliaRoot);
+  juliaAlphaShort.assign_across(&src.juliaAlphaShort);
+  juliaAlpha.assign_across(&src.juliaAlpha);
+  patchSizeExterior=src.patchSizeExterior;
+  juliaBailout.assign_across(&src.juliaBailout);
 }
 
 template<typename BASE>
@@ -5963,7 +6293,7 @@ MandelEvaluator<BASE>::Newt::Newt(MandelMath::NumberType ntype):
 
 template<typename BASE>
 MandelEvaluator<BASE>::InteriorInfo::InteriorInfo(MandelMath::NumberType ntype):
-  inte(ntype), inte_abs(ntype), fz(ntype), fz_mag(ntype), alpha(ntype), alphak(ntype), zoom(ntype)
+  inte(ntype), inte_abs(ntype), fz(ntype), fz_mag(ntype), alpha_unused(ntype), alphak(ntype), zoom(ntype)
 {
   //working_assert(self_allocator.checkFill());
 }
@@ -6649,23 +6979,26 @@ template class LaguerreStep<double>;
 template class MandelLoopEvaluator<double>;
 template class MandelEvaluator<double>;
 template class MandelEvaluator<MandelMath::number_a *>;
+template void MandelEvaluator<double>::ComputeParams::assignJulia<MandelMath::number_a *>(const typename MandelEvaluator<MandelMath::number_a *>::ComputeParams &src);
 #if !NUMBER_DOUBLE_ONLY
 template struct LaguerrePoint<__float128>;
 template struct MandelPoint<__float128>;
 template struct JuliaPoint<__float128>;
 template class MandelEvaluator<__float128>;
+template void MandelEvaluator<__float128>::ComputeParams::assignJulia<MandelMath::number_a *>(const typename MandelEvaluator<MandelMath::number_a *>::ComputeParams &src);
 template struct LaguerrePoint<MandelMath::dd_real>;
 template struct MandelPoint<MandelMath::dd_real>;
 template struct JuliaPoint<MandelMath::dd_real>;
 template class MandelEvaluator<MandelMath::dd_real>;
+template void MandelEvaluator<MandelMath::dd_real>::ComputeParams::assignJulia<MandelMath::number_a *>(const typename MandelEvaluator<MandelMath::number_a *>::ComputeParams &src);
 //template struct LaguerrePoint<MandelMath::dq_real>;
 //template struct MandelPoint<MandelMath::dq_real>;
 //template class MandelEvaluator<MandelMath::dq_real>;
+//template void MandelEvaluator<MandelMath::dq_real>::ComputeParams::assignJulia<MandelMath::number_a *>(const typename MandelEvaluator<MandelMath::number_a *>::ComputeParams &src);
 template struct LaguerrePoint<MandelMath::real642>;
 template struct MandelPoint<MandelMath::real642>;
 template struct JuliaPoint<MandelMath::real642>;
 template class MandelEvaluator<MandelMath::real642>;
+template void MandelEvaluator<MandelMath::real642>::ComputeParams::assignJulia<MandelMath::number_a *>(const typename MandelEvaluator<MandelMath::number_a *>::ComputeParams &src);
 #endif
 //template class MandelEvaluator<MandelMath::worker_multi_double>;
-
-

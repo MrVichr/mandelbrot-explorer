@@ -2781,12 +2781,12 @@ void complex<BASE>::pow_int(int n, Scratchpad *tmp)
     {
       tmp->tmp1.assign(re);
       tmp->tmp2.assign(im);
-      re.mul(tmp->tmp4);
-      im.mul(tmp->tmp3);
+      re.mul(tmp->tmp4);        //      r1*i2
+      im.mul(tmp->tmp3);        //i1*r2
       tmp->tmp1.mul(tmp->tmp3); //r1*r2
-      tmp->tmp2.mul(tmp->tmp4); //i1*i2
+      tmp->tmp2.mul(tmp->tmp4); //      i1*i2
+      im.add(re);               //i1*r2+r1*i2
       tmp->tmp1.sub(tmp->tmp2); //r1*r2-i1*i2
-      im.add(re); //i1*r2+r1*i2
       re.assign(tmp->tmp1);
     };
     mask>>=1;

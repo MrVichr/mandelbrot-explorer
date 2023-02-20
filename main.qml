@@ -491,6 +491,7 @@ Window {
                         //where did this come from {viewRe: -0.7499999970459612, viewIm: 0.0000514981111337, viewZoom: 1/549755813888, caption: 'Bulb 30502/61005'},
                         {viewRe: -0.7499999985575414, viewIm: 0.0000514972471137, viewZoom: 1/549755813888, caption: 'Bulb 30502/61005'},
                         {viewRe: -1498800068/8589934592.0, viewIm: 5685911464/8589934592.0, viewZoom: 1/8589934592.0, caption: 'Trouble at 11016'},
+                        {viewRe: -0.5622179376996712, viewIm: 0.67689119098929496, viewZoom: 1/35184372088832.0, caption: 'Bad Newton'},
                     ]
                     MenuItem {
                         text: modelData.caption

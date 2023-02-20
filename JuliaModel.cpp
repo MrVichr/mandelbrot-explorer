@@ -184,13 +184,17 @@ QString JuliaModel::getTextInfoGen()
 
   if (precisionRecord->params.period<=0)
     return state+" iter="+QString::number(data_store->iter)+
-                 " nearz="+QString::number(data_store->nearziter_0)+"("+QString::number(data_store->nearziter_0)+")"+
+                 //" nearz="+QString::number(data_store->nearziter_0)+"("+QString::number(data_store->nearziter_0)+")"+
+                 //" bigfz="+QString::number(data_store->bigfzm_iter)+"("+QString::number(data_store->bigfzm_iter)+")"+
+                 " bigfzfzz="+QString::number(data_store->bigfzfzziter)+"("+QString::number(data_store->bigfzfzziter)+")"+
                  " near0="+QString::number(data_store->near0iter_1)+"("+QString::number(data_store->near0iter_1)+")"+
                  " ("+QString::number((data_store->near0iter_1-data_store->nearziter_0))+")"+
            fc_fz;
   else
     return state+" iter="+QString::number(data_store->iter)+
-                 " nearz="+QString::number(data_store->nearziter_0)+"("+QString::number(data_store->nearziter_0%precisionRecord->params.period)+")"+
+                 //" nearz="+QString::number(data_store->nearziter_0)+"("+QString::number(data_store->nearziter_0%precisionRecord->params.period)+")"+
+                 //" bigfz="+QString::number(data_store->bigfzm_iter)+"("+QString::number(data_store->bigfzm_iter%precisionRecord->params.period)+")"+
+                 " bigfzfzz="+QString::number(data_store->bigfzfzziter)+"("+QString::number(data_store->bigfzfzziter%precisionRecord->params.period)+")"+
                  " near0="+QString::number(data_store->near0iter_1)+"("+QString::number(data_store->near0iter_1%precisionRecord->params.period)+")"+
                  " ("+QString::number((data_store->near0iter_1-data_store->nearziter_0))+")"+
            fc_fz;
@@ -218,12 +222,12 @@ QString JuliaModel::getTextInfoSpec()
   double exterior;
   switch (_selectedEdePatchAlgo)
   {
-    case EedepaAlways: exterior=data_store->exterior.always_hits; break;
-    case EedepaConditional: exterior=data_store->exterior.condi_hits; break;
-    case EedepaBlend: exterior=data_store->exterior.blend_hits_; break;
-    case EedepaVerifyH: exterior=data_store->exterior.verify_hits/data_store->exterior.none_hits-1; break;
-    case EedepaVerifyA: exterior=data_store->exterior.verify_avoids/data_store->exterior.none_avoids-1; break;
-    default: exterior=data_store->exterior.none_hits; break;
+    case EedepaAlways: exterior=data_store->exterior.always_mixed; break;
+    case EedepaConditional: exterior=data_store->exterior.condi_mixed; break;
+    case EedepaBlend: exterior=data_store->exterior.blend_mixed; break;
+    case EedepaVerifyH: exterior=data_store->exterior.verify_mixed/data_store->exterior.none_mixed-1; break;
+    case EedepaVerifyA: exterior=data_store->exterior.verify_empty/data_store->exterior.none_empty-1; break;
+    default: exterior=data_store->exterior.none_mixed; break;
   }
   switch (data_store->rstate)
   {
@@ -251,7 +255,7 @@ QString JuliaModel::getTextInfoSpec()
       //double p=std::atan2((precisionRecord->orbit.bulb.baseFz_.im.toDouble()),
       //                     precisionRecord->orbit.bulb.baseFz_.re.toDouble())*precisionRecord->orbit.bulb.foundMult_;
       return QString("per=")+QString::number(precisionRecord->params.period)+
-                    " int="+QString::number(data_store->interior.hits);
+                    " int="+QString::number(data_store->interior.mixed_);
         //  +" mult="+QString::number(std::round(p/(2*M_PI)))+"/"+QString::number(precisionRecord->orbit.bulb.foundMult_);
     } break;
     case JuliaPointStore::ResultState::stPeriod3:
@@ -259,7 +263,7 @@ QString JuliaModel::getTextInfoSpec()
       //double p=std::atan2((precisionRecord->orbit.bulb.baseFz_.im.toDouble()),
       //                     precisionRecord->orbit.bulb.baseFz_.re.toDouble())*precisionRecord->orbit.bulb.foundMult_;
       return QString("per=")+QString::number(precisionRecord->params.period)+
-                    " int="+QString::number(data_store->interior.hits);
+                    " int="+QString::number(data_store->interior.mixed_);
         //  +" mult="+QString::number(std::round(p/(2*M_PI)))+"/"+QString::number(precisionRecord->orbit.bulb.foundMult_);
     } break;
     case JuliaPointStore::ResultState::stMaxIter:
@@ -270,62 +274,76 @@ QString JuliaModel::getTextInfoSpec()
 
 void JuliaModel::recomputeRoot(int max_effort)
 {
-  precisionRecord->orbit.evaluator.currentParams.epoch=epoch;
-  precisionRecord->orbit.evaluator.workIfEpoch=precisionRecord->orbit.evaluator.busyEpoch;//epoch;
-  precisionRecord->orbit.evaluator.currentParams.pixelIndex=0;
-  precisionRecord->orbit.evaluator.currentParams.first_z.assign(&precisionRecord->orbit.evaluator.currentParams.c);
-  precisionRecord->orbit.evaluator.mandelData.zero(&precisionRecord->orbit.evaluator.currentParams.first_z);
-  precisionRecord->orbit.evaluator.mandelData.store->wstate=MandelPointStore::WorkState::stWorking;
-  precisionRecord->orbit.evaluator.currentParams.breakOnNewNearest=false;
-  precisionRecord->orbit.evaluator.currentParams.maxiter=1<<max_effort;
-  precisionRecord->orbit.evaluator.currentParams.want_extangle=false;
+  MandelEvaluator<MandelMath::number_a *> &evaluator=precisionRecord->orbit.evaluator;
+  evaluator.currentParams.epoch=epoch;
+  evaluator.workIfEpoch=evaluator.busyEpoch;//epoch;
+  evaluator.currentParams.pixelIndex=0;
+  evaluator.currentParams.first_z.assign(&evaluator.currentParams.c);
+  evaluator.mandelData.zero(&evaluator.currentParams.first_z);
+  evaluator.mandelData.store->wstate=MandelPointStore::WorkState::stWorking;
+  evaluator.currentParams.breakOnNewNearest=false;
+  evaluator.currentParams.maxiter=1<<max_effort;
+  evaluator.currentParams.want_extangle=false;
 
-  precisionRecord->orbit.evaluator.thread.syncMandel();
-  if (precisionRecord->orbit.evaluator.mandelData.store->rstate==MandelPointStore::ResultState::stPeriod2 ||
-      precisionRecord->orbit.evaluator.mandelData.store->rstate==MandelPointStore::ResultState::stPeriod3)
+  evaluator.thread.syncMandel();
+  if (evaluator.mandelData.store->rstate==MandelPointStore::ResultState::stPeriod2 ||
+      evaluator.mandelData.store->rstate==MandelPointStore::ResultState::stPeriod3)
   {
-    precisionRecord->params.period=precisionRecord->orbit.evaluator.mandelData.store->period;
-    precisionRecord->orbit.evaluator.currentParams.juliaRoot.assign(&precisionRecord->orbit.evaluator.mandelData.root);
-    precisionRecord->params.root.assign(&precisionRecord->orbit.evaluator.currentParams.juliaRoot);
-    precisionRecord->orbit.evaluator.loope.eval_zz(&precisionRecord->orbit.evaluator.tmp, precisionRecord->params.period, &precisionRecord->orbit.evaluator.currentParams.c, &precisionRecord->orbit.evaluator.currentParams.juliaRoot, false, true);
-    precisionRecord->orbit.evaluator.currentParams.juliaAlpha.assign(&precisionRecord->orbit.evaluator.loope.f_z);
-    //precisionRecord->orbit.evaluator.currentParams.juliaAlpha.recip(&precisionRecord->orbit.evaluator.tmp);
+    precisionRecord->params.period=evaluator.mandelData.store->period;
+    evaluator.currentParams.juliaRoot.assign(&evaluator.mandelData.root);
+    precisionRecord->params.root.assign(&evaluator.currentParams.juliaRoot);
+    evaluator.loope.eval_zz(&evaluator.tmp, precisionRecord->params.period-1, &evaluator.currentParams.c, &evaluator.currentParams.juliaRoot, false, true);
+    evaluator.currentParams.juliaAlphaShort.assign(&evaluator.loope.f_z);
+    evaluator.loope.eval_zz(&evaluator.tmp, 1, &evaluator.currentParams.c, &evaluator.currentParams.juliaRoot, false, false);
+    evaluator.currentParams.juliaAlpha.assign(&evaluator.loope.f_z);
+    //also jas*2*r0=alpha, jas*R=1 -> R=2*r0/alpha, jas=alpha/(2*r0)=alpha/(2*sqrt(r-c))
+    /* looks the same, up to precision
+    evaluator.bulb.t1.assign(&evaluator.currentParams.juliaRoot);
+    evaluator.bulb.t1.sub(&evaluator.currentParams.c);
+    evaluator.bulb.t1.sqrt(&evaluator.tmp);
+    evaluator.bulb.t1.lshift(1);
+    evaluator.bulb.t1.recip(&evaluator.tmp);
+    evaluator.bulb.t1.mul(&evaluator.currentParams.juliaAlpha, &evaluator.tmp);
+    */
   }
   else if (precisionRecord->orbit.evaluator.mandelData.store->rstate==MandelPointStore::ResultState::stMaxIter)
   {
-    precisionRecord->params.period=precisionRecord->orbit.evaluator.mandelData.store->near0iter_1;
-    precisionRecord->orbit.evaluator.currentParams.juliaRoot.assign(&precisionRecord->orbit.evaluator.mandelData.f);
-    precisionRecord->params.root.assign(&precisionRecord->orbit.evaluator.currentParams.juliaRoot);
-    precisionRecord->orbit.evaluator.loope.eval_zz(&precisionRecord->orbit.evaluator.tmp, precisionRecord->params.period, &precisionRecord->orbit.evaluator.currentParams.c, &precisionRecord->orbit.evaluator.currentParams.juliaRoot, false, true);
-    precisionRecord->orbit.evaluator.currentParams.juliaAlpha.assign(&precisionRecord->orbit.evaluator.loope.f_z);
+    precisionRecord->params.period=evaluator.mandelData.store->near0iter_1;
+    evaluator.currentParams.juliaRoot.assign(&evaluator.mandelData.f);
+    precisionRecord->params.root.assign(&evaluator.currentParams.juliaRoot);
+    evaluator.loope.eval_zz(&evaluator.tmp, precisionRecord->params.period-1, &evaluator.currentParams.c, &evaluator.currentParams.juliaRoot, false, true);
+    evaluator.currentParams.juliaAlphaShort.assign(&evaluator.loope.f_z);
+    evaluator.loope.eval_zz(&evaluator.tmp, 1, &evaluator.currentParams.c, &evaluator.currentParams.juliaRoot, false, false);
+    evaluator.currentParams.juliaAlpha.assign(&evaluator.loope.f_z);
     //precisionRecord->orbit.evaluator.currentParams.juliaAlpha.recip(&precisionRecord->orbit.evaluator.tmp);
   }
   else
   {
     precisionRecord->params.period=0;
     precisionRecord->params.root.zero(0, 0);
-    precisionRecord->orbit.evaluator.currentParams.juliaRoot.zero(0, 0);
-    precisionRecord->orbit.evaluator.currentParams.juliaAlpha.zero(2, 0);
+    evaluator.currentParams.juliaRoot.zero(0, 0);
+    evaluator.currentParams.juliaAlphaShort.zero(2, 0);
+    evaluator.currentParams.juliaAlpha.zero(2, 0);
   }
 
   //find distance estimate at c (interested in exterior for now)
-  precisionRecord->orbit.evaluator.currentParams.patchSizeExterior=0; //already used by syncJulia()
-  precisionRecord->orbit.evaluator.currentParams.first_z.assign(&precisionRecord->orbit.evaluator.currentParams.c);
-  precisionRecord->orbit.evaluator.juliaData.zero(&precisionRecord->orbit.evaluator.currentParams.first_z);
-  precisionRecord->orbit.evaluator.juliaData.store->wstate=JuliaPointStore::WorkState::stWorking;
-
-  precisionRecord->orbit.evaluator.thread.syncJulia(precisionRecord->params.period);
-  if (precisionRecord->orbit.evaluator.juliaData.store->rstate==JuliaPointStore::ResultState::stOutside ||
-      precisionRecord->orbit.evaluator.juliaData.store->rstate==JuliaPointStore::ResultState::stOutAngle)
+  evaluator.currentParams.patchSizeExterior=0; //already used by syncJulia()
+  evaluator.currentParams.first_z.assign(&evaluator.currentParams.c);
+  evaluator.juliaData.zero(&evaluator.currentParams.first_z);
+  evaluator.juliaData.store->wstate=JuliaPointStore::WorkState::stWorking;
+  evaluator.thread.syncJulia(precisionRecord->params.period);
+  if (MandelMath::enum_is_one_of<JuliaPointStore::ResultState,
+      JuliaPointStore::ResultState::stOutside,
+      JuliaPointStore::ResultState::stOutAngle>(evaluator.juliaData.store->rstate))
   {
     //will be comparing .near0 to sqrt(d.e.) is same as .near0m to d.e.
-    if (precisionRecord->orbit.evaluator.juliaData.store->exterior.none_avoids>=0)
+    if (evaluator.juliaData.store->exterior.none_empty>=0)
     {
       // for what x does r=d/(2*x) differ from r^2+2xr-d=0 by 10% ?
       // r1=d/(x+sqrt(x^2+d))  r2=d/(2x)    r1/r2=d/(x+sqrt(x^2+d))/d*2*x=2/(1+sqrt(1+d/x^2))
       // k=2/(1+sqrt(1+d/x^2))   x=sqrt(d)/sqrt((2/k-1)^2-1))
       // k=0.828 <- r=sqrt(d); k=0.9 -> 1.423*sqrt(d); k=0.95->2.124*sqrt(d)   k=0.899 <- sqrt(2*d)
-      precisionRecord->orbit.evaluator.currentParams.patchSizeExterior=precisionRecord->orbit.evaluator.juliaData.store->exterior.none_avoids   *2;
+      evaluator.currentParams.patchSizeExterior=evaluator.juliaData.store->exterior.none_empty   *2;
     }
   };
 
@@ -335,19 +353,19 @@ void JuliaModel::recomputeRoot(int max_effort)
   // (e+-sqrt(e^2-4*c))/2=z1[e],z2[e]
   // |(1+-sqrt(1-4*c/e^2))|/2=|z1|[e],|z2|[e]
   // worst case |z|=(1+sqrt(1+4*|c|))/2 so everything above (and some below) flies even farther
-  //precisionRecord->orbit.evaluator.currentParams.juliaBailout=MandelMath::sqr_double(1+std::sqrt(1+4*std::sqrt(precisionRecord->orbit.evaluator.currentParams.c.getMag_double())))/4;
-  precisionRecord->orbit.evaluator.currentParams.juliaBailout_.assign(*precisionRecord->orbit.evaluator.currentParams.c.getMag_tmp(&precisionRecord->orbit.evaluator.tmp));
-  precisionRecord->orbit.evaluator.currentParams.juliaBailout_.sqrt();
-  precisionRecord->orbit.evaluator.currentParams.juliaBailout_.lshift(2);
-  precisionRecord->orbit.evaluator.currentParams.juliaBailout_.add_double(1);
-  precisionRecord->orbit.evaluator.currentParams.juliaBailout_.sqrt();
-  precisionRecord->orbit.evaluator.currentParams.juliaBailout_.add_double(1);
-  precisionRecord->orbit.evaluator.currentParams.juliaBailout_.lshift(-1);
-  precisionRecord->orbit.evaluator.currentParams.juliaBailout_.sqr();
+  //evaluator.currentParams.juliaBailout=MandelMath::sqr_double(1+std::sqrt(1+4*std::sqrt(evaluator.currentParams.c.getMag_double())))/4;
+  evaluator.currentParams.juliaBailout.assign(*evaluator.currentParams.c.getMag_tmp(&evaluator.tmp));
+  evaluator.currentParams.juliaBailout.sqrt();
+  evaluator.currentParams.juliaBailout.lshift(2);
+  evaluator.currentParams.juliaBailout.add_double(1);
+  evaluator.currentParams.juliaBailout.sqrt();
+  evaluator.currentParams.juliaBailout.add_double(1);
+  evaluator.currentParams.juliaBailout.lshift(-1);
+  evaluator.currentParams.juliaBailout.sqr(); // ( (1+sqrt(1+4*|c|))/2 )^2
 
 
 
-  precisionRecord->params.root.assign(&precisionRecord->orbit.evaluator.currentParams.juliaRoot);
+  precisionRecord->params.root.assign(&evaluator.currentParams.juliaRoot);
 
   switch (precisionRecord->ntype)
   {
@@ -356,55 +374,65 @@ void JuliaModel::recomputeRoot(int max_effort)
       for (int t=0; t<precisionRecord->threadCount; t++)
       {
         MandelEvaluator<double> *athread=((MandelEvaluator<double> *)precisionRecord->threads[t]);
-        athread->currentParams.c.assign_across(&precisionRecord->orbit.evaluator.currentParams.c);
-        athread->currentParams.juliaRoot.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaRoot);
-        athread->currentParams.juliaAlpha.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaAlpha);
-        athread->currentParams.patchSizeExterior=precisionRecord->orbit.evaluator.currentParams.patchSizeExterior;
-        athread->currentParams.juliaBailout_.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaBailout_);
+        athread->currentParams.assignJulia<MandelMath::number_a *>(evaluator.currentParams);
+        /*athread->currentParams.c.assign_across(&evaluator.currentParams.c);
+        athread->currentParams.juliaRoot.assign_across(&evaluator.currentParams.juliaRoot);
+        athread->currentParams.juliaAlphaShort.assign_across(&evaluator.currentParams.juliaAlphaShort);
+        athread->currentParams.juliaAlpha.assign_across(&evaluator.currentParams.juliaAlpha);
+        athread->currentParams.patchSizeExterior=evaluator.currentParams.patchSizeExterior;
+        athread->currentParams.juliaBailout.assign_across(&evaluator.currentParams.juliaBailout);*/
       }
       break;
     case MandelMath::NumberType::typeFloat128:
       for (int t=0; t<precisionRecord->threadCount; t++)
       {
         MandelEvaluator<__float128> *athread=((MandelEvaluator<__float128> *)precisionRecord->threads[t]);
-        athread->currentParams.c.assign_across(&precisionRecord->orbit.evaluator.currentParams.c);
-        athread->currentParams.juliaRoot.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaRoot);
-        athread->currentParams.juliaAlpha.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaAlpha);
-        athread->currentParams.patchSizeExterior=precisionRecord->orbit.evaluator.currentParams.patchSizeExterior;
-        athread->currentParams.juliaBailout_.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaBailout_);
+        athread->currentParams.assignJulia<MandelMath::number_a *>(evaluator.currentParams);
+        /*athread->currentParams.c.assign_across(&evaluator.currentParams.c);
+        athread->currentParams.juliaRoot.assign_across(&evaluator.currentParams.juliaRoot);
+        athread->currentParams.juliaAlphaShort.assign_across(&evaluator.currentParams.juliaAlphaShort);
+        athread->currentParams.juliaAlpha.assign_across(&evaluator.currentParams.juliaAlpha);
+        athread->currentParams.patchSizeExterior=evaluator.currentParams.patchSizeExterior;
+        athread->currentParams.juliaBailout.assign_across(&evaluator.currentParams.juliaBailout);*/
       }
       break;
     case MandelMath::NumberType::typeDDouble:
       for (int t=0; t<precisionRecord->threadCount; t++)
       {
         MandelEvaluator<MandelMath::dd_real> *athread=((MandelEvaluator<MandelMath::dd_real> *)precisionRecord->threads[t]);
-        athread->currentParams.c.assign_across(&precisionRecord->orbit.evaluator.currentParams.c);
-        athread->currentParams.juliaRoot.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaRoot);
-        athread->currentParams.juliaAlpha.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaAlpha);
-        athread->currentParams.patchSizeExterior=precisionRecord->orbit.evaluator.currentParams.patchSizeExterior;
-        athread->currentParams.juliaBailout_.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaBailout_);
+        athread->currentParams.assignJulia<MandelMath::number_a *>(evaluator.currentParams);
+        /*athread->currentParams.c.assign_across(&evaluator.currentParams.c);
+        athread->currentParams.juliaRoot.assign_across(&evaluator.currentParams.juliaRoot);
+        athread->currentParams.juliaAlphaShort.assign_across(&evaluator.currentParams.juliaAlphaShort);
+        athread->currentParams.juliaAlpha.assign_across(&evaluator.currentParams.juliaAlpha);
+        athread->currentParams.patchSizeExterior=evaluator.currentParams.patchSizeExterior;
+        athread->currentParams.juliaBailout.assign_across(&evaluator.currentParams.juliaBailout);*/
       }
       break;
     case MandelMath::NumberType::typeQDouble:
       for (int t=0; t<precisionRecord->threadCount; t++)
       {
         MandelEvaluator<MandelMath::dq_real> *athread=((MandelEvaluator<MandelMath::dq_real> *)precisionRecord->threads[t]);
-        athread->currentParams.c.assign_across(&precisionRecord->orbit.evaluator.currentParams.c);
-        athread->currentParams.juliaRoot.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaRoot);
-        athread->currentParams.juliaAlpha.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaAlpha);
-        athread->currentParams.patchSizeExterior=precisionRecord->orbit.evaluator.currentParams.patchSizeExterior;
-        athread->currentParams.juliaBailout_.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaBailout_);
+        athread->currentParams.assignJulia<MandelMath::number_a *>(evaluator.currentParams);
+        /*athread->currentParams.c.assign_across(&evaluator.currentParams.c);
+        athread->currentParams.juliaRoot.assign_across(&evaluator.currentParams.juliaRoot);
+        athread->currentParams.juliaAlphaShort.assign_across(&evaluator.currentParams.juliaAlphaShort);
+        athread->currentParams.juliaAlpha.assign_across(&evaluator.currentParams.juliaAlpha);
+        athread->currentParams.patchSizeExterior=evaluator.currentParams.patchSizeExterior;
+        athread->currentParams.juliaBailout.assign_across(&evaluator.currentParams.juliaBailout);*/
       }
       break;
     case MandelMath::NumberType::typeReal642:
       for (int t=0; t<precisionRecord->threadCount; t++)
       {
         MandelEvaluator<MandelMath::real642> *athread=((MandelEvaluator<MandelMath::real642> *)precisionRecord->threads[t]);
-        athread->currentParams.c.assign_across(&precisionRecord->orbit.evaluator.currentParams.c);
-        athread->currentParams.juliaRoot.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaRoot);
-        athread->currentParams.juliaAlpha.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaAlpha);
-        athread->currentParams.patchSizeExterior=precisionRecord->orbit.evaluator.currentParams.patchSizeExterior;
-        athread->currentParams.juliaBailout_.assign_across(&precisionRecord->orbit.evaluator.currentParams.juliaBailout_);
+        athread->currentParams.assignJulia<MandelMath::number_a *>(evaluator.currentParams);
+        /*athread->currentParams.c.assign_across(&evaluator.currentParams.c);
+        athread->currentParams.juliaRoot.assign_across(&evaluator.currentParams.juliaRoot);
+        athread->currentParams.juliaAlphaShort.assign_across(&evaluator.currentParams.juliaAlphaShort);
+        athread->currentParams.juliaAlpha.assign_across(&evaluator.currentParams.juliaAlpha);
+        athread->currentParams.patchSizeExterior=evaluator.currentParams.patchSizeExterior;
+        athread->currentParams.juliaBailout.assign_across(&evaluator.currentParams.juliaBailout);*/
       }
       break;
   }
@@ -856,23 +884,23 @@ void JuliaModel::paintOrbit(ShareableImageWrapper image, int x, int y)
       painter.setPen(QColor(0xff, 0xff, 0));
       switch (_selectedEdePatchAlgo)
       {
-        case EedepaAlways: exterior=qRound(resultStore->exterior.always_hits/precisionRecord->position.step_size); break;
-        case EedepaConditional: exterior=qRound(resultStore->exterior.condi_hits/precisionRecord->position.step_size); break;
-        case EedepaBlend: exterior=qRound(resultStore->exterior.blend_hits_/precisionRecord->position.step_size); break;
-        case EedepaVerifyH: exterior=qRound(resultStore->exterior.verify_hits/precisionRecord->position.step_size); break;
-        case EedepaVerifyA: exterior=qRound(resultStore->exterior.verify_hits/precisionRecord->position.step_size); break;
-        default: exterior=qRound(resultStore->exterior.none_hits/precisionRecord->position.step_size); break;
+        case EedepaAlways: exterior=qRound(resultStore->exterior.always_mixed/precisionRecord->position.step_size); break;
+        case EedepaConditional: exterior=qRound(resultStore->exterior.condi_mixed/precisionRecord->position.step_size); break;
+        case EedepaBlend: exterior=qRound(resultStore->exterior.blend_mixed/precisionRecord->position.step_size); break;
+        case EedepaVerifyH: exterior=qRound(resultStore->exterior.verify_mixed/precisionRecord->position.step_size); break;
+        case EedepaVerifyA: exterior=qRound(resultStore->exterior.verify_mixed/precisionRecord->position.step_size); break;
+        default: exterior=qRound(resultStore->exterior.none_mixed/precisionRecord->position.step_size); break;
       }
       painter.drawEllipse(x-exterior, y-exterior, 2*exterior, 2*exterior);
       painter.setPen(QColor(0xc0, 0xc0, 0));
       switch (_selectedEdePatchAlgo)
       {
-        case EedepaAlways: exterior=qRound(resultStore->exterior.always_avoids/precisionRecord->position.step_size); break;
-        case EedepaConditional: exterior=qRound(resultStore->exterior.condi_avoids/precisionRecord->position.step_size); break;
-        case EedepaBlend: exterior=qRound(resultStore->exterior.blend_avoids/precisionRecord->position.step_size); break;
-        case EedepaVerifyH: exterior=qRound(resultStore->exterior.verify_avoids/precisionRecord->position.step_size); break;
-        case EedepaVerifyA: exterior=qRound(resultStore->exterior.verify_avoids/precisionRecord->position.step_size); break;
-        default: exterior=qRound(resultStore->exterior.none_avoids/precisionRecord->position.step_size); break;
+        case EedepaAlways: exterior=qRound(resultStore->exterior.always_empty/precisionRecord->position.step_size); break;
+        case EedepaConditional: exterior=qRound(resultStore->exterior.condi_empty/precisionRecord->position.step_size); break;
+        case EedepaBlend: exterior=qRound(resultStore->exterior.blend_empty/precisionRecord->position.step_size); break;
+        case EedepaVerifyH: exterior=qRound(resultStore->exterior.verify_empty/precisionRecord->position.step_size); break;
+        case EedepaVerifyA: exterior=qRound(resultStore->exterior.verify_empty/precisionRecord->position.step_size); break;
+        default: exterior=qRound(resultStore->exterior.none_empty/precisionRecord->position.step_size); break;
       }
       painter.drawEllipse(x-exterior, y-exterior, 2*exterior, 2*exterior);
     } break;
@@ -881,20 +909,40 @@ void JuliaModel::paintOrbit(ShareableImageWrapper image, int x, int y)
     { //interior distance estimate
       int interior;
       painter.setBrush(Qt::BrushStyle::NoBrush);
-      painter.setPen(QColor(0, 0xc0, 0xc0));
-      interior=qRound(resultStore->interior.hits/4/precisionRecord->position.step_size);
-      painter.drawEllipse(x-interior, y-interior, 2*interior, 2*interior);
+      if (_selectedPaintStyle==paintStylePhi2)
+      {
+        painter.setPen(QColor(0, 0xc0, 0xc0));
+        interior=qRound(std::hypot(resultStore->interior.phi2_re, resultStore->interior.phi2_im)/precisionRecord->position.step_size);
+        painter.drawEllipse(x-interior, y-interior, 2*interior, 2*interior);
 
-      painter.setPen(QColor(0, 0xff, 0xff));
-      interior=qRound(resultStore->interior.hits/precisionRecord->position.step_size);
-      painter.drawEllipse(x-interior, y-interior, 2*interior, 2*interior);
+        //painter.setPen(QColor(0, 0xff, 0xff));
+        //interior=qRound(resultStore->interior.mixed_/precisionRecord->position.step_size);
+        //painter.drawEllipse(x-interior, y-interior, 2*interior, 2*interior);
 
-      painter.setPen(QColor(0x00, 0x00, 0x00));
-      int inte_x=qRound(resultStore->interior.hits_re/precisionRecord->position.step_size);
-      int inte_y=qRound(resultStore->interior.hits_im/precisionRecord->position.step_size);
-      painter.drawEllipse(x+inte_x-1, y-inte_y-1, 3, 3);
-      painter.setPen(QColor(0xff, 0xff, 0xff));
-      painter.drawEllipse(+x+inte_x-2, y-inte_y-2, 5, 5);
+        painter.setPen(QColor(0x00, 0x00, 0x00));
+        int inte_x=qRound(resultStore->interior.phi2_re/precisionRecord->position.step_size);
+        int inte_y=qRound(resultStore->interior.phi2_im/precisionRecord->position.step_size);
+        painter.drawEllipse(x+inte_x-1, y-inte_y-1, 3, 3);
+        painter.setPen(QColor(0xff, 0xff, 0xff));
+        painter.drawEllipse(+x+inte_x-2, y-inte_y-2, 5, 5);
+      }
+      else
+      {
+        painter.setPen(QColor(0, 0xc0, 0xc0));
+        interior=qRound(resultStore->interior.full/precisionRecord->position.step_size);
+        painter.drawEllipse(x-interior, y-interior, 2*interior, 2*interior);
+
+        painter.setPen(QColor(0, 0xff, 0xff));
+        interior=qRound(resultStore->interior.mixed_/precisionRecord->position.step_size);
+        painter.drawEllipse(x-interior, y-interior, 2*interior, 2*interior);
+
+        painter.setPen(QColor(0x00, 0x00, 0x00));
+        int inte_x=qRound(resultStore->interior.mixed_re/precisionRecord->position.step_size);
+        int inte_y=qRound(resultStore->interior.mixed_im/precisionRecord->position.step_size);
+        painter.drawEllipse(x+inte_x-1, y-inte_y-1, 3, 3);
+        painter.setPen(QColor(0xff, 0xff, 0xff));
+        painter.drawEllipse(+x+inte_x-2, y-inte_y-2, 5, 5);
+      }
     } break;
     default: ;
   }
@@ -915,7 +963,7 @@ void JuliaModel::paintOrbit(ShareableImageWrapper image, int x, int y)
   //already 0 precisionRecord->orbit.evaluator.currentParams.nth_fz=0;
   evaluator.juliaData.zero(&evaluator.currentParams.first_z);
   evaluator.juliaData.store->wstate=JuliaPointStore::WorkState::stWorking;
-  evaluator.currentParams.breakOnNewNearest=true;
+  evaluator.currentParams.breakOnNewNearest=false;
   evaluator.currentParams.maxiter=1<<MAX_EFFORT;
   evaluator.currentParams.want_extangle=(_selectedPaintStyle==paintStyleExterAngle) ||
                                         (resultStore->rstate==JuliaPointStore::ResultState::stOutAngle);
@@ -1364,12 +1412,12 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
               double tf, exterior;
               switch (_selectedEdePatchAlgo)
               {
-                case EedepaAlways: exterior=wtiStore->exterior.always_hits; break;
-                case EedepaConditional: exterior=wtiStore->exterior.condi_hits; break;
-                case EedepaBlend: exterior=wtiStore->exterior.blend_hits_; break;
-                case EedepaVerifyH: exterior=std::abs(wtiStore->exterior.verify_hits/wtiStore->exterior.none_hits-1); break;
-                case EedepaVerifyA: exterior=std::abs(wtiStore->exterior.verify_avoids/wtiStore->exterior.none_avoids-1); break;
-                default: exterior=wtiStore->exterior.none_hits; break;
+                case EedepaAlways: exterior=wtiStore->exterior.always_mixed; break;
+                case EedepaConditional: exterior=wtiStore->exterior.condi_mixed; break;
+                case EedepaBlend: exterior=wtiStore->exterior.blend_mixed; break;
+                case EedepaVerifyH: exterior=std::abs(wtiStore->exterior.verify_mixed/wtiStore->exterior.none_mixed-1); break;
+                case EedepaVerifyA: exterior=std::abs(wtiStore->exterior.verify_empty/wtiStore->exterior.none_empty-1); break;
+                default: exterior=wtiStore->exterior.none_mixed; break;
               }
               if ((exterior>10000) || (exterior<=0))
                 image.image->setPixel(x, y, 0xff9f9f9f);
@@ -1605,10 +1653,13 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
             case JuliaPointStore::ResultState::stPeriod3:
             {
               int ti=30;
-              if ((wtiStore->interior.hits>4) || (wtiStore->interior.hits<=0))
+              if (wtiStore->interior.mixed_<=0)
                 ti=0;
+              else if (wtiStore->interior.mixed_>4)
+                //ti=(qRound((1-wtiStore->interior.hits/4)*300)+12*0xc0) % (6*0xc0);
+                ti=6*0xc0-1-(qRound((wtiStore->interior.mixed_/4-1)*300)+1)%(6*0xc0);
               else
-                ti=(qRound(-log(wtiStore->interior.hits/4)*300)+12*0xc0) % (6*0xc0);
+                ti=(qRound(-log(wtiStore->interior.mixed_/4)*300)+12*0xc0) % (6*0xc0);
               int r, g, b;
               if (ti<0xC0)
               { r=0x3f+ti; g=0xff; b=0x3f; }                           // + H L
@@ -1912,7 +1963,8 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
             case JuliaPointStore::ResultState::stPeriod3:
             {
               precisionRecord->wtiPoint.readFrom(precisionRecord->points, (y*imageWidth+x)*JuliaPoint<MandelMath::number_a *>::LEN);
-              int index=wtiStore->interior.first_under_1;
+              //int index=wtiStore->interior.first_under_1;
+              int index=wtiStore->bigfzfzziter;
               //reverse bottom 7 bits:
               int g=0x80 | MandelMath::ReverseBits<7,1>(index);
               int b=0;

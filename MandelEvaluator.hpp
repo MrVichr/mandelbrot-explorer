@@ -131,29 +131,30 @@ struct JuliaPointStore
   //bool lookper_nearr_dist_touched; //check if equal but only once; in theory should only happen at dist=0
   int near0iter_1; //actual+1
   int nearziter_0;
+  int bigfzfzziter;
   //int period;
   //int surehand;
   int iter;
   struct
   {
-    double verify_hits, verify_avoids; //official estimate in one go
-    double none_hits, none_avoids; //upper and lower bound; should==verify
-    double always_hits, always_avoids;
-    double condi_hits, condi_avoids;
-    double blend_hits_, blend_avoids;
-    void zero(double x) {verify_hits=x; verify_avoids=x; none_hits=x; none_avoids=x; always_hits=x; always_avoids=x; condi_hits=x; condi_avoids=x; blend_hits_=x; blend_avoids=x; }
+    double verify_mixed, verify_empty; //official estimate in one go
+    double none_mixed, none_empty; //upper and lower bound; should==verify
+    double always_mixed, always_empty;
+    double condi_mixed, condi_empty;
+    double blend_mixed, blend_empty;
+    void zero(double x) {verify_mixed=x; verify_empty=x; none_mixed=x; none_empty=x; always_mixed=x; always_empty=x; condi_mixed=x; condi_empty=x; blend_mixed=x; blend_empty=x; }
   } exterior;
   struct
   {
-    double hits;
-    double hits_re, hits_im;
+    double mixed_, full;
+    double mixed_re, mixed_im;
     double phi_re, phi_im;
     double phi1_re, phi1_im;
     double phi2_re, phi2_im;
     double f1_re, f1_im;
     int first_under_1;
     int cycles_until_root;
-    void zero() {hits=-1; hits_re=0; hits_im=0; phi_re=0; phi_im=0; phi1_re=0; phi1_im=0; phi_re=0; phi2_im=0; f1_re=0; f1_im=0; first_under_1=0; cycles_until_root=0; }
+    void zero() {mixed_=-1; full=-1; mixed_re=0; mixed_im=0; phi_re=0; phi_im=0; phi1_re=0; phi1_im=0; phi_re=0; phi2_im=0; f1_re=0; f1_im=0; first_under_1=0; cycles_until_root=0; }
   } interior;
 
   JuliaPointStore();
@@ -168,22 +169,26 @@ struct JuliaPoint
   {
     iiw__BASE=0,
     iiw_f_=iiw__BASE+0,
-    iiw_fc_c=iiw__BASE+2,
-    iiw_fz_c_mag=iiw__BASE+4,
-    iiw_lookper_distr=iiw__BASE+5,
-    iiw_lookper_fz=iiw__BASE+7,
-    iiw_near0m=iiw__BASE+9,
-    iiw_nearzm=iiw__BASE+10,
-    iiw_near0fzm=iiw__BASE+11,
-    iiw_since0fzm=iiw__BASE+12,
-    iiw_extangle=iiw__BASE+13,
-    iiw__END=iiw__BASE+14
+    iiw_fz_z=iiw__BASE+2,
+    iiw_fzz_z=iiw__BASE+4,
+    iiw_fz_z_mag=iiw__BASE+6,
+    iiw_lookper_distr=iiw__BASE+7,
+    iiw_lookper_fz=iiw__BASE+9,
+    iiw_near0m=iiw__BASE+11,
+    iiw_nearzm=iiw__BASE+12,
+    iiw_near0fzm=iiw__BASE+13,
+    iiw_since0fzm=iiw__BASE+14,
+    iiw_bigfzfzzm=iiw__BASE+15,
+    iiw_shrinkfactor=iiw__BASE+16,
+    iiw_extangle=iiw__BASE+18,
+    iiw__END=iiw__BASE+19
   };
   static constexpr size_t LEN=iiw__END-iiw__BASE;
   JuliaPointStore *store;
   JuliaPoint(JuliaPointStore *store, MandelMath::NumberType ntype);
   MandelMath::complex<BASE> f;
   MandelMath::complex<BASE> fz_z;
+  MandelMath::complex<BASE> fzz_z;
   MandelMath::number<BASE> fz_z_mag; //since the beginning
   MandelMath::complex<BASE> lookper_distr;
   MandelMath::complex<BASE> lookper_fz;
@@ -191,6 +196,8 @@ struct JuliaPoint
   MandelMath::number<BASE> near0fzm; //from start to near0
   MandelMath::number<BASE> near0m;
   MandelMath::number<BASE> since0fzm; //from near0+1 to end
+  MandelMath::number<BASE> bigfzfzzm;
+  MandelMath::complex<BASE> shrinkfactor;
   MandelMath::number<BASE> extangle;
   JuliaPoint &operator=(JuliaPoint &src) = delete;
   //template <int IIW_SRC>
@@ -361,7 +368,7 @@ protected:
   MandelMath::complex<BASE> s2;
 };
 
-template <class WORKER_MULTI>
+template <class BASE>
 class MandelEvaluator;
 
 class MandelEvaluatorThread: public QThread
@@ -443,7 +450,8 @@ public:
     MandelMath::complex<BASE> c;
     MandelMath::complex<BASE> juliaRoot;
     double patchSizeExterior;
-    MandelMath::number<BASE> juliaBailout_; //not quite 4
+    MandelMath::number<BASE> juliaBailout; //not quite 4
+    MandelMath::complex<BASE> juliaAlphaShort; // alpha but only from r to near0
     MandelMath::complex<BASE> juliaAlpha; // |alpha|<1
     MandelMath::complex<BASE> first_z;
     int epoch;
@@ -454,6 +462,9 @@ public:
     bool want_extangle;
     int nth_fz;
     ComputeParams(MandelMath::NumberType ntype);
+    //does not compile void assignJulia(const MandelEvaluator<MandelMath::number_a *>::ComputeParams &src);
+    template <typename BASE_OTHER>
+    void assignJulia(const typename MandelEvaluator<BASE_OTHER>::ComputeParams &src);
   } currentParams;
   LaguerrePointStore laguerreStore;
   LaguerrePoint<BASE> laguerreData;
@@ -537,7 +548,7 @@ protected:
     MandelMath::number<BASE> inte_abs;
     MandelMath::complex<BASE> fz;
     MandelMath::number<BASE> fz_mag;
-    MandelMath::complex<BASE> alpha;
+    MandelMath::complex<BASE> alpha_unused;
     MandelMath::complex<BASE> alphak;
     MandelMath::complex<BASE> zoom;
     InteriorInfo(MandelMath::NumberType ntype);
