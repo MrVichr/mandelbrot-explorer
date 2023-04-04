@@ -1263,9 +1263,17 @@ int LaguerreModel::giveWorkThreaded(MandelEvaluator<BASE> *me)
       //MandelMath::worker_multi::Allocator allo(storeWorker->getAllocator(), pointIndex*LaguerrePoint::LEN, LaguerrePoint::LEN, nullptr);
       //LaguerrePoint pointData_(&pointStore_[pointIndex], &allo);
       LaguerrePointStore *storeAtIndex=&pointStore[pointIndex];
-      LaguerrePointStore::State state_expected=LaguerrePointStore::State::stUnknown;
-      if (!storeAtIndex->state.compare_exchange_strong(state_expected, LaguerrePointStore::State::stWorking))
+      if (storeAtIndex->state==LaguerrePointStore::State::stWorking) //speedup/precheck
         continue;
+      LaguerrePointStore::State state_prev=storeAtIndex->state.exchange(LaguerrePointStore::State::stWorking);
+      if (state_prev!=LaguerrePointStore::State::stUnknown)
+      {
+        //was working->do not touch, could be done by now
+        //was done/fail->restore old state
+        if (state_prev!=LaguerrePointStore::State::stWorking)
+          storeAtIndex->state=state_prev;
+        continue;
+      }
       {
         if (me->currentParams.pixelIndex!=-1)
           dbgPoint();

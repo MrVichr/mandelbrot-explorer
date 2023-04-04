@@ -2073,9 +2073,13 @@ int JuliaModel::giveWorkThreaded(MandelEvaluator<BASE> *me)
       //MandelMath::worker_multi::Allocator allo(storeWorker->getAllocator(), pointIndex*MandelPoint::LEN, MandelPoint::LEN, nullptr);
       //MandelPoint pointData_(&pointStore_[pointIndex], &allo);
       JuliaPointStore *storeAtIndex=&pointStore[pointIndex];
-      JuliaPointStore::WorkState state_expected=JuliaPointStore::WorkState::stIdle;
+      if (storeAtIndex->wstate==JuliaPointStore::WorkState::stWorking)
+        continue; //speedup/precheck
       int extra_effort=0;
-      if (!storeAtIndex->wstate.compare_exchange_strong(state_expected, JuliaPointStore::WorkState::stWorking))
+      JuliaPointStore::WorkState state_prev=storeAtIndex->wstate.exchange(JuliaPointStore::WorkState::stWorking);
+      if (state_prev==JuliaPointStore::WorkState::stWorking)
+        continue;
+      if (state_prev==JuliaPointStore::WorkState::stDone)
       {
         /*if ((_selectedPaintStyle==paintStyleFC) &&
             (!storeAtIndex->has_fc_r) &&
@@ -2091,14 +2095,13 @@ int JuliaModel::giveWorkThreaded(MandelEvaluator<BASE> *me)
         else*/ if (_selectedPaintStyle==paintStyleExterAngle &&
                  storeAtIndex->rstate==JuliaPointStore::ResultState::stOutside)
         {
-          state_expected=JuliaPointStore::WorkState::stDone;
-          if (!storeAtIndex->wstate.compare_exchange_strong(state_expected, JuliaPointStore::WorkState::stWorking))
-            continue;
-            //should check if it still needs but it should be quite rare, evaluate tests it anyway
           extra_effort=1;
         }
         else
+        {
+          storeAtIndex->wstate=JuliaPointStore::WorkState::stDone;
           continue;
+        }
       }
       {
         if (me->currentParams.pixelIndex!=-1)

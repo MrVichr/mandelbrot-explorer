@@ -1680,32 +1680,31 @@ int MandelModel::giveWorkThreaded(MandelEvaluator<BASE> *me)
       //MandelMath::worker_multi::Allocator allo(storeWorker->getAllocator(), pointIndex*MandelPoint::LEN, MandelPoint::LEN, nullptr);
       //MandelPoint pointData_(&pointStore_[pointIndex], &allo);
       MandelPointStore *storeAtIndex=&pointStore[pointIndex];
-      MandelPointStore::WorkState state_expected=MandelPointStore::WorkState::stIdle;
+      if (storeAtIndex->wstate==MandelPointStore::WorkState::stWorking)
+        continue; //speedup/precheck
       int extra_effort=0;
-      if (!storeAtIndex->wstate.compare_exchange_strong(state_expected, MandelPointStore::WorkState::stWorking))
+      MandelPointStore::WorkState state_prev=storeAtIndex->wstate.exchange(MandelPointStore::WorkState::stWorking);
+      if (state_prev==MandelPointStore::WorkState::stWorking)
+        continue;
+      else if (state_prev==MandelPointStore::WorkState::stDone)
       {
         if ((_selectedPaintStyle==paintStyleFC) &&
             (!storeAtIndex->has_fc_r) &&
             (storeAtIndex->rstate==MandelPointStore::ResultState::stPeriod2 ||
              storeAtIndex->rstate==MandelPointStore::ResultState::stPeriod3))
         {
-          state_expected=MandelPointStore::WorkState::stDone;
-          if (!storeAtIndex->wstate.compare_exchange_strong(state_expected, MandelPointStore::WorkState::stWorking))
-            continue;
-            //should check if it still needs but it should be quite rare, evaluate tests it anyway
           extra_effort=1;
         }
         else if (_selectedPaintStyle==paintStyleExterAngle &&
                  storeAtIndex->rstate==MandelPointStore::ResultState::stOutside)
         {
-          state_expected=MandelPointStore::WorkState::stDone;
-          if (!storeAtIndex->wstate.compare_exchange_strong(state_expected, MandelPointStore::WorkState::stWorking))
-            continue;
-            //should check if it still needs but it should be quite rare, evaluate tests it anyway
           extra_effort=1;
         }
         else
+        {
+          storeAtIndex->wstate=MandelPointStore::WorkState::stDone;
           continue;
+        }
       }
       {
         if (me->currentParams.pixelIndex!=-1)
