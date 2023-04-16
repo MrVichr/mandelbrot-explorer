@@ -65,6 +65,7 @@ public:
     paintStylePhi2=9,
     paintStyleF1=10,
     paintStyleFirstUnder1=11,
+    paintStyleNearMR=12,
   };
   Q_ENUM(paintStyle);
   paintStyle _selectedPaintStyle;
@@ -124,6 +125,11 @@ public:
   exterior_coloring getselectedExteriorColoring() { return _selectedExteriorColoring; }
   void setselectedExteriorColoring(exterior_coloring ps) { _selectedExteriorColoring=ps; emit selectedExteriorColoringChange(); }
 
+  bool _orbit_frozen;
+  Q_PROPERTY(bool orbit_frozen READ getorbit_frozen WRITE setorbit_frozen NOTIFY orbit_frozenChange)
+  bool getorbit_frozen() { return _orbit_frozen; }
+  void setorbit_frozen(bool of) { _orbit_frozen=of; emit orbit_frozenChange(); }
+
   QVector<int> periodToIndexCache;
   int periodToIndex(int period);
 protected:
@@ -142,6 +148,7 @@ signals:
   void selectedPrecisionChange();
   void selectedEdePatchAlgoChange();
   void selectedExteriorColoringChange();
+  void orbit_frozenChange();
   void extAngleZoomChange();
   void triggerJuliaThreaded(int epoch, int juliaPeriod);
 protected:
@@ -183,7 +190,6 @@ protected:
   {
     MandelEvaluator<MandelMath::number_a *> evaluator;
     JuliaPointStore pointDataStore; //but we need it for long-term storage of results
-    JuliaPoint<MandelMath::number_a *> pointData;
     double first_mu_re, first_mu_im, first_mum_re, first_mum_im;
     Orbit(MandelMath::NumberType ntype);
     ~Orbit();

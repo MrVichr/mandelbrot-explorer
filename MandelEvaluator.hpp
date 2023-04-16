@@ -44,6 +44,17 @@ struct LaguerrePoint
   void zero(const MandelMath::complex<BASE> *c);
 };
 
+template <typename BASE>
+struct ComputeMandelParams
+{
+  MandelMath::complex<BASE> c;
+  MandelMath::number<BASE> bailout; //4 for mandel
+  MandelMath::complex<BASE> first_z; //used
+  ComputeMandelParams(MandelMath::NumberType ntype);
+  template<typename OTHER_BASE>
+  void assign_across(const ComputeMandelParams<OTHER_BASE> &src);
+};
+
 struct MandelPointStore
 {
   enum WorkState { stIdle, stWorking, stDone };
@@ -120,6 +131,23 @@ struct MandelPoint
   void zero(const MandelMath::complex<BASE> *first_z);
 };
 
+template <typename BASE>
+struct ComputeJuliaParams
+{
+  int period;
+  MandelMath::complex<BASE> c;
+  MandelMath::complex<BASE> root;
+  MandelMath::complex<BASE> root0;
+  double patchSizeExterior;
+  MandelMath::number<BASE> bailout; //not quite 4
+  MandelMath::complex<BASE> alphaShort; // alpha but only from r to near0
+  MandelMath::complex<BASE> alpha; // |alpha|<1
+  MandelMath::complex<BASE> first_z;
+  ComputeJuliaParams(MandelMath::NumberType ntype);
+  template<typename OTHER_BASE>
+  void assign_across(const ComputeJuliaParams<OTHER_BASE> &src);
+};
+
 struct JuliaPointStore
 {
   enum WorkState { stIdle, stWorking, stDone };
@@ -132,6 +160,8 @@ struct JuliaPointStore
   int near0iter_1; //actual+1
   int nearziter_0;
   int bigfzfzziter;
+  int nearmriter;
+  bool nearmr_difficult;
   //int period;
   //int surehand;
   int iter;
@@ -146,7 +176,7 @@ struct JuliaPointStore
   } exterior;
   struct
   {
-    double mixed_, full;
+    double mixed, full;
     double mixed_re, mixed_im;
     double phi_re, phi_im;
     double phi1_re, phi1_im;
@@ -154,7 +184,7 @@ struct JuliaPointStore
     double f1_re, f1_im;
     int first_under_1;
     int cycles_until_root;
-    void zero() {mixed_=-1; full=-1; mixed_re=0; mixed_im=0; phi_re=0; phi_im=0; phi1_re=0; phi1_im=0; phi_re=0; phi2_im=0; f1_re=0; f1_im=0; first_under_1=0; cycles_until_root=0; }
+    void zero() {mixed=-1; full=-1; mixed_re=0; mixed_im=0; phi_re=0; phi_im=0; phi1_re=0; phi1_im=0; phi_re=0; phi2_im=0; f1_re=0; f1_im=0; first_under_1=0; cycles_until_root=0; }
   } interior;
 
   JuliaPointStore();
@@ -180,8 +210,11 @@ struct JuliaPoint
     iiw_since0fzm=iiw__BASE+14,
     iiw_bigfzfzzm=iiw__BASE+15,
     iiw_shrinkfactor=iiw__BASE+16,
-    iiw_extangle=iiw__BASE+18,
-    iiw__END=iiw__BASE+19
+    iiw_nearmrm=iiw__BASE+18,
+    iiw_nearmr_f=iiw__BASE+19,
+    iiw_nearmr_fz_=iiw__BASE+21,
+    iiw_extangle=iiw__BASE+23,
+    iiw__END=iiw__BASE+24
   };
   static constexpr size_t LEN=iiw__END-iiw__BASE;
   JuliaPointStore *store;
@@ -198,6 +231,9 @@ struct JuliaPoint
   MandelMath::number<BASE> since0fzm; //from near0+1 to end
   MandelMath::number<BASE> bigfzfzzm;
   MandelMath::complex<BASE> shrinkfactor;
+  MandelMath::number<BASE> nearmrm; //near0 where we jump into final cycle //closest to -r
+  MandelMath::complex<BASE> nearmr_f; //fz at nearmr_iter (+1)
+  MandelMath::complex<BASE> nearmr_fz; //fz at nearmr_iter (+1)
   MandelMath::number<BASE> extangle;
   JuliaPoint &operator=(JuliaPoint &src) = delete;
   //template <int IIW_SRC>
@@ -207,6 +243,14 @@ struct JuliaPoint
   void readFrom(void *storage, int index);//BASE src[LEN]);
   void writeTo(void *storage, int index);
   void zero(const MandelMath::complex<BASE> *first_z);
+
+  struct NearMR
+  {
+    JuliaPoint<BASE> &owner;
+    void tap(ComputeJuliaParams<BASE> &params, MandelMath::complex<BASE> *tmpx, typename MandelMath::complex<BASE>::Scratchpad *scr);
+    //int get() {return owner.store->nearmriter; }
+    NearMR(JuliaPoint &owner): owner(owner) {}
+  } nearmr;
 };
 
 class ShareableViewInfo: public QObject
@@ -379,11 +423,11 @@ protected:
 public:
   MandelEvaluatorThread(MandelEvaluator<MandelMath::number_a *> *owner);
   void syncMandel();
-  void syncJulia(int juliaPeriod);
+  void syncJulia();
   int syncLaguerre(int period, MandelMath::complex<MandelMath::number_a *> *r, const bool fastHoming);
 public slots:
   void doMandelThreaded(int epoch);
-  void doJuliaThreaded(int epoch, int juliaPeriod);
+  void doJuliaThreaded(int epoch);
   void doLaguerreThreaded(int epoch, int laguerrePeriod);
 signals:
   void doneMandelThreaded(MandelEvaluatorThread *me);
@@ -447,13 +491,8 @@ public:
       iiw__END=iiw__BASE+6
     };
     static constexpr size_t LEN=iiw__END-iiw__BASE;*/
-    MandelMath::complex<BASE> c;
-    MandelMath::complex<BASE> juliaRoot;
-    double patchSizeExterior;
-    MandelMath::number<BASE> juliaBailout; //not quite 4
-    MandelMath::complex<BASE> juliaAlphaShort; // alpha but only from r to near0
-    MandelMath::complex<BASE> juliaAlpha; // |alpha|<1
-    MandelMath::complex<BASE> first_z;
+    ComputeMandelParams<BASE> mandel;
+    ComputeJuliaParams<BASE> julia;
     int epoch;
     int pixelIndex;
     int maxiter;
@@ -462,9 +501,6 @@ public:
     bool want_extangle;
     int nth_fz;
     ComputeParams(MandelMath::NumberType ntype);
-    //does not compile void assignJulia(const MandelEvaluator<MandelMath::number_a *>::ComputeParams &src);
-    template <typename BASE_OTHER>
-    void assignJulia(const typename MandelEvaluator<BASE_OTHER>::ComputeParams &src);
   } currentParams;
   LaguerrePointStore laguerreStore;
   LaguerrePoint<BASE> laguerreData;
@@ -475,7 +511,7 @@ public:
   typename MandelMath::complex<BASE>::Scratchpad tmp;
 
   void syncMandelSplit();
-  void syncJuliaSplit(int juliaPeriod);
+  void syncJuliaSplit();
   MandelLoopEvaluator<BASE> loope;
   int laguerre(int period, const MandelMath::complex<BASE> *c, MandelMath::complex<BASE> *r, const bool fastHoming);
   struct NewtRes
@@ -548,7 +584,8 @@ protected:
     MandelMath::number<BASE> inte_abs;
     MandelMath::complex<BASE> fz;
     MandelMath::number<BASE> fz_mag;
-    MandelMath::complex<BASE> alpha_unused;
+    MandelMath::complex<BASE> step_to_root;
+    MandelMath::complex<BASE> alphak_other;
     MandelMath::complex<BASE> alphak;
     MandelMath::complex<BASE> zoom;
     InteriorInfo(MandelMath::NumberType ntype);
@@ -640,8 +677,8 @@ protected:
   void julia_until_bailout();
   void evaluateMandel();
   void doMandelThreadedSplit(int epoch);
-  void evaluateJulia(int juliaPeriod);
-  void doJuliaThreadedSplit(int epoch, int juliaPeriod);
+  void evaluateJulia();
+  void doJuliaThreadedSplit(int epoch);
   void doLaguerreThreadedSplit(int epoch, int laguerrePeriod);
   friend MandelEvaluatorThread;
 /*protected slots:

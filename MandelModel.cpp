@@ -143,8 +143,8 @@ QString MandelModel::getTextXY()
 {
   if (precisionRecord==nullptr)
     return "-";
-  return precisionRecord->orbit.evaluator.currentParams.first_z.re.toString()+" +i* "+
-         precisionRecord->orbit.evaluator.currentParams.first_z.im.toString();
+  return precisionRecord->orbit.evaluator.currentParams.mandel.first_z.re.toString()+" +i* "+
+         precisionRecord->orbit.evaluator.currentParams.mandel.first_z.im.toString();
 }
 
 static QString mandDoubleToString(double x)
@@ -172,7 +172,7 @@ QString MandelModel::getTextInfoGen()
   int orbit_x, orbit_y;
   {
     MandelMath::number<MandelMath::number_a *> tmp(precisionRecord->ntype);
-    reimToPixel(&orbit_x, &orbit_y, &precisionRecord->orbit.evaluator.currentParams.first_z, &tmp);
+    reimToPixel(&orbit_x, &orbit_y, &precisionRecord->orbit.evaluator.currentParams.mandel.first_z, &tmp);
   }
   if ((orbit_x<0) || (orbit_x>=imageWidth) || (orbit_y<0) | (orbit_y>=imageHeight))
     return "? +i* ?";
@@ -222,7 +222,7 @@ QString MandelModel::getTextInfoSpec()
   int orbit_x, orbit_y;
   {
     MandelMath::number<MandelMath::number_a *> tmp(precisionRecord->ntype);
-    reimToPixel(&orbit_x, &orbit_y, &precisionRecord->orbit.evaluator.currentParams.first_z, &tmp);
+    reimToPixel(&orbit_x, &orbit_y, &precisionRecord->orbit.evaluator.currentParams.mandel.first_z, &tmp);
   }
   if ((orbit_x<0) || (orbit_x>=imageWidth) || (orbit_y<0) | (orbit_y>=imageHeight))
     return "? +i* ?";
@@ -281,22 +281,22 @@ ShareableViewInfo MandelModel::getViewInfo()
   result.nth_fz=precisionRecord->orbit.evaluator.mandelData.store->near0iter_1;/*precisionRecord->orbit.evaluator.currentData.store->period;
   if (result.nth_fz<1)
     result.nth_fz=result.period;*/
-  result.view.assign_across(&precisionRecord->orbit.evaluator.currentParams.c);
+  result.view.assign_across(&precisionRecord->orbit.evaluator.currentParams.mandel.c);
   result.scale=precisionRecord->position.step_size;
   result.max_root_effort=MAX_EFFORT;
   /*orbit.worker->init_(&result.re_, &result.re_p);
   orbit.worker->init_(&result.im, &result.im_p);
   orbit.worker->init_(&result.root_re, &result.rre_p);
   orbit.worker->init_(&result.root_im, &result.rim_p);*/
-  result.c.assign_across(&precisionRecord->orbit.evaluator.currentParams.c);
+  result.c.assign_across(&precisionRecord->orbit.evaluator.currentParams.mandel.c);
   precisionRecord->orbit.evaluator.loope.eval_zz(&precisionRecord->orbit.evaluator.tmp, result.nth_fz,
-      &precisionRecord->orbit.evaluator.currentParams.c,//result.c,
+      &precisionRecord->orbit.evaluator.currentParams.mandel.c,//result.c,
       &precisionRecord->orbit.evaluator.mandelData.root,//result.root,
       false);
   result.nth_fz_limit.assign_across(precisionRecord->orbit.evaluator.loope.f_z.getMag_tmp(&spad));
 
   //TODO: why here? should be somewhere else
-  precisionRecord->lagu_c.assign_across(&precisionRecord->orbit.evaluator.currentParams.c);
+  precisionRecord->lagu_c.assign_across(&precisionRecord->orbit.evaluator.currentParams.mandel.c);
   precisionRecord->lagu_r.assign_across(&precisionRecord->orbit.evaluator.mandelData.root);
 
   return result;
@@ -800,16 +800,16 @@ void MandelModel::paintOrbit(ShareableImageWrapper image, int x, int y)
     } break;
     default: ;
   }
-  precisionRecord->position.pixelXtoRE(x-imageWidth/2, &precisionRecord->orbit.evaluator.currentParams.first_z.re);
-  precisionRecord->position.pixelYtoIM(imageHeight/2-y, &precisionRecord->orbit.evaluator.currentParams.first_z.im);
+  precisionRecord->position.pixelXtoRE(x-imageWidth/2, &precisionRecord->orbit.evaluator.currentParams.mandel.first_z.re);
+  precisionRecord->position.pixelYtoIM(imageHeight/2-y, &precisionRecord->orbit.evaluator.currentParams.mandel.first_z.im);
   precisionRecord->orbit.evaluator.currentParams.epoch=epoch;
   precisionRecord->orbit.evaluator.workIfEpoch=precisionRecord->orbit.evaluator.busyEpoch;//epoch;
   precisionRecord->orbit.evaluator.currentParams.pixelIndex=0;
-  precisionRecord->orbit.evaluator.currentParams.c.assign(&precisionRecord->orbit.evaluator.currentParams.first_z);
+  precisionRecord->orbit.evaluator.currentParams.mandel.c.assign(&precisionRecord->orbit.evaluator.currentParams.mandel.first_z);
   //already 0 precisionRecord->orbit.evaluator.currentParams.nth_fz=0;
   //precisionRecord->orbit.evaluator.currentData.store->rstate=MandelPointStore::ResultState::stUnknown_;
   //precisionRecord->orbit.evaluator.currentData.store->wstate=MandelPointStore::WorkState::stIdle;
-  precisionRecord->orbit.evaluator.mandelData.zero(&precisionRecord->orbit.evaluator.currentParams.first_z);
+  precisionRecord->orbit.evaluator.mandelData.zero(&precisionRecord->orbit.evaluator.currentParams.mandel.first_z);
   precisionRecord->orbit.evaluator.mandelData.store->wstate=MandelPointStore::WorkState::stWorking;
   precisionRecord->orbit.evaluator.currentParams.breakOnNewNearest=true;
   precisionRecord->orbit.evaluator.currentParams.maxiter=1<<MAX_EFFORT;
@@ -877,7 +877,7 @@ void MandelModel::paintOrbit(ShareableImageWrapper image, int x, int y)
     //precisionRecord->orbit.bulb.valid=
     precisionRecord->orbit.evaluator.bulb.findBulbBase(&precisionRecord->orbit.evaluator.tmp,
         precisionRecord->orbit.evaluator.mandelData.store->period,
-        &precisionRecord->orbit.evaluator.currentParams.c);
+        &precisionRecord->orbit.evaluator.currentParams.mandel.c);
     precisionRecord->orbit.bulb.baseFz.assign_across(&precisionRecord->orbit.evaluator.bulb.res_baseFz);
     precisionRecord->orbit.bulb.foundMult_=precisionRecord->orbit.evaluator.bulb.res_foundMult;
     if (precisionRecord->orbit.evaluator.bulb.res_valid)
@@ -1118,7 +1118,7 @@ int MandelModel::writeToImage(ShareableImageWrapper image)
           switch (wtiStore->rstate)
           {
             case MandelPointStore::ResultState::stUnknown:
-              image.image->setPixel(x, y, 0x00906090);
+              image.image->setPixel(x, y, 0x00906090); //100% transparent (gray) = black
               break;
             case MandelPointStore::ResultState::stOutside:
             case MandelPointStore::ResultState::stOutAngle:
@@ -1678,7 +1678,6 @@ int MandelModel::giveWorkThreaded(MandelEvaluator<BASE> *me)
       //if ((lastGivenPointIndex_!=0) && (pointIndex==0))
         //dbgPoint();
       //MandelMath::worker_multi::Allocator allo(storeWorker->getAllocator(), pointIndex*MandelPoint::LEN, MandelPoint::LEN, nullptr);
-      //MandelPoint pointData_(&pointStore_[pointIndex], &allo);
       MandelPointStore *storeAtIndex=&pointStore[pointIndex];
       if (storeAtIndex->wstate.load(std::memory_order_relaxed)==MandelPointStore::WorkState::stWorking)
         continue; //speedup/precheck
@@ -1742,9 +1741,9 @@ int MandelModel::giveWorkThreaded(MandelEvaluator<BASE> *me)
             //if (me->currentWorker->ntype()!=precisionRecord->ntype)
               //dbgPoint();
             //evaluator->switchType(position.worker);
-            precisionRecord->position.pixelXtoRE<BASE>(pointIndex%imageWidth - imageWidth/2, &me->currentParams.first_z.re);
-            precisionRecord->position.pixelYtoIM<BASE>(imageHeight/2-pointIndex/imageWidth, &me->currentParams.first_z.im);
-            me->currentParams.c.assign(&me->currentParams.first_z);
+            precisionRecord->position.pixelXtoRE<BASE>(pointIndex%imageWidth - imageWidth/2, &me->currentParams.mandel.first_z.re);
+            precisionRecord->position.pixelYtoIM<BASE>(imageHeight/2-pointIndex/imageWidth, &me->currentParams.mandel.first_z.im);
+            me->currentParams.mandel.c.assign(&me->currentParams.mandel.first_z);
             me->currentParams.epoch=me->busyEpoch;
             //storeAtIndex->state=MandelPointStore::State::stWorking;
             me->currentParams.pixelIndex=pointIndex;

@@ -60,8 +60,10 @@ void MandelImageCombiner::paint(QPainter *painter)
   painter->drawImage(0, 0, m_bgImage);
   //painter->setPen(QColor(0x0000ff));
   //painter->drawEllipse(50, 100, 100, 50);
-  painter->drawImage(0, 0, m_baseImage);
-  painter->drawImage(0, 0, m_fgImage);
+  if (!m_baseImage.isNull())
+    painter->drawImage(0, 0, m_baseImage);
+  if (!m_fgImage.isNull())
+    painter->drawImage(0, 0, m_fgImage);
   //painter->setPen(QColor("green"));
   //painter->drawEllipse(50, 150, 100, 50);
 }

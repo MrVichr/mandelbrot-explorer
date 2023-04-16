@@ -262,6 +262,7 @@ public:
   const number<BASE> *ccw_tmp(const complex *other, Scratchpad *tmp) const; //"counterclockwise" Im(other/this)*|this|^2 = re*o.im-im*o.re
   double dist2_double(const complex *other, Scratchpad *tmp) const;
   const number<BASE> *dist2_tmp(const complex *other, Scratchpad *tmp) const;
+  void from_pmdist(const complex &one, const complex &second, Scratchpad *tmp); //re:=|o-s|^2, im:=|o+s|^2
   bool isequal(const complex *other) const;
   bool is0() const;
   bool isNegative() const; //im<0 || im==0 && re<0

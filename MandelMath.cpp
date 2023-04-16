@@ -2889,6 +2889,8 @@ const number<BASE> *complex<BASE>::getMag1_tmp(Scratchpad *tmp) const
 template<typename BASE>
 const number<BASE> *complex<BASE>::getDist1_tmp(Scratchpad *tmp) const
 {
+  //TODO: add parameter   double from=1.0
+  //      merge with getMag_tmp()
   tmp->tmp1.assign(re);
   tmp->tmp1.add_double(-1);
   tmp->tmp1.sqr();
@@ -2909,6 +2911,12 @@ const number<BASE> *complex<BASE>::mulreT_tmp(const complex *other, Scratchpad *
   return &tmp->tmp1;
 }
 
+/**
+ * @brief "counterclockwise" Im(other/this)*|this|^2 = re*o.im-im*o.re
+ * @param other
+ * @param tmp
+ * @return >0 if this to other is counterclockwise
+ */
 template<typename BASE>
 const number<BASE> *complex<BASE>::ccw_tmp(const complex *other, Scratchpad *tmp) const
 {
@@ -2949,6 +2957,35 @@ const number<BASE> *complex<BASE>::dist2_tmp(const complex *other, Scratchpad *t
   tmp->tmp2.sqr();
   tmp->tmp1.add(tmp->tmp2);
   return &tmp->tmp1;
+}
+
+template<typename BASE>
+void complex<BASE>::from_pmdist(const complex &one, const complex &second, Scratchpad *tmp)
+{
+  //(a-c)^2+(b-d)^2=a^2-2*a*c+c^2+b^2-2*b*d+d^2=a^2+b^2+c^2+d^2 -2*a*c-2*b*d
+  //(a+c)^2+(b+d)^2=a^2+2*a*c+c^2+b^2+2*b*d+d^2=a^2+b^2+c^2+d^2 +2*a*c+2*b*d
+  tmp->tmp1.assign(one.re);
+  im.assign(one.im);
+  tmp->tmp1.mul(second.re);
+  im.mul(second.im);
+  tmp->tmp1.add(im); //a*c+b*d
+  tmp->tmp1.lshift(1);
+
+  re.assign(one.re);
+  re.sqr();
+  im.assign(one.im);
+  im.sqr();
+  re.add(im);
+  im.assign(second.re);
+  im.sqr();
+  re.add(im);
+  im.assign(second.im);
+  im.sqr();
+  re.add(im); //a^2+b^2+c^2+d^2
+
+  im.assign(re);
+  re.sub(tmp->tmp1);
+  im.add(tmp->tmp1);
 }
 
 template<typename BASE>

@@ -171,6 +171,7 @@ Window {
                     ListElement { text: "Exter"; key: 2 }//mandelModel.paintStyleExter  }
                     ListElement { text: "ExtAng"; key: 3 }//mandelModel.paintStyleExter  }
                     ListElement { text: "Inter"; key: 4 }//mandelModel.paintStyleInter  }
+                    ListElement { text: "near -r0"; key: 12 }//
                     ListElement { text: "Near0"; key: 5 }//mandelModel.paintStyleNear  }
                     ListElement { text: "NearZ"; key: 6 }//mandelModel.paintStyleNear  }
                     ListElement { text: "phi"; key: 7 }//
@@ -461,6 +462,17 @@ Window {
                     var vi=mandelModel.viewInfo;
                     laguerreModel.setParams(vi);
                     juliaModel.setParams(vi);
+                }
+            }
+            MenuItem {
+                text: "Freeze orbit (J)"
+                visible: rbuttonViewJulia.checked
+                checkable: true
+                //checked: false
+                onTriggered: {
+                    console.log("Freeze Orbit checked:", checked);
+                    //checked=!checked;
+                    juliaModel.orbit_frozen=checked;
                 }
             }
             Menu {
