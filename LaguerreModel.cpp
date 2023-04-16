@@ -1263,15 +1263,15 @@ int LaguerreModel::giveWorkThreaded(MandelEvaluator<BASE> *me)
       //MandelMath::worker_multi::Allocator allo(storeWorker->getAllocator(), pointIndex*LaguerrePoint::LEN, LaguerrePoint::LEN, nullptr);
       //LaguerrePoint pointData_(&pointStore_[pointIndex], &allo);
       LaguerrePointStore *storeAtIndex=&pointStore[pointIndex];
-      if (storeAtIndex->state==LaguerrePointStore::State::stWorking) //speedup/precheck
+      if (storeAtIndex->state.load(std::memory_order_relaxed)!=LaguerrePointStore::State::stUnknown) //speedup/precheck
         continue;
-      LaguerrePointStore::State state_prev=storeAtIndex->state.exchange(LaguerrePointStore::State::stWorking);
+      LaguerrePointStore::State state_prev=storeAtIndex->state.exchange(LaguerrePointStore::State::stWorking, std::memory_order_acquire);
       if (state_prev!=LaguerrePointStore::State::stUnknown)
       {
         //was working->do not touch, could be done by now
         //was done/fail->restore old state
         if (state_prev!=LaguerrePointStore::State::stWorking)
-          storeAtIndex->state=state_prev;
+          storeAtIndex->state.store(state_prev, std::memory_order_relaxed);
         continue;
       }
       {
@@ -1290,7 +1290,7 @@ int LaguerreModel::giveWorkThreaded(MandelEvaluator<BASE> *me)
           {
             if (retryEffortFrom<0)
               retryEffortFrom=pointIndex;
-            storeAtIndex->state=LaguerrePointStore::State::stUnknown;
+            storeAtIndex->state.store(LaguerrePointStore::State::stUnknown, std::memory_order_release);
           }
           else
           {
@@ -1351,18 +1351,18 @@ int LaguerreModel::doneWorkThreaded(MandelEvaluator<BASE> *me, int result, bool 
       else*/
       {
         LaguerrePointStore *dstStore=&pointStore[me->currentParams.pixelIndex];
-        if (dstStore->state==LaguerrePointStore::State::stUnknown)
+        if (dstStore->state.load(std::memory_order_relaxed)==LaguerrePointStore::State::stUnknown)
           dbgPoint();
-        if (dstStore->state==LaguerrePointStore::State::stWorking)
+        if (dstStore->state.load(std::memory_order_relaxed)==LaguerrePointStore::State::stWorking)
         {
           if (result>0)
           {
-            dstStore->state=LaguerrePointStore::State::stResolved;
+            dstStore->state.store(LaguerrePointStore::State::stResolved, std::memory_order_release);
           }
           else
           {
             me->newtres.cyclesNeeded=-1;
-            dstStore->state=LaguerrePointStore::State::stFail;
+            dstStore->state.store(LaguerrePointStore::State::stFail, std::memory_order_release);
           };
           //point->assign(position.worker, me->currentData);
           //in theory, LaguerrePoint can be assigned from NewtRes; in practice, they are quite different

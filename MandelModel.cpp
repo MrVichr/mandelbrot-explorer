@@ -1680,10 +1680,10 @@ int MandelModel::giveWorkThreaded(MandelEvaluator<BASE> *me)
       //MandelMath::worker_multi::Allocator allo(storeWorker->getAllocator(), pointIndex*MandelPoint::LEN, MandelPoint::LEN, nullptr);
       //MandelPoint pointData_(&pointStore_[pointIndex], &allo);
       MandelPointStore *storeAtIndex=&pointStore[pointIndex];
-      if (storeAtIndex->wstate==MandelPointStore::WorkState::stWorking)
+      if (storeAtIndex->wstate.load(std::memory_order_relaxed)==MandelPointStore::WorkState::stWorking)
         continue; //speedup/precheck
       int extra_effort=0;
-      MandelPointStore::WorkState state_prev=storeAtIndex->wstate.exchange(MandelPointStore::WorkState::stWorking);
+      MandelPointStore::WorkState state_prev=storeAtIndex->wstate.exchange(MandelPointStore::WorkState::stWorking, std::memory_order_acquire);
       if (state_prev==MandelPointStore::WorkState::stWorking)
         continue;
       else if (state_prev==MandelPointStore::WorkState::stDone)
@@ -1702,7 +1702,7 @@ int MandelModel::giveWorkThreaded(MandelEvaluator<BASE> *me)
         }
         else
         {
-          storeAtIndex->wstate=MandelPointStore::WorkState::stDone;
+          storeAtIndex->wstate.store(MandelPointStore::WorkState::stDone, std::memory_order_relaxed);
           continue;
         }
       }
@@ -1728,13 +1728,13 @@ int MandelModel::giveWorkThreaded(MandelEvaluator<BASE> *me)
             if (effort>=MAX_EFFORT)
             {
               storeAtIndex->rstate=MandelPointStore::ResultState::stMaxIter;
-              storeAtIndex->wstate=MandelPointStore::WorkState::stDone;
+              storeAtIndex->wstate.store(MandelPointStore::WorkState::stDone, std::memory_order_release);
             }
             else
             {
               if (retryEffortFrom<0)
                 retryEffortFrom=pointIndex;
-              storeAtIndex->wstate=MandelPointStore::WorkState::stIdle;
+              storeAtIndex->wstate.store(MandelPointStore::WorkState::stIdle, std::memory_order_release);
             }
           }
           else
@@ -1784,7 +1784,7 @@ int MandelModel::doneWorkThreaded(MandelEvaluator<BASE> *me, bool giveWork)
     MandelPointStore *dstStore=&pointStore[me->currentParams.pixelIndex];
 #if CURRENT_STORE_DIRECT
 #else
-    if (dstStore->wstate!=MandelPointStore::WorkState::stWorking)
+    if (dstStore->wstate.load(std::memory_order_relaxed)!=MandelPointStore::WorkState::stWorking)
       dbgPoint(); //leftovers should be from different epoch
 #endif
     {
@@ -1795,19 +1795,19 @@ int MandelModel::doneWorkThreaded(MandelEvaluator<BASE> *me, bool giveWork)
       dstStore->assign(me->mandelData.store);
 #endif
     }
-    if (dstStore->wstate.load()==MandelPointStore::WorkState::stIdle)
+    if (dstStore->wstate.load(std::memory_order_relaxed)==MandelPointStore::WorkState::stIdle)
       dbgPoint();
-    if (dstStore->wstate==MandelPointStore::WorkState::stWorking)
+    if (dstStore->wstate.load(std::memory_order_relaxed)==MandelPointStore::WorkState::stWorking)
     {
        if (dstStore->iter>=(1<<MAX_EFFORT))
        {
          dstStore->rstate=MandelPointStore::ResultState::stMaxIter;
-         dstStore->wstate=MandelPointStore::WorkState::stDone;
+         dstStore->wstate.store(MandelPointStore::WorkState::stDone, std::memory_order_release);
        }
        else if (dstStore->rstate!=MandelPointStore::ResultState::stUnknown)
-         dstStore->wstate=MandelPointStore::WorkState::stDone;
+         dstStore->wstate.store(MandelPointStore::WorkState::stDone, std::memory_order_release);
        else
-         dstStore->wstate=MandelPointStore::WorkState::stIdle;
+         dstStore->wstate.store(MandelPointStore::WorkState::stIdle, std::memory_order_release);
     }
     else
       dbgPoint();

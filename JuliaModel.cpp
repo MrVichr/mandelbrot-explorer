@@ -2073,10 +2073,10 @@ int JuliaModel::giveWorkThreaded(MandelEvaluator<BASE> *me)
       //MandelMath::worker_multi::Allocator allo(storeWorker->getAllocator(), pointIndex*MandelPoint::LEN, MandelPoint::LEN, nullptr);
       //MandelPoint pointData_(&pointStore_[pointIndex], &allo);
       JuliaPointStore *storeAtIndex=&pointStore[pointIndex];
-      if (storeAtIndex->wstate==JuliaPointStore::WorkState::stWorking)
+      if (storeAtIndex->wstate.load(std::memory_order_relaxed)==JuliaPointStore::WorkState::stWorking)
         continue; //speedup/precheck
       int extra_effort=0;
-      JuliaPointStore::WorkState state_prev=storeAtIndex->wstate.exchange(JuliaPointStore::WorkState::stWorking);
+      JuliaPointStore::WorkState state_prev=storeAtIndex->wstate.exchange(JuliaPointStore::WorkState::stWorking, std::memory_order_acquire);
       if (state_prev==JuliaPointStore::WorkState::stWorking)
         continue;
       if (state_prev==JuliaPointStore::WorkState::stDone)
@@ -2099,7 +2099,7 @@ int JuliaModel::giveWorkThreaded(MandelEvaluator<BASE> *me)
         }
         else
         {
-          storeAtIndex->wstate=JuliaPointStore::WorkState::stDone;
+          storeAtIndex->wstate.store(JuliaPointStore::WorkState::stDone, std::memory_order_relaxed);
           continue;
         }
       }
@@ -2125,13 +2125,13 @@ int JuliaModel::giveWorkThreaded(MandelEvaluator<BASE> *me)
             if (effort>=MAX_EFFORT)
             {
               storeAtIndex->rstate=JuliaPointStore::ResultState::stMaxIter;
-              storeAtIndex->wstate=JuliaPointStore::WorkState::stDone;
+              storeAtIndex->wstate.store(JuliaPointStore::WorkState::stDone, std::memory_order_release);
             }
             else
             {
               if (retryEffortFrom<0)
                 retryEffortFrom=pointIndex;
-              storeAtIndex->wstate=JuliaPointStore::WorkState::stIdle;
+              storeAtIndex->wstate.store(JuliaPointStore::WorkState::stIdle, std::memory_order_release);
             }
           }
           else
@@ -2179,23 +2179,23 @@ int JuliaModel::doneWorkThreaded(MandelEvaluator<BASE> *me, bool giveWork)
   if ((me->currentParams.epoch==epoch) && (me->currentParams.pixelIndex>=0) && (me->currentParams.pixelIndex<imageWidth*imageHeight))
   {
     JuliaPointStore *dstStore=&pointStore[me->currentParams.pixelIndex];
-    if (dstStore->wstate!=JuliaPointStore::WorkState::stWorking)
+    if (dstStore->wstate.load(std::memory_order_relaxed)!=JuliaPointStore::WorkState::stWorking)
       dbgPoint(); //leftovers should be from different epoch
     me->juliaData.writeTo(precisionRecord->points, me->currentParams.pixelIndex*JuliaPoint<MandelMath::number_a *>::LEN);
     dstStore->assign(me->juliaData.store);
-    if (dstStore->wstate.load()==JuliaPointStore::WorkState::stIdle)
+    if (dstStore->wstate.load(std::memory_order_relaxed)==JuliaPointStore::WorkState::stIdle)
       dbgPoint();
-    if (dstStore->wstate==JuliaPointStore::WorkState::stWorking)
+    if (dstStore->wstate.load(std::memory_order_relaxed)==JuliaPointStore::WorkState::stWorking)
     {
        if (dstStore->iter>=(1<<MAX_EFFORT))
        {
          dstStore->rstate=JuliaPointStore::ResultState::stMaxIter;
-         dstStore->wstate=JuliaPointStore::WorkState::stDone;
+         dstStore->wstate.store(JuliaPointStore::WorkState::stDone, std::memory_order_release);
        }
        else if (dstStore->rstate!=JuliaPointStore::ResultState::stUnknown)
-         dstStore->wstate=JuliaPointStore::WorkState::stDone;
+         dstStore->wstate.store(JuliaPointStore::WorkState::stDone, std::memory_order_release);
        else
-         dstStore->wstate=JuliaPointStore::WorkState::stIdle;
+         dstStore->wstate.store(JuliaPointStore::WorkState::stIdle, std::memory_order_release);
     }
     else
       dbgPoint();
