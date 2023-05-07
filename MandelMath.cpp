@@ -33,9 +33,9 @@ void dbgPointII(int x1, int x2)
 
 namespace MandelMath {
 
+/* moved to .h
 template<int N, typename... Ts> using NthTypeOf =
     typename std::tuple_element<N, std::tuple<Ts...>>::type;
-
 template<typename ...Options>
 auto mvisit(auto callable, std::variant<Options...> &vari, auto &...params)
 {
@@ -56,6 +56,8 @@ auto mvisit(auto callable, std::variant<Options...> &vari, auto &...params)
     if (index==5) return callable(std::get<5>(vari), params...);
   if constexpr (sizeof...(Options)>6)
     if (index==6) return callable(std::get<6>(vari), params...);
+  [[unlikely]]
+  return decltype(callable((NthTypeOf<0, Options...> &)vari, params...)) ();
 }
 
 template<typename ...Options>
@@ -78,8 +80,10 @@ auto mvisit(auto callable, std::variant<Options...> const &vari, auto &...params
     if (index==5) return callable(std::get<5>(vari), params...);
   if constexpr (sizeof...(Options)>6)
     if (index==6) return callable(std::get<6>(vari), params...);
+  [[unlikely]]
+  return decltype(callable((NthTypeOf<0, Options...> const &)vari, params...)) ();
 }
-
+*/
 int gcd(int m, int n)
 {
   if (m==n)
@@ -539,14 +543,6 @@ number<double> &number<double>::assign_across(const number<number_any> &src)
 {
   //working_assert(src->ntype()==typeDouble);
   //working_assert(src->raw_ntype()==typeDouble);
-  /*std::visit([this](auto &other){
-      using T=std::remove_cv_t<std::remove_reference_t<decltype(other)>>;
-      if constexpr(std::is_same_v<T, std::monostate>)
-          store=0;
-      else
-          assign_across(other);
-  }, src.store);*/
-
   mvisit([](const auto &other, number<double> &self){
     using T=std::decay_t<decltype(other)>;
     if constexpr(std::is_same_v<T, std::monostate>)
@@ -2879,7 +2875,7 @@ double number<real642>::toDouble() const
 template<>
 double number<number_any>::eps2() const
 {
-  return std::visit([](auto &val){
+  return mvisit([](auto const &val){
       using T=std::remove_cv_t<std::remove_reference_t<decltype(val)>>;
       if constexpr (std::is_same_v<T, std::monostate>)
           return 1.0;
@@ -2891,7 +2887,7 @@ double number<number_any>::eps2() const
 template<>
 double number<number_any>::eps234() const
 {
-  return std::visit([](auto &val){
+  return mvisit([](auto &val){
       using T=std::remove_cv_t<std::remove_reference_t<decltype(val)>>;
       if constexpr (std::is_same_v<T, std::monostate>)
           return 2.0;
@@ -2903,7 +2899,7 @@ double number<number_any>::eps234() const
 template<>
 NumberType number<number_any>::ntype() const
 {
-  return std::visit([](auto &val){
+  return mvisit([](auto &val){
       //using T = std::decay_t<decltype(val)>;
       using T = std::remove_cv_t<std::remove_reference_t<decltype(val)>>;
       //using T = decltype(val);
@@ -2983,7 +2979,7 @@ void number<number_any>::readFrom(void *storage, int index)
 template<>
 void number<number_any>::writeTo(void *storage, int index) const
 {
-  std::visit([&storage, &index](auto &value) {
+  mvisit([&storage, &index](auto &value) {
       using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
       if constexpr (std::is_same_v<T, std::monostate>)
       { }
@@ -2996,7 +2992,7 @@ void number<number_any>::writeTo(void *storage, int index) const
 template<>
 number<number_any> &number<number_any>::zero(double val)
 {
-  std::visit([val](auto &value) {
+  mvisit([val](auto &value) {
       using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
       if constexpr (std::is_same_v<T, std::monostate>)
       { }
@@ -3092,7 +3088,7 @@ void number<number_a *>::assign_across(const number_a *src)
 template<>
 number<number_any> &number<number_any>::chs()
 {
-  std::visit([](auto &value) {
+  mvisit([](auto &value) {
       using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
       if constexpr (std::is_same_v<T, std::monostate>)
       { }
@@ -3105,7 +3101,7 @@ number<number_any> &number<number_any>::chs()
 template<>
 number<number_any> &number<number_any>::lshift(int shoft)
 {
-  std::visit([shoft](auto &value) {
+  mvisit([shoft](auto &value) {
       using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
       if constexpr (std::is_same_v<T, std::monostate>)
       { }
@@ -3119,7 +3115,7 @@ number<number_any> &number<number_any>::lshift(int shoft)
 template<>
 number<number_any> &number<number_any>::round()
 {
-  std::visit([](auto &value) {
+  mvisit([](auto &value) {
       using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
       if constexpr (std::is_same_v<T, std::monostate>)
       { }
@@ -3132,7 +3128,7 @@ number<number_any> &number<number_any>::round()
 template<>
 number<number_any> &number<number_any>::frac()
 {
-  std::visit([](auto &value) {
+  mvisit([](auto &value) {
       using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
       if constexpr (std::is_same_v<T, std::monostate>)
       { }
@@ -3145,7 +3141,7 @@ number<number_any> &number<number_any>::frac()
 template<>
 number<number_any> &number<number_any>::mod1()
 {
-  std::visit([](auto &value) {
+  mvisit([](auto &value) {
       using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
       if constexpr (std::is_same_v<T, std::monostate>)
       { }
@@ -3158,7 +3154,7 @@ number<number_any> &number<number_any>::mod1()
 template<>
 number<number_any> &number<number_any>::add_double(double x)
 {
-  std::visit([x](auto &value) {
+  mvisit([x](auto &value) {
       using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
       if constexpr (std::is_same_v<T, std::monostate>)
       { }
@@ -3171,7 +3167,7 @@ number<number_any> &number<number_any>::add_double(double x)
 template<>
 number<number_any> &number<number_any>::mul_double(double x)
 {
-  std::visit([x](auto &value) {
+  mvisit([x](auto &value) {
       using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
       if constexpr (std::is_same_v<T, std::monostate>)
       { }
@@ -3184,13 +3180,13 @@ number<number_any> &number<number_any>::mul_double(double x)
 template<>
 number<number_any> &number<number_any>::add(const number<number_any> &other)
 {
-  std::visit([&other](auto &value) {
+  mvisit([&other](auto &value) {
       using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
       if constexpr (std::is_same_v<T, std::monostate>)
       { }
       else
       {
-          std::visit([&value](auto &other_value) {
+          mvisit([&value](auto const &other_value) {
               using O=std::remove_cv_t<std::remove_reference_t<decltype(other_value)>>;
               if constexpr (std::is_same_v<O, std::monostate>)
               { }
@@ -3214,13 +3210,13 @@ number<number_any> &number<number_any>::add(const number_a &other)
 template<>
 number<number_any> &number<number_any>::sub(const number<number_any> &other)
 {
-  std::visit([&other](auto &value) {
+  mvisit([&other](auto &value) {
       using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
       if constexpr (std::is_same_v<T, std::monostate>)
       { }
       else
       {
-          std::visit([&value](auto &other_value) {
+          mvisit([&value](auto &other_value) {
               using O=std::remove_cv_t<std::remove_reference_t<decltype(other_value)>>;
               if constexpr (std::is_same_v<O, std::monostate>)
               { }
@@ -3244,13 +3240,13 @@ void number<number_a *>::sub(const number_a &other)
 template<>
 number<number_any> &number<number_any>::rsub(const number<number_any> &other)
 {
-  std::visit([&other](auto &value) {
+  mvisit([&other](auto &value) {
       using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
       if constexpr (std::is_same_v<T, std::monostate>)
       { }
       else
       {
-          std::visit([&value](auto &other_value) {
+          mvisit([&value](auto &other_value) {
               using O=std::remove_cv_t<std::remove_reference_t<decltype(other_value)>>;
               if constexpr (std::is_same_v<O, std::monostate>)
               { }
@@ -3274,13 +3270,13 @@ void number<number_a *>::rsub(const number_a &other)
 template<>
 number<number_any> &number<number_any>::mul(const number<number_any> &other)
 {
-  std::visit([&other](auto &value) {
+  mvisit([&other](auto &value) {
       using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
       if constexpr (std::is_same_v<T, std::monostate>)
       { }
       else
       {
-          std::visit([&value](auto &other_value) {
+          mvisit([&value](auto &other_value) {
               using O=std::remove_cv_t<std::remove_reference_t<decltype(other_value)>>;
               if constexpr (std::is_same_v<O, std::monostate>)
               { }
@@ -3304,7 +3300,7 @@ void number<number_a *>::mul(const number_a &other)
 template<>
 number<number_any> &number<number_any>::sqr()
 {
-  std::visit([](auto &value) {
+  mvisit([](auto &value) {
       using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
       if constexpr (std::is_same_v<T, std::monostate>)
       { }
@@ -3317,13 +3313,13 @@ number<number_any> &number<number_any>::sqr()
 template<>
 double number<number_any>::radixfloor(const number<number_any> &store2) const
 {
-  return std::visit([&store2](auto &value)->double {
+  return mvisit([&store2](auto &value)->double {
       using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
       if constexpr (std::is_same_v<T, std::monostate>)
         return 1;
       else
       {
-          return std::visit([&value](auto &other_value)->double {
+          return mvisit([&value](auto &other_value)->double {
               using O=std::remove_cv_t<std::remove_reference_t<decltype(other_value)>>;
               if constexpr (std::is_same_v<O, std::monostate>)
                 return 1;
@@ -3350,7 +3346,7 @@ double number<number_a *>::radixfloor(const number_a &store2) const
 template<>
 number<number_any> &number<number_any>::recip()
 {
-  std::visit([](auto &value) {
+  mvisit([](auto &value) {
       using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
       if constexpr (std::is_same_v<T, std::monostate>)
       { }
@@ -3363,7 +3359,7 @@ number<number_any> &number<number_any>::recip()
 template<>
 number<number_any> &number<number_any>::sqrt()
 {
-  std::visit([](auto &value) {
+  mvisit([](auto &value) {
       using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
       if constexpr (std::is_same_v<T, std::monostate>)
       { }
@@ -3376,7 +3372,7 @@ number<number_any> &number<number_any>::sqrt()
 template<>
 bool number<number_any>::reduce_angle()
 {
-  return std::visit([](auto &value)->bool {
+  return mvisit([](auto &value)->bool {
       using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
       if constexpr (std::is_same_v<T, std::monostate>)
         return false;
@@ -3388,7 +3384,7 @@ bool number<number_any>::reduce_angle()
 template<>
 number<number_any> &number<number_any>::add_pi(double x)
 {
-  std::visit([x](auto &value) {
+  mvisit([x](auto &value) {
       using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
       if constexpr (std::is_same_v<T, std::monostate>)
       { }
@@ -3401,13 +3397,13 @@ number<number_any> &number<number_any>::add_pi(double x)
 template<>
 std::strong_ordering number<number_any>::compare(const number<number_any> &other) const
 {
-  return std::visit([&other](auto &value)->std::strong_ordering {
+  return mvisit([](auto const &value, const number<number_any> &other)->std::strong_ordering {
       using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
       if constexpr (std::is_same_v<T, std::monostate>)
           return std::strong_ordering::equal;
       else
       {
-          return std::visit([&value](auto &other_value)->std::strong_ordering {
+          return mvisit([](auto const &other_value, auto const &value)->std::strong_ordering {
               using O=std::remove_cv_t<std::remove_reference_t<decltype(other_value)>>;
               if constexpr (std::is_same_v<O, std::monostate>)
                   return std::strong_ordering::equal;
@@ -3418,9 +3414,9 @@ std::strong_ordering number<number_any>::compare(const number<number_any> &other
                   working_assert(false);
                   return std::strong_ordering::equal;
               }
-          }, other.store);
+          }, other.store, value);
       }
-  }, store);
+  }, store, other);
 }
 
 /*template<>
@@ -3434,13 +3430,13 @@ int number<number_a *>::compare(const number_a &other) const
 template<>
 bool number<number_any>::isequal(const number<number_any> &other) const
 {
-  return std::visit([&other](auto &value)->bool {
+  return mvisit([&other](auto &value)->bool {
       using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
       if constexpr (std::is_same_v<T, std::monostate>)
           return true;
       else
       {
-          return std::visit([&value](auto &other_value)->bool {
+          return mvisit([&value](auto &other_value)->bool {
               using O=std::remove_cv_t<std::remove_reference_t<decltype(other_value)>>;
               if constexpr (std::is_same_v<O, std::monostate>)
                   return true;
@@ -3467,7 +3463,7 @@ bool number<number_a *>::isequal(const number_a &other) const
 template<>
 bool number<number_any>::is0() const
 {
-  return std::visit([](auto &value)->bool {
+  return mvisit([](auto &value)->bool {
       using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
       if constexpr (std::is_same_v<T, std::monostate>)
         return true;
@@ -3479,13 +3475,13 @@ bool number<number_any>::is0() const
 template<>
 bool number<number_any>::isle(const number<number_any> &other) const
 {
-  return std::visit([&other](auto &value)->bool {
+  return mvisit([&other](auto &value)->bool {
       using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
       if constexpr (std::is_same_v<T, std::monostate>)
           return true;
       else
       {
-          return std::visit([&value](auto &other_value)->bool {
+          return mvisit([&value](auto &other_value)->bool {
               using O=std::remove_cv_t<std::remove_reference_t<decltype(other_value)>>;
               if constexpr (std::is_same_v<O, std::monostate>)
                   return true;
@@ -3512,7 +3508,7 @@ bool number<number_a *>::isle(const number_a &other) const
 template<>
 bool number<number_any>::isle0() const
 {
-  return std::visit([](auto &value)->bool {
+  return mvisit([](auto &value)->bool {
       using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
       if constexpr (std::is_same_v<T, std::monostate>)
         return true;
@@ -3524,7 +3520,7 @@ bool number<number_any>::isle0() const
 template<>
 bool number<number_any>::isl0() const
 {
-  return std::visit([](auto &value)->bool {
+  return mvisit([](auto &value)->bool {
       using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
       if constexpr (std::is_same_v<T, std::monostate>)
         return false;
@@ -3536,7 +3532,7 @@ bool number<number_any>::isl0() const
 template<>
 bool number<number_any>::isl1() const
 {
-  return std::visit([](auto &value)->bool {
+  return mvisit([](auto &value)->bool {
       using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
       if constexpr (std::is_same_v<T, std::monostate>)
         return true;
@@ -3548,13 +3544,13 @@ bool number<number_any>::isl1() const
 template<>
 number<number_any> &number<number_any>::min(const number<number_any> &other)
 {
-  std::visit([&other](auto &value) {
+  mvisit([&other](auto &value) {
       using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
       if constexpr (std::is_same_v<T, std::monostate>)
       { }
       else
       {
-          std::visit([&value](auto &other_value) {
+          mvisit([&value](auto &other_value) {
               using O=std::remove_cv_t<std::remove_reference_t<decltype(other_value)>>;
               if constexpr (std::is_same_v<O, std::monostate>)
               { }
@@ -3578,7 +3574,7 @@ void number<number_a *>::min(const number_a &other)
 template<>
 QString number<number_any>::toString() const
 {
-  return std::visit([](auto &value)->QString {
+  return mvisit([](auto &value)->QString {
       using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
       if constexpr (std::is_same_v<T, std::monostate>)
         return QString("none");
@@ -3590,7 +3586,7 @@ QString number<number_any>::toString() const
 template<>
 int number<number_any>::toRound() const
 {
-  return std::visit([](auto &value)->int {
+  return mvisit([](auto &value)->int {
       using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
       if constexpr (std::is_same_v<T, std::monostate>)
         return 0;
@@ -3602,7 +3598,7 @@ int number<number_any>::toRound() const
 template<>
 double number<number_any>::toDouble() const
 {
-  return std::visit([](auto &value)->double {
+  return mvisit([](auto &value)->double {
       using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
       if constexpr (std::is_same_v<T, std::monostate>)
         return 0;

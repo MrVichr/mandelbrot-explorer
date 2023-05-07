@@ -45,7 +45,7 @@ void LaguerreModel::startRunning()
 {
   for (int t=0; t<precisionRecord->threadCount; t++)
   {
-    std::visit([](auto &thread) {
+      MandelMath::mvisit([](auto &thread) {
       using T=std::remove_cv_t<std::remove_reference_t<decltype(thread)>>;
       if constexpr (!std::is_same_v<T, std::nullptr_t>)
         thread->startRunning();
@@ -249,7 +249,7 @@ void LaguerreModel::recomputeRoot(int max_effort)
   }
 
   for (int t=0; t<precisionRecord->threadCount; t++)
-    std::visit([&evaluator](auto &thread){
+    MandelMath::mvisit([&evaluator](auto &thread){
         using T=std::remove_cv_t<std::remove_reference_t<decltype(thread)>>;
         if constexpr (!std::is_same_v<T, std::nullptr_t>)
             thread->currentParams.mandel.assign_across(evaluator.currentParams.mandel);
@@ -602,7 +602,7 @@ void LaguerreModel::startNewEpoch()
   {
     //giveWorkToThread(precisionRecord->threads[t]);
     auto epoch_what_is_this=epoch; //can't capture epoch for some reason, even by value
-    std::visit([epoch_what_is_this](auto &thread) {
+    MandelMath::mvisit([epoch_what_is_this](auto &thread) {
       using T=std::remove_cv_t<std::remove_reference_t<decltype(thread)>>;
       if constexpr (!std::is_same_v<T, std::nullptr_t>)
       {
@@ -1757,7 +1757,7 @@ LaguerreModel::PrecisionRecord::~PrecisionRecord()
 {
   for (int t=threadCount-1; t>=0; t--)
   {
-    std::visit([](auto thread){
+    MandelMath::mvisit([](auto thread){
       using T=std::remove_cv_t<std::remove_reference_t<decltype(thread)>>;
       if constexpr (!std::is_same_v<T, std::nullptr_t>)
       {
@@ -1768,7 +1768,7 @@ LaguerreModel::PrecisionRecord::~PrecisionRecord()
   }
   for (int t=threadCount-1; t>=0; t--)
   {
-    std::visit([](auto thread){
+    MandelMath::mvisit([](auto thread){
       using T=std::remove_cv_t<std::remove_reference_t<decltype(thread)>>;
       if constexpr (!std::is_same_v<T, std::nullptr_t>)
       {

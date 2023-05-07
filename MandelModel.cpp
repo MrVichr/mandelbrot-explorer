@@ -88,8 +88,8 @@ void MandelModel::startRunning()
 {
   for (int t=0; t<precisionRecord->threadCount; t++)
   {
-      std::visit([](auto &thread) {
-          using T=std::remove_cv_t<std::remove_reference_t<decltype(thread)>>;
+      MandelMath::mvisit([](auto &thread) {
+          using T=std::decay_t<decltype(thread)>;
           if constexpr (!std::is_same_v<T, std::nullptr_t>)
             thread->startRunning();
       }, precisionRecord->threads_[t]);
@@ -128,16 +128,16 @@ QString MandelModel::getTimes()
   qint64 outer=0, inner=0, invokepost=0, invokeswitch=0, threaded=0;
   for (int t=0; t<precisionRecord->threadCount; t++)
   {
-    std::visit([&](auto &thread) {
-        using T=std::remove_cv_t<std::remove_reference_t<decltype(thread)>>;
-        if constexpr (!std::is_same_v<T, std::nullptr_t>)
-        {
-            outer+=thread->timeOuterTotal;
-            inner+=thread->timeInnerTotal;
-            invokepost+=thread->timeInvokePostTotal;
-            invokeswitch+=thread->timeInvokeSwitchTotal;
-            threaded+=thread->timeThreadedTotal;
-        }
+    MandelMath::mvisit([&](auto &thread) {
+      using T=std::remove_cv_t<std::remove_reference_t<decltype(thread)>>;
+      if constexpr (!std::is_same_v<T, std::nullptr_t>)
+      {
+        outer+=thread->timeOuterTotal;
+        inner+=thread->timeInnerTotal;
+        invokepost+=thread->timeInvokePostTotal;
+        invokeswitch+=thread->timeInvokeSwitchTotal;
+        threaded+=thread->timeThreadedTotal;
+      }
     }, precisionRecord->threads_[t]);
   }
   result=QString("%1-%2,%3-%4 =%5,").
@@ -659,7 +659,7 @@ void MandelModel::startNewEpoch()
   {
     //giveWorkToThread(precisionRecord->threads[t]);
     auto epoch_what_is_this=epoch; //can't capture epoch for some reason, even by value
-    std::visit([epoch_what_is_this](auto &thread) {
+    MandelMath::mvisit([epoch_what_is_this](auto &thread) {
         using T=std::remove_cv_t<std::remove_reference_t<decltype(thread)>>;
         if constexpr (!std::is_same_v<T, std::nullptr_t>)
         {
@@ -1059,7 +1059,7 @@ int MandelModel::writeToImage(ShareableImageWrapper image)
     qint64 totalNewtons=0;
     for (int t=0; t<precisionRecord->threadCount; t++)
     {
-      std::visit([&totalNewtons](auto &thread) {
+      MandelMath::mvisit([&totalNewtons](auto &thread) {
           using T=std::remove_cv_t<std::remove_reference_t<decltype(thread)>>;
           if constexpr (!std::is_same_v<T, std::nullptr_t>)
           {
@@ -2226,7 +2226,7 @@ MandelModel::PrecisionRecord::~PrecisionRecord()
 {
   for (int t=threadCount-1; t>=0; t--)
   {
-    std::visit([](auto thread){
+    MandelMath::mvisit([](auto thread){
       using T=std::remove_cv_t<std::remove_reference_t<decltype(thread)>>;
       if constexpr (!std::is_same_v<T, std::nullptr_t>)
       {
@@ -2237,7 +2237,7 @@ MandelModel::PrecisionRecord::~PrecisionRecord()
   }
   for (int t=threadCount-1; t>=0; t--)
   {
-    std::visit([](auto thread){
+    MandelMath::mvisit([](auto thread){
       using T=std::remove_cv_t<std::remove_reference_t<decltype(thread)>>;
       if constexpr (!std::is_same_v<T, std::nullptr_t>)
       {
