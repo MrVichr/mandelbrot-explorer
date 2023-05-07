@@ -33,7 +33,7 @@ struct LaguerrePoint
   };
   static constexpr size_t LEN=iiw__END-iiw__BASE;
   LaguerrePointStore *store;
-  LaguerrePoint(LaguerrePointStore *store, MandelMath::NumberType ntype);
+  LaguerrePoint(LaguerrePointStore *store, MandelMath::complex<BASE>::Scratchpad *spad);
   MandelMath::complex<BASE> r;
   MandelMath::complex<BASE> fz_r;
   MandelMath::complex<BASE> nth_fz;
@@ -41,7 +41,7 @@ struct LaguerrePoint
   //void assign(const LaguerrePoint<WORKER_MULTI, IIW_SRC> &src);
   void readFrom(void *storage, int index);
   void writeTo(void *storage, int index);
-  void zero(const MandelMath::complex<BASE> *c);
+  void zero(MandelMath::complex<BASE> const &c);
 };
 
 template <typename BASE>
@@ -50,7 +50,7 @@ struct ComputeMandelParams
   MandelMath::complex<BASE> c;
   MandelMath::number<BASE> bailout; //4 for mandel
   MandelMath::complex<BASE> first_z; //used
-  ComputeMandelParams(MandelMath::NumberType ntype);
+  ComputeMandelParams(MandelMath::complex<BASE>::Scratchpad *spad);
   template<typename OTHER_BASE>
   void assign_across(const ComputeMandelParams<OTHER_BASE> &src);
 };
@@ -106,7 +106,7 @@ struct MandelPoint
   };
   static constexpr size_t LEN=iiw__END-iiw__BASE;
   MandelPointStore *store;
-  MandelPoint(MandelPointStore *store, MandelMath::NumberType ntype);
+  MandelPoint(MandelPointStore *store, MandelMath::complex<BASE>::Scratchpad *spad);
   MandelMath::complex<BASE> f;
   MandelMath::complex<BASE> fc_c; //fc_c, or fz_r if stPeriod2 or stPeriod3
   MandelMath::complex<BASE> fz_r;
@@ -128,7 +128,7 @@ struct MandelPoint
   //void assign(const MandelPoint<WORKER_MULTI, IIW_SRC> &src);
   void readFrom(void *storage, int index);//BASE src[LEN]);
   void writeTo(void *storage, int index);
-  void zero(const MandelMath::complex<BASE> *first_z);
+  void zero(MandelMath::complex<BASE> const &first_z);
 };
 
 template <typename BASE>
@@ -143,7 +143,7 @@ struct ComputeJuliaParams
   MandelMath::complex<BASE> alphaShort; // alpha but only from r to near0
   MandelMath::complex<BASE> alpha; // |alpha|<1
   MandelMath::complex<BASE> first_z;
-  ComputeJuliaParams(MandelMath::NumberType ntype);
+  ComputeJuliaParams(MandelMath::complex<BASE>::Scratchpad *spad);
   template<typename OTHER_BASE>
   void assign_across(const ComputeJuliaParams<OTHER_BASE> &src);
 };
@@ -218,7 +218,7 @@ struct JuliaPoint
   };
   static constexpr size_t LEN=iiw__END-iiw__BASE;
   JuliaPointStore *store;
-  JuliaPoint(JuliaPointStore *store, MandelMath::NumberType ntype);
+  JuliaPoint(JuliaPointStore *store, MandelMath::complex<BASE>::Scratchpad *spad);
   MandelMath::complex<BASE> f;
   MandelMath::complex<BASE> fz_z;
   MandelMath::complex<BASE> fzz_z;
@@ -242,12 +242,12 @@ struct JuliaPoint
   //void assign(const MandelPoint<WORKER_MULTI, IIW_SRC> &src);
   void readFrom(void *storage, int index);//BASE src[LEN]);
   void writeTo(void *storage, int index);
-  void zero(const MandelMath::complex<BASE> *first_z);
+  void zero(MandelMath::complex<BASE> const &first_z);
 
   struct NearMR
   {
     JuliaPoint<BASE> &owner;
-    void tap(ComputeJuliaParams<BASE> &params, MandelMath::complex<BASE> *tmpx, typename MandelMath::complex<BASE>::Scratchpad *scr);
+    void tap(ComputeJuliaParams<BASE> &params, MandelMath::complex<BASE> *tmpx);
     //int get() {return owner.store->nearmriter; }
     NearMR(JuliaPoint &owner): owner(owner) {}
   } nearmr;
@@ -258,6 +258,7 @@ class ShareableViewInfo: public QObject
   Q_OBJECT
 protected:
   int refcount_unused;
+  MandelMath::complex<MandelMath::number_any>::Scratchpad spad;
 public:
   //static constexpr int LEN=5;
   ShareableViewInfo(): view(), c(), nth_fz_limit() { } //Qt uses this and operator= instead of copy constructor :-/
@@ -265,16 +266,16 @@ public:
   ShareableViewInfo(): c(new MandelMath::number<BASE>(), new MandelMath::number<BASE>()),
                        root(new MandelMath::number<BASE>(), new MandelMath::number<BASE>()),
                        nth_fz_limit(new MandelMath::number<BASE>()), scale(1), period(0), nth_fz(0) { }*/
-  ShareableViewInfo(MandelMath::NumberType ntype): view(ntype), c(ntype), nth_fz_limit(ntype), scale(1), nth_fz(0), max_root_effort(3) { }
+  ShareableViewInfo(MandelMath::NumberType ntype): spad(ntype), view(&spad), c(&spad), nth_fz_limit(ntype), scale(1), nth_fz(0), max_root_effort(3) { }
   ShareableViewInfo(ShareableViewInfo &src);
   ShareableViewInfo(const ShareableViewInfo &src);
   ShareableViewInfo(ShareableViewInfo &&src); //important
   //~ShareableViewInfo();
   ShareableViewInfo &operator=(ShareableViewInfo &src);
   ShareableViewInfo &operator=(ShareableViewInfo &&src);
-  MandelMath::complex<MandelMath::number_a *> view;
-  MandelMath::complex<MandelMath::number_a *> c;
-  MandelMath::number<MandelMath::number_a *> nth_fz_limit;
+  MandelMath::complex<MandelMath::number_any> view;
+  MandelMath::complex<MandelMath::number_any> c;
+  MandelMath::number<MandelMath::number_any> nth_fz_limit;
   double scale;
   int nth_fz;
   int max_root_effort;
@@ -302,14 +303,14 @@ protected:
   };*/
 public:
   //static constexpr size_t LEN=19;
-  LaguerreStep(MandelMath::NumberType ntype);
+  //LaguerreStep(MandelMath::NumberType ntype);
+  LaguerreStep(MandelMath::complex<BASE>::Scratchpad *spad);
   //~LaguerreStep();
   //void switchType(MandelMath::number_worker *worker);
   //do one Laguerre step
-  bool eval(typename MandelMath::complex<BASE>::Scratchpad *tmp,
-            int lg2_degree, const MandelMath::complex<BASE> *const f,
-                            const MandelMath::complex<BASE> *const f_z,
-                            const MandelMath::complex<BASE> *const f_zz); //->step_re, step_im
+  bool eval(int lg2_degree, MandelMath::complex<BASE> const &f,
+                            MandelMath::complex<BASE> const &f_z,
+                            MandelMath::complex<BASE> const &f_zz); //->step_re, step_im
 
   //results
   MandelMath::complex<BASE> step;
@@ -357,7 +358,7 @@ public:
     iiw__END=iiw__BASE+26
   };*/
   //static constexpr size_t LEN=26;
-  MandelLoopEvaluator(MandelMath::NumberType ntype);
+  MandelLoopEvaluator(MandelMath::complex<BASE>::Scratchpad *spad);
   //~MandelLoopEvaluator();
   /*union Place
   {
@@ -367,23 +368,15 @@ public:
   } place;*/
   //void switchType(MandelMath::number_worker *worker);
   //eval F_c(c)-c
-  bool evalg(typename MandelMath::complex<BASE>::Scratchpad *tmp,
-             int period, const MandelMath::complex<BASE> *c); //->f, f_c, f_cc
+  bool evalg(int period, MandelMath::complex<BASE> const &c); //->f, f_c, f_cc
   //eval F_c(z) -z if minusZ
-  bool eval2(typename MandelMath::complex<BASE>::Scratchpad *tmp,
-             int period, const MandelMath::complex<BASE> *c, const MandelMath::complex<BASE> *z, bool minusZ, bool doInit=true);     //->f, f_z, f_zz, f_c, f_zc, f_cc
-  bool eval2_mag(typename MandelMath::complex<BASE>::Scratchpad *tmp,
-                 int period, const MandelMath::complex<BASE> *c, const MandelMath::complex<BASE> *z); //->f, f_z, f_zz, f_c, f_zc, f_z_mag
-  bool eval_zz(typename MandelMath::complex<BASE>::Scratchpad *tmp,
-               int period, const MandelMath::complex<BASE> *c, const MandelMath::complex<BASE> *z, bool minusZ, bool doInit=true);   //->f, f_z, f_zz
-  bool eval2zzc(typename MandelMath::complex<BASE>::Scratchpad *tmp,
-                int period, const MandelMath::complex<BASE> *c, const MandelMath::complex<BASE> *z);  //->f, f_z, f_zz, f_c, f_zc, f_cc, f_zzc
-  bool eval_multi(typename MandelMath::complex<BASE>::Scratchpad *tmp,
-                  int period, const MandelMath::complex<BASE> *c, const MandelMath::complex<BASE> *z, const MandelMath::complex<BASE> *f_z_target, double dist_tolerance); //->f, f_z, f_zz, multi, first_multi
-  bool eval_near0(typename MandelMath::complex<BASE>::Scratchpad *tmp,
-                  int period, const MandelMath::complex<BASE> *c); //->near0iter_1
-  bool eval_ext_mandMJ(typename MandelMath::complex<BASE>::Scratchpad *tmp, double mandel,
-                    const MandelMath::complex<BASE> *c, const MandelMath::complex<BASE> *z, int iter); //
+  bool eval2(int period, MandelMath::complex<BASE> const &c, MandelMath::complex<BASE> const &z, bool minusZ, bool doInit=true);     //->f, f_z, f_zz, f_c, f_zc, f_cc
+  bool eval2_mag(int period, MandelMath::complex<BASE> const &c, MandelMath::complex<BASE> const &z); //->f, f_z, f_zz, f_c, f_zc, f_z_mag
+  bool eval_zz(int period, MandelMath::complex<BASE> const &c, MandelMath::complex<BASE> const &z, bool minusZ, bool doInit=true);   //->f, f_z, f_zz
+  bool eval2zzc(int period, MandelMath::complex<BASE> const &c, MandelMath::complex<BASE> const &z);  //->f, f_z, f_zz, f_c, f_zc, f_cc, f_zzc
+  bool eval_multi(int period, MandelMath::complex<BASE> const &c, MandelMath::complex<BASE> const &z, MandelMath::complex<BASE> const &f_z_target, double dist_tolerance); //->f, f_z, f_zz, multi, first_multi
+  bool eval_near0(int period, MandelMath::complex<BASE> const &c); //->near0iter_1
+  bool eval_ext_mandMJ(double mandel, MandelMath::complex<BASE> const &c, MandelMath::complex<BASE> const &z, int iter); //mandel=1.0 -> d/dc f_c[z], mandel=0.0 -> d/dz f_c[z]
 
   //inputs
   //MandelMath::complex<BASE> help_c; //for use by caller if needed
@@ -419,12 +412,12 @@ class MandelEvaluatorThread: public QThread
 {
   Q_OBJECT
 protected:
-  MandelEvaluator<MandelMath::number_a *> *owner;
+  MandelEvaluator<MandelMath::number_any> *owner;
 public:
-  MandelEvaluatorThread(MandelEvaluator<MandelMath::number_a *> *owner);
+  MandelEvaluatorThread(MandelEvaluator<MandelMath::number_any> *owner);
   void syncMandel();
   void syncJulia();
-  int syncLaguerre(int period, MandelMath::complex<MandelMath::number_a *> *r, const bool fastHoming);
+  int syncLaguerre(int period, MandelMath::complex<MandelMath::number_any> *r, const bool fastHoming);
 public slots:
   void doMandelThreaded(int epoch);
   void doJuliaThreaded(int epoch);
@@ -454,7 +447,9 @@ public:
   int busyEpoch;
   MandelEvaluatorThread thread;
   //WORKER_MULTI *currentWorker;
-  MandelMath::NumberType ntype; //typeEmpty for number * ?
+  MandelMath::NumberType ntype; //typeEmpty for number_any ?
+  typename MandelMath::complex<BASE>::Scratchpad tmp;
+  //from here on, layout is different with BASE -> ntype before tmp
   MandelEvaluator(MandelMath::NumberType ntype, bool dontRun);
   virtual ~MandelEvaluator(); //must be virtual, or would have to typecast in delete threads[i]
   void startRunning();
@@ -500,7 +495,7 @@ public:
     bool want_fc_r;
     bool want_extangle;
     int nth_fz;
-    ComputeParams(MandelMath::NumberType ntype);
+    ComputeParams(MandelMath::complex<BASE>::Scratchpad *spad);
   } currentParams;
   LaguerrePointStore laguerreStore;
   LaguerrePoint<BASE> laguerreData;
@@ -508,12 +503,11 @@ public:
   MandelPoint<BASE> mandelData;
   JuliaPointStore juliaStore;
   JuliaPoint<BASE> juliaData;
-  typename MandelMath::complex<BASE>::Scratchpad tmp;
 
   void syncMandelSplit();
   void syncJuliaSplit();
   MandelLoopEvaluator<BASE> loope;
-  int laguerre(int period, const MandelMath::complex<BASE> *c, MandelMath::complex<BASE> *r, const bool fastHoming);
+  int laguerre(int period, MandelMath::complex<BASE> const &c, MandelMath::complex<BASE> *r, const bool fastHoming);
   struct NewtRes
   {
     //static constexpr int LEN=8;
@@ -533,7 +527,7 @@ public:
     double first_lagu1_re, first_lagu1_im, first_lagu1o_re, first_lagu1o_im;
     double firstMu_re, firstMu_im, firstMum_re, firstMum_im;
     double accy_tostop, accy_multiplier, accy_noise; //in units of eps2()
-    NewtRes(MandelMath::NumberType ntype);
+    NewtRes(MandelMath::complex<BASE>::Scratchpad *spad);
   } newtres;
 protected:
   struct Eval
@@ -547,7 +541,7 @@ protected:
     MandelMath::complex<BASE> fz_r;
     MandelMath::number<BASE> fz_mag;
     //MandelMath::number<BASE> near0fmag;
-    Eval(MandelMath::NumberType ntype);
+    Eval(MandelMath::complex<BASE>::Scratchpad *spad);
   } eval;
   struct Newt
   {
@@ -571,7 +565,7 @@ protected:
     MandelMath::complex<BASE> prevGz;
     MandelMath::complex<BASE> fzzf;
     MandelMath::number<BASE> tmp2;
-    Newt(MandelMath::NumberType ntype);
+    Newt(MandelMath::complex<BASE>::Scratchpad *spad);
   } newt;
   struct InteriorInfo
   {
@@ -588,7 +582,7 @@ protected:
     MandelMath::complex<BASE> alphak_other;
     MandelMath::complex<BASE> alphak;
     MandelMath::complex<BASE> zoom;
-    InteriorInfo(MandelMath::NumberType ntype);
+    InteriorInfo(MandelMath::complex<BASE>::Scratchpad *spad);
   } interior;
 public:
   struct Bulb
@@ -619,12 +613,12 @@ public:
     //MandelMath::number_store test_x0_re, test_x0_im;
     //MandelMath::number_store test_xn_re, test_xn_im;
     LaguerreStep<BASE> lagu;
-    Bulb(MandelMath::NumberType ntype, MandelLoopEvaluator<BASE> *loope);
+    Bulb(MandelMath::complex<BASE>::Scratchpad *spad, MandelLoopEvaluator<BASE> *loope);
     ~Bulb() { }
   protected:
     //void fixRnearBase(MandelMath::complex_place<WORKER_MULTI> *r, const MandelMath::complex_place<WORKER_MULTI> *c, int period, int *mult);
   public:
-    void findBulbBase(typename MandelMath::complex<BASE>::Scratchpad *tmp, int period2, const MandelMath::complex<BASE> *c);//, MandelMath::complex<WORKER_MULTI> *cb, MandelMath::complex<WORKER_MULTI> *rb, MandelMath::complex<WORKER_MULTI> *xc, MandelMath::complex<WORKER_MULTI> *baseZC, MandelMath::complex<WORKER_MULTI> *baseCC, bool *is_card, int *foundMult, MandelMath::complex<WORKER_MULTI> *baseFz);
+    void findBulbBase(int period2, MandelMath::complex<BASE> const &c);//, MandelMath::complex<WORKER_MULTI> *cb, MandelMath::complex<WORKER_MULTI> *rb, MandelMath::complex<WORKER_MULTI> *xc, MandelMath::complex<WORKER_MULTI> *baseZC, MandelMath::complex<WORKER_MULTI> *baseCC, bool *is_card, int *foundMult, MandelMath::complex<WORKER_MULTI> *baseFz);
     //static constexpr int LEN=MandelLoopEvaluator<BASE>::LEN+32+LaguerreStep<BASE>::LEN;
   } bulb;
   struct ExtAngle
@@ -652,12 +646,12 @@ public:
       complex first_guess_0, first_guess_1_, first_guess_2;
       int last_guess_valid;
       complex last_guess_0, last_guess_1_, last_guess_2;
-      Dbg(MandelMath::NumberType ntype): first_guess_valid(0), first_guess_0(ntype), first_guess_1_(ntype), first_guess_2(ntype),
-                                         last_guess_valid(0), last_guess_0(ntype), last_guess_1_(ntype), last_guess_2(ntype) {}
+      Dbg(MandelMath::complex<BASE>::Scratchpad *spad): first_guess_valid(0), first_guess_0(spad), first_guess_1_(spad), first_guess_2(spad),
+                                         last_guess_valid(0), last_guess_0(spad), last_guess_1_(spad), last_guess_2(spad) {}
     } dbg;
-    ExtAngle(MandelMath::NumberType ntype, MandelLoopEvaluator<BASE> *loope, LaguerreStep<BASE> *lagus, MandelEvaluator<BASE> *owner);
+    ExtAngle(MandelMath::complex<BASE>::Scratchpad *spad, MandelLoopEvaluator<BASE> *loope, LaguerreStep<BASE> *lagus, MandelEvaluator<BASE> *owner);
     ~ExtAngle();
-    void computeMJ(number *result, bool mandel, int iter, const complex *c, const complex *z, typename complex::Scratchpad *tmp);
+    void computeMJ(number *result, bool mandel, int iter, complex const &c, complex const &z);
   } extangle;
   //static constexpr size_t LEN=10+ ComputeParams::LEN+MandelPoint_<BASE>::LEN+LaguerrePoint<BASE>::LEN+JuliaPoint<BASE>::LEN+NewtRes::LEN+Eval::LEN+Newt::LEN+InteriorInfo::LEN+Bulb::LEN;
 public:
@@ -671,8 +665,8 @@ public:
 protected:
 
   protected:
-  int periodCheck(int period, const MandelMath::complex<BASE> *c, const MandelMath::complex<BASE> *root_seed, bool exactMatch);
-  int estimateInterior(int period, const MandelMath::complex<BASE> *c, const MandelMath::complex<BASE> *root);//, InteriorInfo *interior);
+  int periodCheck(int period, MandelMath::complex<BASE> const &c, MandelMath::complex<BASE> const &root_seed, bool exactMatch);
+  int estimateInterior(int period, MandelMath::complex<BASE> const &c, MandelMath::complex<BASE> const &root);//, InteriorInfo *interior);
   void mandel_until_bailout();
   void julia_until_bailout();
   void evaluateMandel();

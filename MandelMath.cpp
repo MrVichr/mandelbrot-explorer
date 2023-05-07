@@ -7,7 +7,13 @@
 
 void doNothing(int &x)
 {
-  x++;
+  //x++;
+  (void)x;
+}
+
+void doNothing(void *x)
+{
+  (void)x;
 }
 
 void nop() { }
@@ -26,6 +32,53 @@ void dbgPointII(int x1, int x2)
 }
 
 namespace MandelMath {
+
+template<int N, typename... Ts> using NthTypeOf =
+    typename std::tuple_element<N, std::tuple<Ts...>>::type;
+
+template<typename ...Options>
+auto mvisit(auto callable, std::variant<Options...> &vari, auto &...params)
+{
+  //using cases=std::make_index_sequence<sizeof...(Options)>;
+  auto index=vari.index(); //size_t
+  if constexpr (sizeof...(Options)>0)
+    if (index==0) return callable(std::get<0>(vari), params...); //__detail::__variant::__get<_Np>(__v);
+  if constexpr (sizeof...(Options)>1)
+    //if (index==1) return callable(std::get<1>(vari), params...);
+    if (index==1) return callable((NthTypeOf<1, Options...> &)vari, params...);
+  if constexpr (sizeof...(Options)>2)
+    if (index==2) return callable(std::get<2>(vari), params...);
+  if constexpr (sizeof...(Options)>3)
+    if (index==3) return callable(std::get<3>(vari), params...);
+  if constexpr (sizeof...(Options)>4)
+    if (index==4) return callable(std::get<4>(vari), params...);
+  if constexpr (sizeof...(Options)>5)
+    if (index==5) return callable(std::get<5>(vari), params...);
+  if constexpr (sizeof...(Options)>6)
+    if (index==6) return callable(std::get<6>(vari), params...);
+}
+
+template<typename ...Options>
+auto mvisit(auto callable, std::variant<Options...> const &vari, auto &...params)
+{
+  //using cases=std::make_index_sequence<sizeof...(Options)>;
+  auto index=vari.index(); //size_t
+  if constexpr (sizeof...(Options)>0)
+    if (index==0) return callable(std::get<0>(vari), params...); //__detail::__variant::__get<_Np>(__v);
+  if constexpr (sizeof...(Options)>1)
+    //if (index==1) return callable(std::get<1>(vari), params...);
+    if (index==1) return callable((NthTypeOf<1, Options...> const &)vari, params...);
+  if constexpr (sizeof...(Options)>2)
+    if (index==2) return callable(std::get<2>(vari), params...);
+  if constexpr (sizeof...(Options)>3)
+    if (index==3) return callable(std::get<3>(vari), params...);
+  if constexpr (sizeof...(Options)>4)
+    if (index==4) return callable(std::get<4>(vari), params...);
+  if constexpr (sizeof...(Options)>5)
+    if (index==5) return callable(std::get<5>(vari), params...);
+  if constexpr (sizeof...(Options)>6)
+    if (index==6) return callable(std::get<6>(vari), params...);
+}
 
 int gcd(int m, int n)
 {
@@ -281,7 +334,7 @@ int ReverseBits(int val)
 
 int CreatedInstancesOfNumber=0;
 
-number_a::number_a()
+/*number_a::number_a()
 {
   CreatedInstancesOfNumber++;
 }
@@ -291,21 +344,10 @@ number_a::~number_a()
   CreatedInstancesOfNumber--;
   if (CreatedInstancesOfNumber<=0)
     nop(); //should be hit exactly once on program end
-}
+}*/
 
 //these 2 have to be in front... maybe move all <number_a *> ?
-template<>
-NumberType number<number_a *>::ntype() const
-{
-  return store->ntype();
-}
-
-template<>
-NumberType number<number_a *>::raw_ntype() const
-{
-  return NumberType::typeEmpty;
-}
-
+//...no more?
 
 template<>
 double number<double>::eps2() const
@@ -420,26 +462,31 @@ double *number<double>::convert_block(NumberType old_type, const void *old_data,
 
 
 template<>
-void number<double>::zero(double val)
+number<double> &number<double>::zero(double val)
 {
   store=val;
+  return *this;
 }
 
 #if 1 //1..all explicit, 0..try number_a* + others
 template<>
-void number<double>::assign(const number<double> &src)
+number<double> &number<double>::assign(const number<double> &src) noexcept
 {
+  //working_assert(tmp==src.tmp);
   store=src.store;
+  return *this;
 }
 
+/* but that's assign_across
 template<>
-void number<double>::assign(const number_a &src)
+number<double> &number<double>::assign(const number<number_any> &src)
 {
   working_assert(src.raw_ntype()==NumberType::typeDouble);
   //const number<double> *src2=(const number<double> *)&src;
   //assign(*src2);
   assign(*(const number<double> *)&src);
-}
+  return *this;
+}*/
 
 #else
 template<typename BASE>
@@ -449,12 +496,33 @@ void number<BASE>::assign(const number<BASE> &src)
 }
 
 #endif
-template<> //template <>
-void number<double>::assign_across(const number<double> *src)
+
+template<> template <typename OTHER>
+number<double> &number<double>::assign_across(number<OTHER> const &src)
 {
   //const number<double> *access=specific_cast<number<double> *, number_a *>(src->store);
   //store=access->store;
-  store=src->store;
+
+  //store=src.store;
+  //return *this;
+
+  using T=std::remove_cv_t<std::remove_reference_t<OTHER>>;
+  if constexpr (std::is_same_v<T, double>)
+    store=src.store;
+  else if constexpr (std::is_same_v<T, __float128>)
+    store=src.store;
+  else if constexpr (std::is_same_v<T, dd_real>)
+    //const dd_real &access=((const number<dd_real> *)src)->store;
+    //store=access.hi;
+    store=src.store.hi;
+  else if constexpr (std::is_same_v<T, dq_real>)
+      store=src.store.hi;
+  else if constexpr (std::is_same_v<T, real642>)
+    store=src.store.val1;
+  else
+    //static_assert(false, "unknown number");
+    static_assert(!sizeof(T), "unknown number type");
+  return *this;
 }
 
 /*template<> template <>
@@ -466,12 +534,29 @@ void number<double>::assign_across<number_a *>(const number<number_a *> *src)
   store=access->store;
 }*/
 
-template<>
-void number<double>::assign_across(const number_a *src)
+template<> template<>
+number<double> &number<double>::assign_across(const number<number_any> &src)
 {
   //working_assert(src->ntype()==typeDouble);
   //working_assert(src->raw_ntype()==typeDouble);
-  switch (src->raw_ntype())
+  /*std::visit([this](auto &other){
+      using T=std::remove_cv_t<std::remove_reference_t<decltype(other)>>;
+      if constexpr(std::is_same_v<T, std::monostate>)
+          store=0;
+      else
+          assign_across(other);
+  }, src.store);*/
+
+  mvisit([](const auto &other, number<double> &self){
+    using T=std::decay_t<decltype(other)>;
+    if constexpr(std::is_same_v<T, std::monostate>)
+      self.store=0;
+    else
+      self.assign_across(other);
+  }, src.store, *this);
+  return *this;
+
+  /*switch (src.store.index())
   {
     case NumberType::typeEmpty: assign_across(((const number<number_a *> *)src)->store); break;
     case NumberType::typeDouble: store=((const number<double> *)src)->store; break;
@@ -491,106 +576,118 @@ void number<double>::assign_across(const number_a *src)
       const real642 &access=((const number<real642> *)src)->store;
       store=access.val1;
     } break;
-  }
+  }*/
 }
 
 template<>
-void number<double>::chs()
+number<double> &number<double>::chs()
 {
   store=-store;
+  return *this;
 }
 
 template<>
-void number<double>::lshift(int shoft)
+number<double> &number<double>::lshift(int shoft)
 {
   store=ldexp(store, shoft);
+  return *this;
 }
 
 template<>
-void number<double>::round()
+number<double> &number<double>::round()
 {
   store=std::round(store);
+  return *this;
 }
 
 template<>
-void number<double>::frac()
+number<double> &number<double>::frac()
 {
   if (store<0)
     store -= ceil(store);
   else
     store -= floor(store);
+  return *this;
 }
 
 template<>
-void number<double>::mod1()
+number<double> &number<double>::mod1()
 {
   store -= floor(store);
+  return *this;
 }
 
 template<>
-void number<double>::add_double(double x)
+number<double> &number<double>::add_double(double x)
 {
   store += x;
+  return *this;
 }
 
 template<>
-void number<double>::mul_double(double x)
+number<double> &number<double>::mul_double(double x)
 {
   store *= x;
+  return *this;
 }
 
 template<>
-void number<double>::add(const number<double> &other)
+number<double> &number<double>::add(const number<double> &other)
 {
   store += other.store;
+  return *this;
 }
 
-template<>
-void number<double>::add(const number_a &other)
+/*template<>
+number<double> &number<double>::add(const number_a &other)
 {
-  add(*(const number<double> *)&other);
-}
+  return add(*(const number<double> *)&other);
+}*/
 
 template<>
-void number<double>::sub(const number<double> &other)
+number<double> &number<double>::sub(const number<double> &other)
 {
   store -= other.store;
+  return *this;
 }
 
-template<>
+/*template<>
 void number<double>::sub(const number_a &other)
 {
   sub(*(const number<double> *)&other);
-}
+}*/
 
 template<>
-void number<double>::rsub(const number<double> &other)
+number<double> &number<double>::rsub(const number<double> &other)
 {
   store = other.store-store;
+  return *this;
 }
 
-template<>
+/*template<>
 void number<double>::rsub(const number_a &other)
 {
   rsub(*(const number<double> *)&other);
-}
+}*/
 
 template<>
-void number<double>::mul(const number<double> &other)
+number<double> &number<double>::mul(const number<double> &other)
 {
   store *= other.store;
+  return *this;
 }
 
-template<>
+/*template<>
 void number<double>::mul(const number_a &other)
 {
   mul(*(const number<double> *)&other);
-}
+}*/
 
 template<>
-void number<double>::sqr()
+number<double> &number<double>::sqr()
 {
   store *= store;
+  return *this;
 }
 
 template<>
@@ -603,26 +700,28 @@ double number<double>::radixfloor(const number<double> &other) const
   return ldexp(1, ilog1);
 }
 
-template<>
+/*template<>
 double number<double>::radixfloor(const number_a &other) const
 {
   return radixfloor(*(const number<double> *)&other);
-}
+}*/
 
 template<>
-void number<double>::recip()
+number<double> &number<double>::recip()
 {
-  store = 1/store;
+  store = 1.0/store;
+  return *this;
 }
 
 template<>
-void number<double>::sqrt()
+number<double> &number<double>::sqrt()
 {
   store = std::sqrt(store);
+  return *this;
 }
 
 template<>
-bool number<double>::reduceAngle()
+bool number<double>::reduce_angle()
 {
   if (store<-M_PI)
   {
@@ -639,27 +738,28 @@ bool number<double>::reduceAngle()
 }
 
 template<>
-void number<double>::add_pi(double x)
+number<double> &number<double>::add_pi(double x)
 {
   store+=x*M_PI;
+  return *this;
 }
 
 template<>
-int number<double>::compare(const number<double> &other) const
+std::strong_ordering number<double>::compare(const number<double> &other) const
 {
   if (store == other.store)
-    return 0;
+    return std::strong_ordering::equal;
   else if (store < other.store)
-    return -1;
+    return std::strong_ordering::less;
   else
-    return +1;
+    return std::strong_ordering::greater;
 }
 
-template<>
+/*template<>
 int number<double>::compare(const number_a &other) const
 {
   return compare(*(const number<double> *)&other);
-}
+}*/
 
 template<>
 bool number<double>::isequal(const number<double> &other) const
@@ -667,11 +767,11 @@ bool number<double>::isequal(const number<double> &other) const
   return store==other.store;
 }
 
-template<>
+/*template<>
 bool number<double>::isequal(const number_a &other) const
 {
   return isequal(*(const number<double> *)&other);
-}
+}*/
 
 template<>
 bool number<double>::is0() const
@@ -685,11 +785,11 @@ bool number<double>::isle(const number<double> &other) const
   return store <= other.store;
 }
 
-template<>
+/*template<>
 bool number<double>::isle(const number_a &other) const
 {
   return isle(*(const number<double> *)&other);
-}
+}*/
 
 template<>
 bool number<double>::isle0() const
@@ -710,19 +810,20 @@ bool number<double>::isl1() const
 }
 
 template<>
-void number<double>::min(const number<double> &other)
+number<double> &number<double>::min(const number<double> &other)
 {
   if (store>other.store)
   {
     store=other.store;
   };
+  return *this;
 }
 
-template<>
+/*template<>
 void number<double>::min(const number_a &other)
 {
   min(*(const number<double> *)&other);
-}
+}*/
 
 template<>
 QString number<double>::toString() const
@@ -872,32 +973,53 @@ __float128 *number<__float128>::convert_block(NumberType old_type, const void *o
 }
 
 template<>
-void number<__float128>::zero(double val)
+number<__float128> &number<__float128>::zero(double val)
 {
   store=val;
+  return *this;
 }
 
 template<>
-void number<__float128>::assign(const number<__float128> &src)
+number<__float128> &number<__float128>::assign(const number<__float128> &src) noexcept
 {
   store=src.store;
+  return *this;
 }
 
-template<>
+/*template<>
 void number<__float128>::assign(const number_a &src)
 {
   working_assert(src.raw_ntype()==NumberType::typeFloat128);
   //const number<double> *src2=(const number<double> *)&src;
   //assign(*src2);
   assign(*(const number<__float128> *)&src);
-}
+}*/
 
-template<> //template <>
-void number<__float128>::assign_across(const number<__float128> *src)
+template<> template <typename OTHER>
+number<__float128> &number<__float128>::assign_across(number<OTHER> const &src)
 {
   //const number<double> *access=specific_cast<number<double> *, number_a *>(src->store);
   //store=access->store;
-  store=src->store;
+
+  //store=src->store;
+
+  using T=std::remove_cv_t<std::remove_reference_t<OTHER>>;
+  if constexpr (std::is_same_v<T, double>)
+    store=src.store;
+  else if constexpr (std::is_same_v<T, __float128>)
+    store=src.store;
+  else if constexpr (std::is_same_v<T, dd_real>)
+    //const dd_real &access=((const number<dd_real> *)src)->store;
+    //store=access.hi;
+    store=src.store.hi+__float128(src.store.lo_);
+  else if constexpr (std::is_same_v<T, dq_real>)
+    store=src.store.hi+__float128(src.store.lo_);
+  else if constexpr (std::is_same_v<T, real642>)
+    store=src.store.val1;
+  else
+    //static_assert(false, "unknown number type");
+    static_assert(!sizeof(T), "unknown number type");
+  return *this;
 }
 
 /*template<> template <>
@@ -909,12 +1031,22 @@ void number<__float128>::assign_across<number_a *>(const number<number_a *> *src
   store=access->store;
 }*/
 
-template<>
-void number<__float128>::assign_across(const number_a *src)
+template<> template<>
+number<__float128> &number<__float128>::assign_across(number<number_any> const &src)
 {
   //working_assert(src->ntype()==typeFloat128);
   //working_assert(src->raw_ntype()==typeFloat128);
-  switch (src->raw_ntype())
+
+  mvisit([](auto const &other, number<__float128> &self){
+      using T=std::decay_t<decltype(other)>;
+      if constexpr(std::is_same_v<T, std::monostate>)
+          self.store=0;
+      else
+          self.assign_across(other);
+  }, src.store, *this);
+  return *this;
+
+  /*switch (src->raw_ntype())
   {
     case NumberType::typeEmpty: assign_across(((const number<number_a *> *)src)->store); break;
     case NumberType::typeDouble: store=((const number<double> *)src)->store; break;
@@ -934,26 +1066,28 @@ void number<__float128>::assign_across(const number_a *src)
       const real642 &access=((const number<real642> *)src)->store;
       store=access.val1;
     } break;
-  }
+  }*/
 }
 
 template<>
-void number<__float128>::chs()
+number<__float128> &number<__float128>::chs()
 {
   store=-store;
+  return *this;
 }
 
 template<>
-void number<__float128>::lshift(int shoft)
+number<__float128> &number<__float128>::lshift(int shoft)
 {
   //could try ldexp only on upper half but...
   if (store != 0) //don't play with 0's exponent or you get NaN
     ((uint16_t *)&store)[7]+=shoft;
     //TODO: should check for overflow/underflow but unlikely to happen
+  return *this;
 }
 
 template<>
-void number<__float128>::round()
+number<__float128> &number<__float128>::round()
 {
   __float128 remainder=store;
   store=0;
@@ -965,10 +1099,11 @@ void number<__float128>::round()
     store+=some;
     remainder-=some;
   }
+  return *this;
 }
 
 template<>
-void number<__float128>::frac()
+number<__float128> &number<__float128>::frac()
 {
   if (store<0)
   {
@@ -988,10 +1123,11 @@ void number<__float128>::frac()
       some=floor((double)store);
     }
   }
+  return *this;
 }
 
 template<>
-void number<__float128>::mod1()
+number<__float128> &number<__float128>::mod1()
 {
   double some=floor((double)store);
   while (some)
@@ -999,72 +1135,80 @@ void number<__float128>::mod1()
     store -= some;
     some=floor((double)store);
   }
+  return *this;
 }
 
 template<>
-void number<__float128>::add_double(double x)
+number<__float128> &number<__float128>::add_double(double x)
 {
   store += x;
+  return *this;
 }
 
 template<>
-void number<__float128>::mul_double(double x)
+number<__float128> &number<__float128>::mul_double(double x)
 {
   store *= x;
+  return *this;
 }
 
 template<>
-void number<__float128>::add(const number<__float128> &other)
+number<__float128> &number<__float128>::add(number<__float128> const &other)
 {
   store += other.store;
+  return *this;
 }
 
-template<>
+/*template<>
 void number<__float128>::add(const number_a &other)
 {
   add(*(const number<__float128> *)&other);
-}
+}*/
 
 template<>
-void number<__float128>::sub(const number<__float128> &other)
+number<__float128> &number<__float128>::sub(const number<__float128> &other)
 {
   store -= other.store;
+  return *this;
 }
 
-template<>
+/*template<>
 void number<__float128>::sub(const number_a &other)
 {
   sub(*(const number<__float128> *)&other);
-}
+}*/
 
 template<>
-void number<__float128>::rsub(const number<__float128> &other)
+number<__float128> &number<__float128>::rsub(const number<__float128> &other)
 {
   store = other.store-store;
+  return *this;
 }
 
-template<>
+/*template<>
 void number<__float128>::rsub(const number_a &other)
 {
   rsub(*(const number<__float128> *)&other);
-}
+}*/
 
 template<>
-void number<__float128>::mul(const number<__float128> &other)
+number<__float128> &number<__float128>::mul(const number<__float128> &other)
 {
   store *= other.store;
+  return *this;
 }
 
-template<>
-void number<__float128>::mul(const number_a &other)
+/*template<>
+number<__float128> &number<__float128>::mul(const number_a &other)
 {
   mul(*(const number<__float128> *)&other);
-}
+}*/
 
 template<>
-void number<__float128>::sqr()
+number<__float128> &number<__float128>::sqr()
 {
   store *= store;
+  return *this;
 }
 
 template<>
@@ -1077,22 +1221,23 @@ double number<__float128>::radixfloor(const number<__float128> &other) const
   return ldexp(1, ilog1);
 }
 
-template<>
+/*template<>
 double number<__float128>::radixfloor(const number_a &other) const
 {
   return radixfloor(*(const number<__float128> *)&other);
+}*/
+
+template<>
+number<__float128> &number<__float128>::recip()
+{
+  store = __float128(1.0)/store;
+  return *this;
 }
 
 template<>
-void number<__float128>::recip()
+number<__float128> &number<__float128>::sqrt()
 {
-  store = __float128(1)/store;
-}
-
-template<>
-void number<__float128>::sqrt()
-{
-  double x=1/std::sqrt((double)store);
+  double x=1.0/std::sqrt((double)store);
   __float128 ax=x*(double)store;
   double tmp=store - ax*ax;
   double tmp2=tmp*x/2;
@@ -1121,10 +1266,11 @@ void number<__float128>::sqrt()
   //result ~ sqrt*(1+h)+f + sqrt*(2+h)*(-h)*(1+h)/2-f*(1+h) + g/sqrt*(1+h)/2
   //result ~ sqrt*(1+h) + sqrt*(-h)*(1+h)+sqrt*(-h)*(1+h)*h/2 + g/sqrt*(1+h)/2 -f*h
   //result ~ sqrt + g/sqrt/2 + second order terms
+  return *this;
 }
 
 template<>
-bool number<__float128>::reduceAngle()
+bool number<__float128>::reduce_angle()
 {
   static constexpr __float128 M_PIq=3.141592653589793238462643383279502884197Q;
   if (store<-M_PIq)
@@ -1142,28 +1288,30 @@ bool number<__float128>::reduceAngle()
 }
 
 template<>
-void number<__float128>::add_pi(double x)
+number<__float128> &number<__float128>::add_pi(double x)
 {
   static constexpr __float128 M_PIq=3.141592653589793238462643383279502884197Q;
   store+=x*M_PIq;
+  return *this;
 }
 
 template<>
-int number<__float128>::compare(const number<__float128> &other) const
+std::strong_ordering number<__float128>::compare(const number<__float128> &other) const
 {
+  //partial_ordering? return store <=> other.store;
   if (store == other.store)
-    return 0;
+    return std::strong_ordering::equal;
   else if (store < other.store)
-    return -1;
+    return std::strong_ordering::less;
   else
-    return +1;
+    return std::strong_ordering::greater;
 }
 
-template<>
+/*template<>
 int number<__float128>::compare(const number_a &other) const
 {
   return compare(*(const number<__float128> *)&other);
-}
+}*/
 
 template<>
 bool number<__float128>::isequal(const number<__float128> &other) const
@@ -1171,11 +1319,11 @@ bool number<__float128>::isequal(const number<__float128> &other) const
   return store==other.store;
 }
 
-template<>
+/*template<>
 bool number<__float128>::isequal(const number_a &other) const
 {
   return isequal(*(const number<__float128> *)&other);
-}
+}*/
 
 template<>
 bool number<__float128>::is0() const
@@ -1189,11 +1337,11 @@ bool number<__float128>::isle(const number<__float128> &other) const
   return store <= other.store;
 }
 
-template<>
+/*template<>
 bool number<__float128>::isle(const number_a &other) const
 {
   return isle(*(const number<__float128> *)&other);
-}
+}*/
 
 template<>
 bool number<__float128>::isle0() const
@@ -1214,19 +1362,20 @@ bool number<__float128>::isl1() const
 }
 
 template<>
-void number<__float128>::min(const number<__float128> &other)
+number<__float128> &number<__float128>::min(const number<__float128> &other)
 {
   if (store>other.store)
   {
     store=other.store;
   };
+  return *this;
 }
 
-template<>
+/*template<>
 void number<__float128>::min(const number_a &other)
 {
   min(*(const number<__float128> *)&other);
-}
+}*/
 
 template<>
 QString number<__float128>::toString() const
@@ -1363,31 +1512,34 @@ dd_real *number<dd_real>::convert_block(NumberType old_type, const void *old_dat
 }
 
 template<>
-void number<dd_real>::zero(double val)
+number<dd_real> &number<dd_real>::zero(double val)
 {
   store.zero(val);
+  return *this;
 }
 
 template<>
-void number<dd_real>::assign(const number<dd_real> &src)
+number<dd_real> &number<dd_real>::assign(const number<dd_real> &src) noexcept
 {
   store=src.store;
+  return *this;
 }
 
-template<>
+/*template<>
 void number<dd_real>::assign(const number_a &src)
 {
   working_assert(src.raw_ntype()==NumberType::typeDDouble);
   //const number<double> *src2=(const number<double> *)&src;
   //assign(*src2);
   assign(*(const number<dd_real> *)&src);
-}
+}*/
 
-template<> //template <>
-void number<dd_real>::assign_across(const number<dd_real> *src)
+/*template<> //template <>
+number<dd_real> &number<dd_real>::assign_across(const number<dd_real> &src)
 {
-  store=src->store;
-}
+  store=src.store;
+  return *this;
+}*/
 
 /*template<> template <>
 void number<dd_real>::assign_across<number_a *>(const number<number_a *> *src)
@@ -1398,136 +1550,165 @@ void number<dd_real>::assign_across<number_a *>(const number<number_a *> *src)
   store=access->store;
 }*/
 
-template<>
-void number<dd_real>::assign_across(const number_a *src)
+template<> template <typename OTHER>
+number<dd_real> &number<dd_real>::assign_across(number<OTHER> const &src)
 {
   //working_assert(src->ntype()==typeDDouble);
   //working_assert(src->raw_ntype()==typeDDouble);
   //store=specific_cast<const number<dd_real> *, const number_a *>(src)->store;
-  switch (src->raw_ntype())
+
+  using T=std::remove_cv_t<std::remove_reference_t<OTHER>>;
+  //could do if (monostate) store.hi=store.lo_=0;
+  if constexpr (std::is_same_v<T, double>)
+    { store.hi=src.store; store.lo_=0; }
+  else if constexpr (std::is_same_v<T, __float128>)
   {
-    case NumberType::typeEmpty: assign_across(((const number<number_a *> *)src)->store); break;
-    case NumberType::typeDouble: store.hi=((const number<double> *)src)->store; store.lo_=0; break;
-    case NumberType::typeFloat128:
-    {
-      const __float128 &access=((const number<__float128> *)src)->store;
-      store.hi=access;
-      store.lo_=access-store.hi;
-    } break;
-    case NumberType::typeDDouble:
-    {
-      const dd_real &access=((const number<dd_real> *)src)->store;
-      store=access;
-    } break;
-    case NumberType::typeQDouble:
-    {
-      const dq_real &access=((const number<dq_real> *)src)->store;
-      store=access;
-    } break;
-    case NumberType::typeReal642:
-    {
-      const real642 &access=((const number<real642> *)src)->store;
-      store.hi=access.val1;
-      store.lo_=0;
-    } break;
+    /*const __float128 &access=((const number<__float128> *)src)->store;
+    store.hi=access;
+    store.lo_=access-store.hi;*/
+    store.hi=src.store;
+    store.lo_=src.store-store.hi;
   }
+  else if constexpr (std::is_same_v<T, dd_real>)
+      //const dd_real &access=((const number<dd_real> *)src)->store;
+      //store=access.hi;
+      store=src.store;
+  else if constexpr (std::is_same_v<T, dq_real>)
+      store=src.store;
+  else if constexpr (std::is_same_v<T, real642>)
+  {
+    store.hi=src.store.val1;
+    store.lo_=0;
+  }
+  else
+      //static_assert(false, "unknown number type");
+    static_assert(!sizeof(T), "unknown number type");
+  return *this;
+}
+
+template<> template<>
+number<dd_real> &number<dd_real>::assign_across(number<number_any> const &src)
+{
+  //working_assert(src->ntype()==typeFloat128);
+  //working_assert(src->raw_ntype()==typeFloat128);
+
+  mvisit([](auto const &other, number<dd_real> &self){
+      using T=std::decay_t<decltype(other)>;
+      if constexpr(std::is_same_v<T, std::monostate>)
+        { self.store.hi=self.store.lo_=0; }
+      else
+        self.assign_across(other);
+  }, src.store, *this);
+  return *this;
 }
 
 template<>
-void number<dd_real>::chs()
+number<dd_real> &number<dd_real>::chs()
 {
   store.chs();
+  return *this;
 }
 
 template<>
-void number<dd_real>::lshift(int shoft)
+number<dd_real> &number<dd_real>::lshift(int shoft)
 {
   store.lshift(shoft);
+  return *this;
 }
 
 template<>
-void number<dd_real>::round()
+number<dd_real> &number<dd_real>::round()
 {
   store.round();
+  return *this;
 }
 
 template<>
-void number<dd_real>::frac()
+number<dd_real> &number<dd_real>::frac()
 {
   store.frac();
+  return *this;
 }
 
 template<>
-void number<dd_real>::mod1()
+number<dd_real> &number<dd_real>::mod1()
 {
   store.mod1();
+  return *this;
 }
 
 template<>
-void number<dd_real>::add_double(double x)
+number<dd_real> &number<dd_real>::add_double(double x)
 {
   store.add_double(x);
+  return *this;
 }
 
 template<>
-void number<dd_real>::mul_double(double x)
+number<dd_real> &number<dd_real>::mul_double(double x)
 {
   store.mul_double(x);
+  return *this;
 }
 
 template<>
-void number<dd_real>::add(const number<dd_real> &other)
+number<dd_real> &number<dd_real>::add(const number<dd_real> &other)
 {
   store.add(other.store.hi, other.store.lo_);
+  return *this;
 }
 
-template<>
+/*template<>
 void number<dd_real>::add(const number_a &other)
 {
   add(*(const number<dd_real> *)&other);
-}
+}*/
 
 template<>
-void number<dd_real>::sub(const number<dd_real> &other)
+number<dd_real> &number<dd_real>::sub(const number<dd_real> &other)
 {
   store.add(-other.store.hi, -other.store.lo_);
+  return *this;
 }
 
-template<>
+/*template<>
 void number<dd_real>::sub(const number_a &other)
 {
   sub(*(const number<dd_real> *)&other);
-}
+}*/
 
 template<>
-void number<dd_real>::rsub(const number<dd_real> &other)
+number<dd_real> &number<dd_real>::rsub(const number<dd_real> &other)
 {
   store.chs();
   store.add(other.store.hi, other.store.lo_);
+  return *this;
 }
 
-template<>
+/*template<>
 void number<dd_real>::rsub(const number_a &other)
 {
   rsub(*(const number<dd_real> *)&other);
-}
+}*/
 
 template<>
-void number<dd_real>::mul(const number<dd_real> &other)
+number<dd_real> &number<dd_real>::mul(const number<dd_real> &other)
 {
   store.mul(other.store.hi, other.store.lo_);
+  return *this;
 }
 
-template<>
+/*template<>
 void number<dd_real>::mul(const number_a &other)
 {
   mul(*(const number<dd_real> *)&other);
-}
+}*/
 
 template<>
-void number<dd_real>::sqr()
+number<dd_real> &number<dd_real>::sqr()
 {
   store.sqr();
+  return *this;
 }
 
 template<>
@@ -1540,26 +1721,28 @@ double number<dd_real>::radixfloor(const number<dd_real> &other) const
   return rf1;
 }
 
-template<>
+/*template<>
 double number<dd_real>::radixfloor(const number_a &other) const
 {
   return radixfloor(*(const number<dd_real> *)&other);
-}
+}*/
 
 template<>
-void number<dd_real>::recip()
+number<dd_real> &number<dd_real>::recip()
 {
   store.recip();
+  return *this;
 }
 
 template<>
-void number<dd_real>::sqrt()
+number<dd_real> &number<dd_real>::sqrt()
 {
   store.sqrt();
+  return *this;
 }
 
 template<>
-bool number<dd_real>::reduceAngle()
+bool number<dd_real>::reduce_angle()
 {
   static const dd_real M_PIdd(3.141, 0.0005926);
   if (store.compare(-M_PIdd.hi, -M_PIdd.lo_)<0)
@@ -1577,7 +1760,7 @@ bool number<dd_real>::reduceAngle()
 }
 
 template<>
-void number<dd_real>::add_pi(double x)
+number<dd_real> &number<dd_real>::add_pi(double x)
 {
   dd_real tmppi(3.141, 0.0005926);
   dbgPoint();
@@ -1585,19 +1768,25 @@ void number<dd_real>::add_pi(double x)
   tmppi.lo_=3.141592653589793238462643383279502884197Q-tmppi.hi;
   tmppi.mul_double(x);
   store.add(tmppi.hi, tmppi.lo_);
+  return *this;
 }
 
 template<>
-int number<dd_real>::compare(const number<dd_real> &other) const
+std::strong_ordering number<dd_real>::compare(const number<dd_real> &other) const
 {
-  return store.compare(&other.store);
+  switch (store.compare(&other.store))
+  {
+  case -1: return std::strong_ordering::less;
+  case +1: return std::strong_ordering::greater;
+  default: return std::strong_ordering::equal;
+  }
 }
 
-template<>
+/*template<>
 int number<dd_real>::compare(const number_a &other) const
 {
   return compare(*(const number<dd_real> *)&other);
-}
+}*/
 
 template<>
 bool number<dd_real>::isequal(const number<dd_real> &other) const
@@ -1605,11 +1794,11 @@ bool number<dd_real>::isequal(const number<dd_real> &other) const
   return store.isequal(&other.store);
 }
 
-template<>
+/*template<>
 bool number<dd_real>::isequal(const number_a &other) const
 {
   return isequal(*(const number<dd_real> *)&other);
-}
+}*/
 
 template<>
 bool number<dd_real>::is0() const
@@ -1623,11 +1812,11 @@ bool number<dd_real>::isle(const number<dd_real> &other) const
   return store.isle(&other.store);
 }
 
-template<>
+/*template<>
 bool number<dd_real>::isle(const number_a &other) const
 {
   return isle(*(const number<dd_real> *)&other);
-}
+}*/
 
 template<>
 bool number<dd_real>::isle0() const
@@ -1648,19 +1837,20 @@ bool number<dd_real>::isl1() const
 }
 
 template<>
-void number<dd_real>::min(const number<dd_real> &other)
+number<dd_real> &number<dd_real>::min(const number<dd_real> &other)
 {
   if (!store.isle(&other.store))
   {
     store=other.store;
   };
+  return *this;
 }
 
-template<>
+/*template<>
 void number<dd_real>::min(const number_a &other)
 {
   min(*(const number<dd_real> *)&other);
-}
+}*/
 
 template<>
 QString number<dd_real>::toString() const
@@ -1679,6 +1869,487 @@ double number<dd_real>::toDouble() const
 {
   return store.hi;
 }
+
+
+
+
+
+
+
+template<>
+double number<dq_real>::eps2() const
+{
+  return 6.07717e-64; // 2^-(2*(53+52)) rounded up
+}
+
+template<>
+double number<dq_real>::eps234() const
+{
+  return 3.87e-48; // veps2^(3/4)
+}
+
+template<>
+number<dq_real>::number(NumberType ntype): store()
+{
+  working_assert(ntype==NumberType::typeDDouble || ntype==NumberType::typeQDouble);
+}
+
+template<>
+number<dq_real>::~number()
+{
+  store.hi=12.345;
+  store.lo_=1.234e-30;
+}
+
+template<>
+NumberType number<dq_real>::ntype() const
+{
+  return NumberType::typeQDouble;
+}
+
+template<>
+NumberType number<dq_real>::raw_ntype() const
+{
+  return NumberType::typeQDouble;
+}
+
+template<>
+void number<dq_real>::readFrom(void *storage, int index)
+{
+  store=((dq_real *)storage)[index];
+}
+
+template<>
+void number<dq_real>::writeTo(void *storage, int index) const
+{
+  ((dq_real *)storage)[index]=store;
+}
+
+template<>
+dq_real *number<dq_real>::convert_block(NumberType old_type, const void *old_data, int count)
+{
+  dq_real *result=new dq_real[count];
+  switch (old_type)
+  {
+  case NumberType::typeEmpty:
+  {
+    for (int i=0; i<count; i++)
+        result[i].zero(0);
+  } break;
+  case NumberType::typeDouble:
+  {
+    const double *src_storage=(const double *)old_data;
+    for (int i=0; i<count; i++)
+    {
+        result[i].zero(*src_storage);
+        src_storage++;
+    }
+  } break;
+  case NumberType::typeFloat128:
+  {
+    const __float128 *src_storage=(const __float128 *)old_data;
+    for (int i=0; i<count; i++)
+    {
+        result[i].hi=(double)*src_storage;
+        result[i].lo_=*src_storage-result[i].hi;
+        src_storage++;
+    }
+  } break;
+  case NumberType::typeDDouble:
+  {
+    const dd_real *src_storage=(const dd_real *)old_data;
+    for (int i=0; i<count; i++)
+    {
+        result[i].assign(*src_storage);
+        src_storage++;
+    }
+  } break;
+  case NumberType::typeQDouble:
+  {
+    const dq_real *src_storage=(const dq_real *)old_data;
+    for (int i=0; i<count; i++)
+    {
+        result[i].assign(*src_storage);
+        src_storage++;
+    }
+  } break;
+  case NumberType::typeReal642:
+  {
+    const real642 *src_storage=(const real642 *)old_data;
+    for (int i=0; i<count; i++)
+    {
+        result[i].hi=src_storage->val1;
+        result[i].lo_=0;
+        src_storage++;
+    }
+  } break;
+  }
+  return result;
+}
+
+template<>
+number<dq_real> &number<dq_real>::zero(double val)
+{
+  store.zero(val);
+  return *this;
+}
+
+template<>
+number<dq_real> &number<dq_real>::assign(const number<dq_real> &src) noexcept
+{
+  store=src.store;
+  return *this;
+}
+
+/*template<>
+void number<dq_real>::assign(const number_a &src)
+{
+  working_assert(src.raw_ntype()==NumberType::typeDDouble);
+  //const number<double> *src2=(const number<double> *)&src;
+  //assign(*src2);
+  assign(*(const number<dq_real> *)&src);
+}*/
+
+/*template<> //template <>
+number<dq_real> &number<dq_real>::assign_across(const number<dq_real> &src)
+{
+  store=src.store;
+  return *this;
+}*/
+
+/*template<> template <>
+void number<dq_real>::assign_across<number_a *>(const number<number_a *> *src)
+{
+  working_assert(src->ntype()==typeDDouble);
+  working_assert(src->raw_ntype()==typeEmpty);
+  const number<dq_real> *access=specific_cast<number<dq_real> *, number_a *>(src->store);
+  store=access->store;
+}*/
+
+template<> template <typename OTHER>
+number<dq_real> &number<dq_real>::assign_across(number<OTHER> const &src)
+{
+  //working_assert(src->ntype()==typeDDouble);
+  //working_assert(src->raw_ntype()==typeDDouble);
+  //store=specific_cast<const number<dq_real> *, const number_a *>(src)->store;
+
+  using T=std::remove_cv_t<std::remove_reference_t<OTHER>>;
+  //could do if (monostate) store.hi=store.lo_=0;
+  if constexpr (std::is_same_v<T, double>)
+  { store.hi=src.store; store.lo_=0; }
+  else if constexpr (std::is_same_v<T, __float128>)
+  {
+    /*const __float128 &access=((const number<__float128> *)src)->store;
+    store.hi=access;
+    store.lo_=access-store.hi;*/
+    store.hi=src.store;
+    store.lo_=src.store-store.hi;
+  }
+  else if constexpr (std::is_same_v<T, dd_real>)
+  {
+    //const dd_real &access=((const number<dd_real> *)src)->store;
+    //store=access.hi;
+    store.hi=src.store.hi;
+    store.lo_=src.store.lo_;
+  }
+  else if constexpr (std::is_same_v<T, dq_real>)
+    store=src.store;
+  else if constexpr (std::is_same_v<T, real642>)
+  {
+    store.hi=src.store.val1;
+    store.lo_=0;
+  }
+  else
+      //static_assert(false, "unknown number type");
+    static_assert(!sizeof(T), "unknown number type");
+  return *this;
+}
+
+template<> template<>
+number<dq_real> &number<dq_real>::assign_across(number<number_any> const &src)
+{
+  //working_assert(src->ntype()==typeFloat128);
+  //working_assert(src->raw_ntype()==typeFloat128);
+
+  mvisit([](auto const &other, number<dq_real> &self){
+      using T=std::decay_t<decltype(other)>;
+      if constexpr(std::is_same_v<T, std::monostate>)
+      { self.store.hi=self.store.lo_=0; }
+      else
+        self.assign_across(other);
+  }, src.store, *this);
+  return *this;
+}
+
+template<>
+number<dq_real> &number<dq_real>::chs()
+{
+  store.chs();
+  return *this;
+}
+
+template<>
+number<dq_real> &number<dq_real>::lshift(int shoft)
+{
+  store.lshift(shoft);
+  return *this;
+}
+
+template<>
+number<dq_real> &number<dq_real>::round()
+{
+  store.round();
+  return *this;
+}
+
+template<>
+number<dq_real> &number<dq_real>::frac()
+{
+  store.frac();
+  return *this;
+}
+
+template<>
+number<dq_real> &number<dq_real>::mod1()
+{
+  store.mod1();
+  return *this;
+}
+
+template<>
+number<dq_real> &number<dq_real>::add_double(double x)
+{
+  store.add_double(x);
+  return *this;
+}
+
+template<>
+number<dq_real> &number<dq_real>::mul_double(double x)
+{
+  store.mul_double(x);
+  return *this;
+}
+
+template<>
+number<dq_real> &number<dq_real>::add(const number<dq_real> &other)
+{
+  store.add(other.store.hi, other.store.lo_);
+  return *this;
+}
+
+/*template<>
+void number<dq_real>::add(const number_a &other)
+{
+  add(*(const number<dq_real> *)&other);
+}*/
+
+template<>
+number<dq_real> &number<dq_real>::sub(const number<dq_real> &other)
+{
+  store.add(-other.store.hi, -other.store.lo_);
+  return *this;
+}
+
+/*template<>
+void number<dq_real>::sub(const number_a &other)
+{
+  sub(*(const number<dq_real> *)&other);
+}*/
+
+template<>
+number<dq_real> &number<dq_real>::rsub(const number<dq_real> &other)
+{
+  store.chs();
+  store.add(other.store.hi, other.store.lo_);
+  return *this;
+}
+
+/*template<>
+void number<dq_real>::rsub(const number_a &other)
+{
+  rsub(*(const number<dq_real> *)&other);
+}*/
+
+template<>
+number<dq_real> &number<dq_real>::mul(const number<dq_real> &other)
+{
+  store.mul(other.store.hi, other.store.lo_);
+  return *this;
+}
+
+/*template<>
+void number<dq_real>::mul(const number_a &other)
+{
+  mul(*(const number<dq_real> *)&other);
+}*/
+
+template<>
+number<dq_real> &number<dq_real>::sqr()
+{
+  store.sqr();
+  return *this;
+}
+
+template<>
+double number<dq_real>::radixfloor(const number<dq_real> &other) const
+{
+  double rf1=store.radixfloor();
+  double rf2=other.store.radixfloor();
+  if (rf1<rf2)
+    return rf2;
+  return rf1;
+}
+
+/*template<>
+double number<dq_real>::radixfloor(const number_a &other) const
+{
+  return radixfloor(*(const number<dq_real> *)&other);
+}*/
+
+template<>
+number<dq_real> &number<dq_real>::recip()
+{
+  store.recip();
+  return *this;
+}
+
+template<>
+number<dq_real> &number<dq_real>::sqrt()
+{
+  store.sqrt();
+  return *this;
+}
+
+template<>
+bool number<dq_real>::reduce_angle()
+{
+  static const dq_real M_PIdd(3.141, 0.0005926);
+  if (store.compare(-M_PIdd.hi, -M_PIdd.lo_)<0)
+  {
+    store.add(2*M_PIdd.hi, 2*M_PIdd.lo_);
+    return true;
+  }
+  else if (store.isle(&M_PIdd))
+  {
+    store.add(-2*M_PIdd.hi, -2*M_PIdd.lo_);
+    return true;
+  }
+  else
+    return false;
+}
+
+template<>
+number<dq_real> &number<dq_real>::add_pi(double x)
+{
+  dq_real tmppi(3.141, 0.0005926);
+  dbgPoint();
+  tmppi.hi=3.141592653589793238462643383279502884197Q;
+  tmppi.lo_=3.141592653589793238462643383279502884197Q-tmppi.hi;
+  tmppi.mul_double(x);
+  store.add(tmppi.hi, tmppi.lo_);
+  return *this;
+}
+
+template<>
+std::strong_ordering number<dq_real>::compare(const number<dq_real> &other) const
+{
+  switch (store.compare(&other.store))
+  {
+  case -1: return std::strong_ordering::less;
+  case +1: return std::strong_ordering::greater;
+  default: return std::strong_ordering::equal;
+  }
+}
+
+/*template<>
+int number<dq_real>::compare(const number_a &other) const
+{
+  return compare(*(const number<dq_real> *)&other);
+}*/
+
+template<>
+bool number<dq_real>::isequal(const number<dq_real> &other) const
+{
+  return store.isequal(&other.store);
+}
+
+/*template<>
+bool number<dq_real>::isequal(const number_a &other) const
+{
+  return isequal(*(const number<dq_real> *)&other);
+}*/
+
+template<>
+bool number<dq_real>::is0() const
+{
+  return store.is0();
+}
+
+template<>
+bool number<dq_real>::isle(const number<dq_real> &other) const
+{
+  return store.isle(&other.store);
+}
+
+/*template<>
+bool number<dq_real>::isle(const number_a &other) const
+{
+  return isle(*(const number<dq_real> *)&other);
+}*/
+
+template<>
+bool number<dq_real>::isle0() const
+{
+  return store.isle0();
+}
+
+template<>
+bool number<dq_real>::isl0() const
+{
+  return store.isl0();
+}
+
+template<>
+bool number<dq_real>::isl1() const
+{
+  return store.isl1();
+}
+
+template<>
+number<dq_real> &number<dq_real>::min(const number<dq_real> &other)
+{
+  if (!store.isle(&other.store))
+  {
+    store=other.store;
+  };
+  return *this;
+}
+
+/*template<>
+void number<dq_real>::min(const number_a &other)
+{
+  min(*(const number<dq_real> *)&other);
+}*/
+
+template<>
+QString number<dq_real>::toString() const
+{
+  return QString("dd(%1,%2)").arg(store.hi, 0, 'f', 16).arg(store.lo_, 0, 'g', 16);
+}
+
+template<>
+int number<dq_real>::toRound() const
+{
+  return floor(store.hi+0.5)+floor(store.lo_+0.5);
+}
+
+template<>
+double number<dq_real>::toDouble() const
+{
+  return store.hi;
+}
+
+
 
 
 
@@ -1804,34 +2475,36 @@ real642 *number<real642>::convert_block(NumberType old_type, const void *old_dat
 }
 
 template<>
-void number<real642>::zero(double val)
+number<real642> &number<real642>::zero(double val)
 {
   store.val1=val;
   store.val2=val;
+  return *this;
 }
 
 template<>
-void number<real642>::assign(const number<real642> &src)
+number<real642> &number<real642>::assign(const number<real642> &src) noexcept
 {
   store=src.store;
+  return *this;
 }
 
-template<>
+/*template<>
 void number<real642>::assign(const number_a &src)
 {
   working_assert(src.raw_ntype()==NumberType::typeReal642);
   //const number<double> *src2=(const number<double> *)&src;
   //assign(*src2);
   assign(*(const number<real642> *)&src);
-}
+}*/
 
-template<> //template <>
-void number<real642>::assign_across(const number<real642> *src)
+/*template<> template <typename OTHER>
+number<real642> &number<real642>::assign_across(number<OTHER> &src)
 {
   //const number<double> *access=specific_cast<number<double> *, number_a *>(src->store);
   //store=access->store;
   store=src->store;
-}
+}*/
 
 /*template<> template <>
 void number<real642>::assign_across<number_a *>(const number<number_a *> *src)
@@ -1842,60 +2515,68 @@ void number<real642>::assign_across<number_a *>(const number<number_a *> *src)
   store=access->store;
 }*/
 
-template<>
-void number<real642>::assign_across(const number_a *src)
+template<> template<typename OTHER>
+number<real642> &number<real642>::assign_across(number<OTHER> const &src)
 {
   //working_assert(src->ntype()==typeReal642);
   //working_assert(src->raw_ntype()==typeReal642);
   //store=specific_cast<const number<real642> *, const number_a *>(src)->store;
-  switch (src->raw_ntype())
-  {
-    case NumberType::typeEmpty: assign_across(((const number<number_a *> *)src)->store); break;
-    case NumberType::typeDouble: store.val2=store.val1=((const number<double> *)src)->store; break;
-    case NumberType::typeFloat128:
-    {
-      const __float128 &access=((const number<__float128> *)src)->store;
-      store.val1=access;
-      store.val2=store.val1;
-    } break;
-    case NumberType::typeDDouble:
-    {
-      const dd_real &access=((const number<dd_real> *)src)->store;
-      store.val1=access.hi;
-      store.val2=access.hi;
-    } break;
-    case NumberType::typeQDouble:
-    {
-      const dq_real &access=((const number<dq_real> *)src)->store;
-      store.val1=access.hi;
-      store.val2=access.hi;
-    } break;
-    case NumberType::typeReal642:
-    {
-      const real642 &access=((const number<real642> *)src)->store;
-      store=access;
-    } break;
-  }
+
+  using T=std::remove_cv_t<std::remove_reference_t<OTHER>>;
+  if constexpr (std::is_same_v<T, double>)
+    store.val2=store.val1=src.store;
+  else if constexpr (std::is_same_v<T, __float128>)
+    store.val2=store.val1=src.store;
+  else if constexpr (std::is_same_v<T, dd_real>)
+      //const dd_real &access=((const number<dd_real> *)src)->store;
+      //store=access.hi;
+    store.val2=store.val1=src.store.hi;
+  else if constexpr (std::is_same_v<T, dq_real>)
+    store.val2=store.val1=src.store.hi;
+  else if constexpr (std::is_same_v<T, real642>)
+    store=src.store;
+  else
+    //static_assert(false, "unknown number type");
+    static_assert(!sizeof(T), "unknown number type");
+  return *this;
+}
+
+template<> template<>
+number<real642> &number<real642>::assign_across(number<number_any> const &src)
+{
+  //working_assert(src->ntype()==typeFloat128);
+  //working_assert(src->raw_ntype()==typeFloat128);
+
+  mvisit([](auto const &other, number<real642> &self){
+      using T=std::decay_t<decltype(other)>;
+      if constexpr(std::is_same_v<T, std::monostate>)
+      { self.store.val2=self.store.val1=0; }
+      else
+        self.assign_across(other);
+  }, src.store, *this);
+  return *this;
 }
 
 template<>
-void number<real642>::chs()
+number<real642> &number<real642>::chs()
 {
   store.val1=-store.val1;
   store.val2=-store.val2;
+  return *this;
 }
 
 template<>
-void number<real642>::lshift(int shoft)
+number<real642> &number<real642>::lshift(int shoft)
 {
   store.val1=ldexp(store.val1, shoft);
   if (store.val2 != 0) //don't play with 0's exponent or you get NaN
     ((uint16_t *)&store.val2)[7]+=shoft;
     //TODO: should check for overflow/underflow but unlikely to happen
+  return *this;
 }
 
 template<>
-void number<real642>::round()
+number<real642> &number<real642>::round()
 {
   store.val1=std::round(store.val1);
   __float128 remainder=store.val2;
@@ -1908,10 +2589,11 @@ void number<real642>::round()
     store.val2+=some;
     remainder-=some;
   }
+  return *this;
 }
 
 template<>
-void number<real642>::frac()
+number<real642> &number<real642>::frac()
 {
   if (store.val1<0)
     store.val1 -= ceil(store.val1);
@@ -1935,10 +2617,11 @@ void number<real642>::frac()
       some=floor((double)store.val2);
     }
   }
+  return *this;
 }
 
 template<>
-void number<real642>::mod1()
+number<real642> &number<real642>::mod1()
 {
   store.val1 -= floor(store.val1);
   double some=floor((double)store.val2);
@@ -1947,79 +2630,87 @@ void number<real642>::mod1()
     store.val2 -= some;
     some=floor((double)store.val2);
   }
+  return *this;
 }
 
 template<>
-void number<real642>::add_double(double x)
+number<real642> &number<real642>::add_double(double x)
 {
   store.val1 += x;
   store.val2 += x;
+  return *this;
 }
 
 template<>
-void number<real642>::mul_double(double x)
+number<real642> &number<real642>::mul_double(double x)
 {
   store.val1 *= x;
   store.val2 *= x;
+  return *this;
 }
 
 template<>
-void number<real642>::add(const number<real642> &other)
+number<real642> &number<real642>::add(const number<real642> &other)
 {
   store.val1 += other.store.val1;
   store.val2 += other.store.val2;
+  return *this;
 }
 
-template<>
+/*template<>
 void number<real642>::add(const number_a &other)
 {
   add(*(const number<real642> *)&other);
-}
+}*/
 
 template<>
-void number<real642>::sub(const number<real642> &other)
+number<real642> &number<real642>::sub(const number<real642> &other)
 {
   store.val1 -= other.store.val1;
   store.val2 -= other.store.val2;
+  return *this;
 }
 
-template<>
+/*template<>
 void number<real642>::sub(const number_a &other)
 {
   sub(*(const number<real642> *)&other);
-}
+}*/
 
 template<>
-void number<real642>::rsub(const number<real642> &other)
+number<real642> &number<real642>::rsub(const number<real642> &other)
 {
   store.val1 = other.store.val1-store.val1;
   store.val2 = other.store.val2-store.val2;
+  return *this;
 }
 
-template<>
+/*template<>
 void number<real642>::rsub(const number_a &other)
 {
   rsub(*(const number<real642> *)&other);
-}
+}*/
 
 template<>
-void number<real642>::mul(const number<real642> &other)
+number<real642> &number<real642>::mul(const number<real642> &other)
 {
   store.val1 *= other.store.val1;
   store.val2 *= other.store.val2;
+  return *this;
 }
 
-template<>
+/*template<>
 void number<real642>::mul(const number_a &other)
 {
   mul(*(const number<real642> *)&other);
-}
+}*/
 
 template<>
-void number<real642>::sqr()
+number<real642> &number<real642>::sqr()
 {
   store.val1 *= store.val1;
   store.val2 *= store.val2;
+  return *this;
 }
 
 template<>
@@ -2032,31 +2723,33 @@ double number<real642>::radixfloor(const number<real642> &other) const
   return ldexp(1, ilog1);
 }
 
-template<>
+/*template<>
 double number<real642>::radixfloor(const number_a &other) const
 {
   return radixfloor(*(const number<real642> *)&other);
-}
+}*/
 
 template<>
-void number<real642>::recip()
+number<real642> &number<real642>::recip()
 {
   store.val1 = 1.0/store.val1;
   store.val2 = __float128(1)/store.val2;
+  return *this;
 }
 
 template<>
-void number<real642>::sqrt()
+number<real642> &number<real642>::sqrt()
 {
   store.val1 = std::sqrt(store.val1);
   double x=1/std::sqrt((double)store.val2);
   __float128 ax=x*(double)store.val2;
   ax += double(store.val2 - ax*ax)*x/2;
   store.val2 = ax + double(store.val2 - ax*ax)*x/2;
+  return *this;
 }
 
 template<>
-bool number<real642>::reduceAngle()
+bool number<real642>::reduce_angle()
 {
   if (store.val1<-M_PI)
   {
@@ -2075,28 +2768,29 @@ bool number<real642>::reduceAngle()
 }
 
 template<>
-void number<real642>::add_pi(double x)
+number<real642> &number<real642>::add_pi(double x)
 {
   store.val1+=x*M_PI;
   store.val2+=x*3.141592653589793238462643383279502884197Q;
+  return *this;
 }
 
 template<>
-int number<real642>::compare(const number<real642> &other) const
+std::strong_ordering number<real642>::compare(const number<real642> &other) const
 {
   if (store.val1 == other.store.val1)
-    return 0;
+    return std::strong_ordering::equal;
   else if (store.val1 < other.store.val1)
-    return -1;
+    return std::strong_ordering::less;
   else
-    return +1;
+    return std::strong_ordering::greater;
 }
 
-template<>
+/*template<>
 int number<real642>::compare(const number_a &other) const
 {
   return compare(*(const number<real642> *)&other);
-}
+}*/
 
 template<>
 bool number<real642>::isequal(const number<real642> &other) const
@@ -2104,11 +2798,11 @@ bool number<real642>::isequal(const number<real642> &other) const
   return store.val1==other.store.val1;
 }
 
-template<>
+/*template<>
 bool number<real642>::isequal(const number_a &other) const
 {
   return isequal(*(const number<real642> *)&other);
-}
+}*/
 
 template<>
 bool number<real642>::is0() const
@@ -2122,11 +2816,11 @@ bool number<real642>::isle(const number<real642> &other) const
   return store.val1 <= other.store.val1;
 }
 
-template<>
+/*template<>
 bool number<real642>::isle(const number_a &other) const
 {
   return isle(*(const number<real642> *)&other);
-}
+}*/
 
 template<>
 bool number<real642>::isle0() const
@@ -2147,19 +2841,20 @@ bool number<real642>::isl1() const
 }
 
 template<>
-void number<real642>::min(const number<real642> &other)
+number<real642> &number<real642>::min(const number<real642> &other)
 {
   if (store.val1>other.store.val1)
   {
     store=other.store;
   };
+  return *this;
 }
 
-template<>
+/*template<>
 void number<real642>::min(const number_a &other)
 {
   min(*(const number<real642> *)&other);
-}
+}*/
 
 template<>
 QString number<real642>::toString() const
@@ -2182,96 +2877,153 @@ double number<real642>::toDouble() const
 #endif // !NUMBER_DOUBLE_ONLY
 
 template<>
-double number<number_a *>::eps2() const
+double number<number_any>::eps2() const
 {
-  return store->eps2();
+  return std::visit([](auto &val){
+      using T=std::remove_cv_t<std::remove_reference_t<decltype(val)>>;
+      if constexpr (std::is_same_v<T, std::monostate>)
+          return 1.0;
+      else
+          return val.eps2();
+  }, store);
 }
 
 template<>
-double number<number_a *>::eps234() const
+double number<number_any>::eps234() const
 {
-  return store->eps234();
+  return std::visit([](auto &val){
+      using T=std::remove_cv_t<std::remove_reference_t<decltype(val)>>;
+      if constexpr (std::is_same_v<T, std::monostate>)
+          return 2.0;
+      else
+          return val.eps234();
+  }, store);
 }
 
 template<>
-number<number_a *>::number(NumberType ntype)
+NumberType number<number_any>::ntype() const
+{
+  return std::visit([](auto &val){
+      //using T = std::decay_t<decltype(val)>;
+      using T = std::remove_cv_t<std::remove_reference_t<decltype(val)>>;
+      //using T = decltype(val);
+      if constexpr (std::is_same_v<T, std::monostate>)
+          return NumberType::typeEmpty;
+      else
+          return val.ntype();
+  }, store);
+  //return store->ntype();
+}
+
+template<>
+NumberType number<number_any>::raw_ntype() const
+{
+  return NumberType::typeEmpty;
+}
+
+template<>
+number<number_any>::number(NumberType ntype)
 {
   switch (ntype)
   {
     //case NumberType::typeEmpty: dbgPoint(); store=new number<double>(); break;
-    case NumberType::typeDouble: store=new number<double>(ntype); break;
+    case NumberType::typeDouble: store=number<double>(); break;
+  //case NumberType::typeDouble: store.emplace<1>(wtf); break;
 #if !NUMBER_DOUBLE_ONLY
-    case NumberType::typeFloat128: store=new number<__float128>(); break;
-    case NumberType::typeDDouble: store=new number<dd_real>(); break;
-    case NumberType::typeQDouble: store=new number<dq_real>(); break;
-    case NumberType::typeReal642: store=new number<real642>(); break;
+    case NumberType::typeFloat128: store=number<__float128>(); break;
+    case NumberType::typeDDouble: store=number<dd_real>(); break;
+    case NumberType::typeQDouble: store=number<dq_real>(); break;
+    case NumberType::typeReal642: store=number<real642>(); break;
 #endif
     default:
-      dbgPoint(); store=new number<double>(); break;
+      dbgPoint(); store=number<double>(); break;
   }
 }
 
 template<>
-void number<number_a *>::constructLateBecauseQtIsAwesome(NumberType ntype)
+void number<number_any>::constructLateBecauseQtIsAwesome(NumberType ntype)
 {
-  working_assert(store==nullptr);
+  working_assert(store.index()==0);
   switch (ntype)
   {
     //case NumberType::typeEmpty: dbgPoint(); store=new number<double>(); break;
-    case NumberType::typeDouble: store=new number<double>(ntype); break;
+    case NumberType::typeDouble: store=number<double>(ntype); break;
 #if !NUMBER_DOUBLE_ONLY
-    case NumberType::typeFloat128: store=new number<__float128>(); break;
-    case NumberType::typeDDouble: store=new number<dd_real>(); break;
-    case NumberType::typeQDouble: store=new number<dq_real>(); break;
-    case NumberType::typeReal642: store=new number<real642>(); break;
+    case NumberType::typeFloat128: store=number<__float128>(); break;
+    case NumberType::typeDDouble: store=number<dd_real>(); break;
+    case NumberType::typeQDouble: store=number<dq_real>(); break;
+    case NumberType::typeReal642: store=number<real642>(); break;
 #endif
     default:
-      dbgPoint(); store=new number<double>(); break;
+      dbgPoint(); store=number<double>(); break;
   }
 }
 
 template<>
-number<number_a *>::~number()
+number<number_any>::~number()
 {
-  //nop();
-  delete store;
-  store=nullptr;
+  nop();
+  //delete store;
+  //store=nullptr;
 }
 
 template<>
-void number<number_a *>::readFrom(void *storage, int index)
+void number<number_any>::readFrom(void *storage, int index)
 {
-  store->readFrom(storage, index);
+  mvisit([](auto &value, void *storage, int index) {
+      using T=std::decay_t<decltype(value)>;
+      if constexpr (std::is_same_v<T, std::monostate>)
+        { }
+      else
+        value.readFrom(storage, index);
+      }, store, storage, index);
+  //store->readFrom(storage, index);
 }
 
 template<>
-void number<number_a *>::writeTo(void *storage, int index) const
+void number<number_any>::writeTo(void *storage, int index) const
 {
-  store->writeTo(storage, index);
+  std::visit([&storage, &index](auto &value) {
+      using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
+      if constexpr (std::is_same_v<T, std::monostate>)
+      { }
+      else
+          value.writeTo(storage, index);
+  }, store);
+  //store->writeTo(storage, index);
 }
 
 template<>
-void number<number_a *>::zero(double val)
+number<number_any> &number<number_any>::zero(double val)
 {
-  store->zero(val);
+  std::visit([val](auto &value) {
+      using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
+      if constexpr (std::is_same_v<T, std::monostate>)
+      { }
+      else
+          value.zero(val);
+  }, store);
+  //store->zero(val);
+  return *this;
 }
 
 template<>
-void number<number_a *>::assign(const number<number_a *> &src)
+number<number_any> &number<number_any>::assign(const number<number_any> &src) noexcept
 {
   //working_assert(src.raw_ntype()==typeEmpty);
-  working_assert(store);
-  working_assert(src.store);
-  working_assert(store->raw_ntype()==src.store->raw_ntype());
-  store->assign(*src.store);
+  working_assert(store.index()!=0);
+  working_assert(src.store.index()!=0);
+  working_assert(store.index()==src.store.index());
+  store=src.store;
+  return *this;
 }
 
-template<>
+/*template<>
 void number<number_a *>::assign(const number_a &src)
 {
   (void)src;
   dbgPoint();
-}
+}*/
 
 /*template<> template <>
 void number<number_a *>::assign_across<double>(const number<double> *src)
@@ -2299,258 +3051,564 @@ void number<number_a *>::assign_across<real642>(const number<real642> *src)
   specific_cast<number<real642> *, number_a *>(store)->assign(*src);
 }*/
 
-template<> //template<>
-void number<number_a *>::assign_across(const number<number_a *> *src)
+template<> template<>
+number<number_any> &number<number_any>::assign_across(const number<number_any> &src)
 {
-  working_assert(src->raw_ntype()==typeEmpty);
+  //working_assert(src->raw_ntype()==typeEmpty);
   //working_assert(store->ntype()==src->store->ntype());
   //working_assert(store->raw_ntype()==src->store->raw_ntype());
   //TODO: convert if store->ntype()!=src->store->ntype()
-  store->assign_across(src->store);
+  mvisit([](auto &value, const number<number_any> &src) {
+      using T=std::decay_t<decltype(value)>;
+      if constexpr (std::is_same_v<T, std::monostate>)
+      { }
+      else
+      {
+          mvisit([](auto const &other_value, decltype(value) &value2) {
+            using O=std::decay_t<decltype(other_value)>;
+            if constexpr (std::is_same_v<O, std::monostate>)
+              { }
+            else if constexpr (std::is_same_v<O, T>)
+            {
+              value2.assign_across(other_value);
+            }
+            else
+              working_assert(false);
+          }, src.store, value);
+      }
+    }, store, src);
+  return *this;
 }
 
-template<>
+/*template<>
 void number<number_a *>::assign_across(const number_a *src)
 {
   //working_assert(store->ntype()==src->store->ntype());
   //store->assign(*src->store);
   (void)src;
   dbgPoint();
-}
+}*/
 
 template<>
-void number<number_a *>::chs()
+number<number_any> &number<number_any>::chs()
 {
-  store->chs();
+  std::visit([](auto &value) {
+      using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
+      if constexpr (std::is_same_v<T, std::monostate>)
+      { }
+      else
+        value.chs();
+  }, store);
+  return *this;
 }
 
 template<>
-void number<number_a *>::lshift(int shoft)
+number<number_any> &number<number_any>::lshift(int shoft)
 {
-  store->lshift(shoft);
+  std::visit([shoft](auto &value) {
+      using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
+      if constexpr (std::is_same_v<T, std::monostate>)
+      { }
+      else
+        value.lshift(shoft);
+  }, store);
+  //store->zero(val);
+  return *this;
 }
 
 template<>
-void number<number_a *>::round()
+number<number_any> &number<number_any>::round()
 {
-  store->round();
+  std::visit([](auto &value) {
+      using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
+      if constexpr (std::is_same_v<T, std::monostate>)
+      { }
+      else
+        value.round();
+  }, store);
+  return *this;
 }
 
 template<>
-void number<number_a *>::frac()
+number<number_any> &number<number_any>::frac()
 {
-  store->frac();
+  std::visit([](auto &value) {
+      using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
+      if constexpr (std::is_same_v<T, std::monostate>)
+      { }
+      else
+        value.frac();
+  }, store);
+  return *this;
 }
 
 template<>
-void number<number_a *>::mod1()
+number<number_any> &number<number_any>::mod1()
 {
-  store->mod1();
+  std::visit([](auto &value) {
+      using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
+      if constexpr (std::is_same_v<T, std::monostate>)
+      { }
+      else
+        value.mod1();
+  }, store);
+  return *this;
 }
 
 template<>
-void number<number_a *>::add_double(double x)
+number<number_any> &number<number_any>::add_double(double x)
 {
-  store->add_double(x);
+  std::visit([x](auto &value) {
+      using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
+      if constexpr (std::is_same_v<T, std::monostate>)
+      { }
+      else
+        value.add_double(x);
+  }, store);
+  return *this;
 }
 
 template<>
-void number<number_a *>::mul_double(double x)
+number<number_any> &number<number_any>::mul_double(double x)
 {
-  store->mul_double(x);
+  std::visit([x](auto &value) {
+      using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
+      if constexpr (std::is_same_v<T, std::monostate>)
+      { }
+      else
+        value.mul_double(x);
+  }, store);
+  return *this;
 }
 
 template<>
-void number<number_a *>::add(const number<number_a *> &other)
+number<number_any> &number<number_any>::add(const number<number_any> &other)
 {
-  store->add(*other.store);
+  std::visit([&other](auto &value) {
+      using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
+      if constexpr (std::is_same_v<T, std::monostate>)
+      { }
+      else
+      {
+          std::visit([&value](auto &other_value) {
+              using O=std::remove_cv_t<std::remove_reference_t<decltype(other_value)>>;
+              if constexpr (std::is_same_v<O, std::monostate>)
+              { }
+              else if constexpr (std::is_same_v<O, T>)
+                  value.add(other_value);
+              else
+                  working_assert(false);
+          }, other.store);
+      }
+  }, store);
+  return *this;
 }
 
-template<>
-void number<number_a *>::add(const number_a &other)
+/*template<>
+number<number_any> &number<number_any>::add(const number_a &other)
 {
   (void)other;
   dbgPoint();//store->add(*other.store);
-}
+}*/
 
 template<>
-void number<number_a *>::sub(const number<number_a *> &other)
+number<number_any> &number<number_any>::sub(const number<number_any> &other)
 {
-  store->sub(*other.store);
+  std::visit([&other](auto &value) {
+      using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
+      if constexpr (std::is_same_v<T, std::monostate>)
+      { }
+      else
+      {
+          std::visit([&value](auto &other_value) {
+              using O=std::remove_cv_t<std::remove_reference_t<decltype(other_value)>>;
+              if constexpr (std::is_same_v<O, std::monostate>)
+              { }
+              else if constexpr (std::is_same_v<O, T>)
+                  value.sub(other_value);
+              else
+                  working_assert(false);
+          }, other.store);
+      }
+  }, store);
+  return *this;
 }
 
-template<>
+/*template<>
 void number<number_a *>::sub(const number_a &other)
 {
   (void)other;
   dbgPoint();//store->add(*other.store);
-}
+}*/
 
 template<>
-void number<number_a *>::rsub(const number<number_a *> &other)
+number<number_any> &number<number_any>::rsub(const number<number_any> &other)
 {
-  store->rsub(*other.store);
+  std::visit([&other](auto &value) {
+      using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
+      if constexpr (std::is_same_v<T, std::monostate>)
+      { }
+      else
+      {
+          std::visit([&value](auto &other_value) {
+              using O=std::remove_cv_t<std::remove_reference_t<decltype(other_value)>>;
+              if constexpr (std::is_same_v<O, std::monostate>)
+              { }
+              else if constexpr (std::is_same_v<O, T>)
+                  value.rsub(other_value);
+              else
+                  working_assert(false);
+          }, other.store);
+      }
+  }, store);
+  return *this;
 }
 
-template<>
+/*template<>
 void number<number_a *>::rsub(const number_a &other)
 {
   (void)other;
   dbgPoint();//store->add(*other.store);
-}
+}*/
 
 template<>
-void number<number_a *>::mul(const number<number_a *> &other)
+number<number_any> &number<number_any>::mul(const number<number_any> &other)
 {
-  store->mul(*other.store);
+  std::visit([&other](auto &value) {
+      using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
+      if constexpr (std::is_same_v<T, std::monostate>)
+      { }
+      else
+      {
+          std::visit([&value](auto &other_value) {
+              using O=std::remove_cv_t<std::remove_reference_t<decltype(other_value)>>;
+              if constexpr (std::is_same_v<O, std::monostate>)
+              { }
+              else if constexpr (std::is_same_v<O, T>)
+                  value.mul(other_value);
+              else
+                  working_assert(false);
+          }, other.store);
+      }
+  }, store);
+  return *this;
 }
 
-template<>
+/*template<>
 void number<number_a *>::mul(const number_a &other)
 {
   (void)other;
   dbgPoint();//store->add(*other.store);
-}
+}*/
 
 template<>
-void number<number_a *>::sqr()
+number<number_any> &number<number_any>::sqr()
 {
-  store->sqr();
+  std::visit([](auto &value) {
+      using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
+      if constexpr (std::is_same_v<T, std::monostate>)
+      { }
+      else
+          value.sqr();
+  }, store);
+  return *this;
 }
 
 template<>
-double number<number_a *>::radixfloor(const number<number_a *> &store2) const
+double number<number_any>::radixfloor(const number<number_any> &store2) const
 {
-  return store->radixfloor(*store2.store);
+  return std::visit([&store2](auto &value)->double {
+      using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
+      if constexpr (std::is_same_v<T, std::monostate>)
+        return 1;
+      else
+      {
+          return std::visit([&value](auto &other_value)->double {
+              using O=std::remove_cv_t<std::remove_reference_t<decltype(other_value)>>;
+              if constexpr (std::is_same_v<O, std::monostate>)
+                return 1;
+              else if constexpr (std::is_same_v<O, T>)
+                return value.radixfloor(other_value);
+              else
+              {
+                working_assert(false);
+                return 1;
+              }
+          }, store2.store);
+      }
+  }, store);
 }
 
-template<>
+/*template<>
 double number<number_a *>::radixfloor(const number_a &store2) const
 {
   (void)store2;
   dbgPoint();
   return 1;
-}
+}*/
 
 template<>
-void number<number_a *>::recip()
+number<number_any> &number<number_any>::recip()
 {
-  store->recip();
+  std::visit([](auto &value) {
+      using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
+      if constexpr (std::is_same_v<T, std::monostate>)
+      { }
+      else
+        value.recip();
+  }, store);
+  return *this;
 }
 
 template<>
-void number<number_a *>::sqrt()
+number<number_any> &number<number_any>::sqrt()
 {
-  store->sqrt();
+  std::visit([](auto &value) {
+      using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
+      if constexpr (std::is_same_v<T, std::monostate>)
+      { }
+      else
+        value.sqrt();
+  }, store);
+  return *this;
 }
 
 template<>
-bool number<number_a *>::reduceAngle()
+bool number<number_any>::reduce_angle()
 {
-  return store->reduceAngle();
+  return std::visit([](auto &value)->bool {
+      using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
+      if constexpr (std::is_same_v<T, std::monostate>)
+        return false;
+      else
+        return value.reduce_angle();
+  }, store);
 }
 
 template<>
-void number<number_a *>::add_pi(double x)
+number<number_any> &number<number_any>::add_pi(double x)
 {
-  store->add_pi(x);
+  std::visit([x](auto &value) {
+      using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
+      if constexpr (std::is_same_v<T, std::monostate>)
+      { }
+      else
+        value.add_pi(x);
+  }, store);
+  return *this;
 }
 
 template<>
-int number<number_a *>::compare(const number<number_a *> &other) const
+std::strong_ordering number<number_any>::compare(const number<number_any> &other) const
 {
-  return store->compare(*other.store);
+  return std::visit([&other](auto &value)->std::strong_ordering {
+      using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
+      if constexpr (std::is_same_v<T, std::monostate>)
+          return std::strong_ordering::equal;
+      else
+      {
+          return std::visit([&value](auto &other_value)->std::strong_ordering {
+              using O=std::remove_cv_t<std::remove_reference_t<decltype(other_value)>>;
+              if constexpr (std::is_same_v<O, std::monostate>)
+                  return std::strong_ordering::equal;
+              else if constexpr (std::is_same_v<O, T>)
+                  return value.compare(other_value);
+              else
+              {
+                  working_assert(false);
+                  return std::strong_ordering::equal;
+              }
+          }, other.store);
+      }
+  }, store);
 }
 
-template<>
+/*template<>
 int number<number_a *>::compare(const number_a &other) const
 {
   (void)other;
   dbgPoint();
   return 0;
-}
+}*/
 
 template<>
-bool number<number_a *>::isequal(const number<number_a *> &other) const
+bool number<number_any>::isequal(const number<number_any> &other) const
 {
-  return store->isequal(*other.store);
+  return std::visit([&other](auto &value)->bool {
+      using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
+      if constexpr (std::is_same_v<T, std::monostate>)
+          return true;
+      else
+      {
+          return std::visit([&value](auto &other_value)->bool {
+              using O=std::remove_cv_t<std::remove_reference_t<decltype(other_value)>>;
+              if constexpr (std::is_same_v<O, std::monostate>)
+                  return true;
+              else if constexpr (std::is_same_v<O, T>)
+                  return value.isequal(other_value);
+              else
+              {
+                  working_assert(false);
+                  return true;
+              }
+          }, other.store);
+      }
+  }, store);
 }
 
-template<>
+/*template<>
 bool number<number_a *>::isequal(const number_a &other) const
 {
   (void)other;
   dbgPoint();
   return false;
-}
+}*/
 
 template<>
-bool number<number_a *>::is0() const
+bool number<number_any>::is0() const
 {
-  return store->is0();
+  return std::visit([](auto &value)->bool {
+      using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
+      if constexpr (std::is_same_v<T, std::monostate>)
+        return true;
+      else
+        return value.is0();
+  }, store);
 }
 
 template<>
-bool number<number_a *>::isle(const number<number_a *> &other) const
+bool number<number_any>::isle(const number<number_any> &other) const
 {
-  return store->isle(*other.store);
+  return std::visit([&other](auto &value)->bool {
+      using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
+      if constexpr (std::is_same_v<T, std::monostate>)
+          return true;
+      else
+      {
+          return std::visit([&value](auto &other_value)->bool {
+              using O=std::remove_cv_t<std::remove_reference_t<decltype(other_value)>>;
+              if constexpr (std::is_same_v<O, std::monostate>)
+                  return true;
+              else if constexpr (std::is_same_v<O, T>)
+                  return value.isle(other_value);
+              else
+              {
+                  working_assert(false);
+                  return true;
+              }
+          }, other.store);
+      }
+  }, store);
 }
 
-template<>
+/*template<>
 bool number<number_a *>::isle(const number_a &other) const
 {
   (void)other;
   dbgPoint();
   return true;
-}
+}*/
 
 template<>
-bool number<number_a *>::isle0() const
+bool number<number_any>::isle0() const
 {
-  return store->isle0();
+  return std::visit([](auto &value)->bool {
+      using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
+      if constexpr (std::is_same_v<T, std::monostate>)
+        return true;
+      else
+        return value.isle0();
+  }, store);
 }
 
 template<>
-bool number<number_a *>::isl0() const
+bool number<number_any>::isl0() const
 {
-  return store->isl0();
+  return std::visit([](auto &value)->bool {
+      using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
+      if constexpr (std::is_same_v<T, std::monostate>)
+        return false;
+      else
+        return value.isl0();
+  }, store);
 }
 
 template<>
-bool number<number_a *>::isl1() const
+bool number<number_any>::isl1() const
 {
-  return store->isl1();
+  return std::visit([](auto &value)->bool {
+      using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
+      if constexpr (std::is_same_v<T, std::monostate>)
+        return true;
+      else
+        return value.isl1();
+  }, store);
 }
 
 template<>
-void number<number_a *>::min(const number<number_a *> &other)
+number<number_any> &number<number_any>::min(const number<number_any> &other)
 {
-  store->min(*other.store);
+  std::visit([&other](auto &value) {
+      using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
+      if constexpr (std::is_same_v<T, std::monostate>)
+      { }
+      else
+      {
+          std::visit([&value](auto &other_value) {
+              using O=std::remove_cv_t<std::remove_reference_t<decltype(other_value)>>;
+              if constexpr (std::is_same_v<O, std::monostate>)
+              { }
+              else if constexpr (std::is_same_v<O, T>)
+                  value.min(other_value);
+              else
+                  working_assert(false);
+          }, other.store);
+      }
+  }, store);
+  return *this;
 }
 
-template<>
+/*template<>
 void number<number_a *>::min(const number_a &other)
 {
   (void)other;
   dbgPoint();
+}*/
+
+template<>
+QString number<number_any>::toString() const
+{
+  return std::visit([](auto &value)->QString {
+      using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
+      if constexpr (std::is_same_v<T, std::monostate>)
+        return QString("none");
+      else
+        return value.toString();
+  }, store);
 }
 
 template<>
-QString number<number_a *>::toString() const
+int number<number_any>::toRound() const
 {
-  return store->toString();
+  return std::visit([](auto &value)->int {
+      using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
+      if constexpr (std::is_same_v<T, std::monostate>)
+        return 0;
+      else
+        return value.toRound();
+  }, store);
 }
 
 template<>
-int number<number_a *>::toRound() const
+double number<number_any>::toDouble() const
 {
-  return store->toRound();
-}
-
-template<>
-double number<number_a *>::toDouble() const
-{
-  return store->toDouble();
+  return std::visit([](auto &value)->double {
+      using T=std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
+      if constexpr (std::is_same_v<T, std::monostate>)
+        return 0;
+      else
+        return value.toDouble();
+  }, store);
 }
 
 
@@ -2571,70 +3629,87 @@ void complex<BASE>::writeTo(void *storage, int index) const
 }
 
 template<typename BASE>
-void complex<BASE>::zero(double r, double i)
+complex<BASE> &complex<BASE>::zero(double r)
+{
+  re.zero(r);
+  im.zero(0);
+  return *this;
+}
+
+template<typename BASE>
+complex<BASE> &complex<BASE>::zero(double r, double i)
 {
   re.zero(r);
   im.zero(i);
+  return *this;
 }
 
 template<typename BASE>
-void complex<BASE>::assign(const complex *other)
+complex<BASE> &complex<BASE>::assign(complex const &other) noexcept
 {
-  re.assign(other->re);
-  im.assign(other->im);
+  working_assert(tmp==other.tmp);
+  re.assign(other.re);
+  im.assign(other.im);
+  return *this;
 }
 
 template<typename BASE> template<typename OTHER_BASE>
-void complex<BASE>::assign_across(const complex<OTHER_BASE> *src)
+void complex<BASE>::assign_across(const complex<OTHER_BASE> &src)
 {
-  re.assign_across(&src->re);
-  im.assign_across(&src->im);
+  re.assign_across(src.re);
+  im.assign_across(src.im);
 }
 
 template<typename BASE>
-void complex<BASE>::lshift(int shoft)
+complex<BASE> &complex<BASE>::lshift(int shoft)
 {
   re.lshift(shoft);
   im.lshift(shoft);
+  return *this;
 }
 
 template<typename BASE>
-void complex<BASE>::mul_double(double m)
+complex<BASE> &complex<BASE>::mul_double(double m)
 {
   re.mul_double(m);
   im.mul_double(m);
+  return *this;
 }
 
 template<typename BASE>
-void complex<BASE>::add(const complex *const other)
+complex<BASE> &complex<BASE>::add(complex const &other)
 {
-  re.add(other->re);
-  im.add(other->im);
+  re.add(other.re);
+  im.add(other.im);
+  return *this;
 }
 
 template<typename BASE>
-void complex<BASE>::chs()
+complex<BASE> &complex<BASE>::chs()
 {
   re.chs();
   im.chs();
+  return *this;
 }
 
 template<typename BASE>
-void complex<BASE>::sub(const complex *other)
+complex<BASE> &complex<BASE>::sub(complex const &other)
 {
-  re.sub(other->re);
-  im.sub(other->im);
+  re.sub(other.re);
+  im.sub(other.im);
+  return *this;
 }
 
 template<typename BASE>
-void complex<BASE>::rsub(const complex *other)
+complex<BASE> &complex<BASE>::rsub(complex const &other)
 {
-  re.rsub(other->re);
-  im.rsub(other->im);
+  re.rsub(other.re);
+  im.rsub(other.im);
+  return *this;
 }
 
 template<typename BASE>
-void complex<BASE>::sqr(Scratchpad *tmp)
+complex<BASE> &complex<BASE>::sqr()
 {
 #if 0
   //r:=r*r-i*i
@@ -2657,56 +3732,61 @@ void complex<BASE>::sqr(Scratchpad *tmp)
   re.add(tmp->tmp2);    //r+i
   re.mul(tmp->tmp1);
 #endif
+  return *this;
 }
 
 template<typename BASE>
-void complex<BASE>::mul(const number<BASE> &other)
+complex<BASE> &complex<BASE>::mul(const number<BASE> &other)
 {
   re.mul(other);
   im.mul(other);
+  return *this;
 }
 
 template<typename BASE>
-void complex<BASE>::mul(const complex *other, Scratchpad *tmp)
+complex<BASE> &complex<BASE>::mul(complex const &other)
 {
   //r:=r1*r2-i1*i2
   //i:=r1*i2+i1*r2
   tmp->tmp1.assign(re);
   tmp->tmp2.assign(im);
-  re.mul(other->im);
-  im.mul(other->re);
-  tmp->tmp1.mul(other->re); //r1*r2
-  tmp->tmp2.mul(other->im); //i1*i2
+  re.mul(other.im);
+  im.mul(other.re);
+  tmp->tmp1.mul(other.re); //r1*r2
+  tmp->tmp2.mul(other.im); //i1*i2
   tmp->tmp1.sub(tmp->tmp2); //r1*r2-i1*i2
   im.add(re); //i1*r2+r1*i2
   re.assign(tmp->tmp1);
+  return *this;
 }
 
 template<typename BASE>
-void complex<BASE>::recip(Scratchpad *tmp)
+complex<BASE> &complex<BASE>::recip()
 {
-  getMag_tmp(tmp);
-  recip_prepared(tmp);
+  getMag_tmp();
+  recip_prepared();
+  return *this;
 }
 
 template<typename BASE>
-void complex<BASE>::recip_prepared(Scratchpad *tmp)
+complex<BASE> &complex<BASE>::recip_prepared()
 { // 1/(re+i*im) = (re-i*im)/((re+i*im)*(re-i*im)) = (re-i*im)/(re*re+im*im)
   tmp->tmp1.recip();
   im.chs();
   re.mul(tmp->tmp1);
   im.mul(tmp->tmp1);
+  return *this;
 }
 
 template<typename BASE>
-void complex<BASE>::sqrt(Scratchpad *tmp)
+complex<BASE> &complex<BASE>::sqrt()
 {
   /*tmp->tmp1.assign(re);
   tmp->tmp2.assign(im);
   tmp->tmp1.sqr();
   tmp->tmp2.sqr();
   tmp->tmp1.add(tmp->tmp2); //re*re+im*im*/
-  getMag_tmp(tmp);
+  getMag_tmp();
   tmp->tmp1.sqrt();
   if (!re.isle0())
   {
@@ -2745,38 +3825,40 @@ void complex<BASE>::sqrt(Scratchpad *tmp)
       };
     }
   };
+  return *this;
 }
 
 template<typename BASE>
-void complex<BASE>::pow_int(int n, Scratchpad *tmp)
+complex<BASE> &complex<BASE>::pow_uint(unsigned int n)
 {
   if (n==1 || is0())
-    return;
+    return *this;
   if (n<=0)
   {
     zero(1, 0);
-    return;
+    return *this;
   }
   if (n==2)
   {
-    sqr(tmp);
-    return;
+    return sqr();
   };
   tmp->tmp3.assign(re);
   tmp->tmp4.assign(im);
 
   //works for n>=2
-  int n2=n>>2;
+  unsigned int n2=n>>2;
   unsigned int mask=1;
   while (n2)
   {
     mask<<=1;
     n2>>=1;
   }
+  //same as mask:=radixfloor(n>>1) ?
+  working_assert(mask==1u<<(std::numeric_limits<unsigned int>::digits-std::countl_zero(n>>2)));
 
   while (mask>0)
   {
-    sqr(tmp);
+    sqr();
     if (n&mask)
     {
       tmp->tmp1.assign(re);
@@ -2791,57 +3873,60 @@ void complex<BASE>::pow_int(int n, Scratchpad *tmp)
     };
     mask>>=1;
   }
+  return *this;
 }
 
 template<typename BASE>
-void complex<BASE>::root_approx(int n)
+complex<BASE> &complex<BASE>::root_approx(int n)
 {
-  if (is0())
-    return;
-  double this_re=re.toDouble();
-  double this_im=im.toDouble();
-  double r_abs=std::exp(std::log(this_re*this_re+this_im*this_im)/(2*n));
-  double r_phi=std::atan2(this_im, this_re)/n;
-  double r_re=r_abs*cos(r_phi);
-  double r_im=r_abs*sin(r_phi);
-  zero(r_re, r_im);
+  if (!is0())
+  {
+    double this_re=re.toDouble();
+    double this_im=im.toDouble();
+    double r_abs=std::exp(std::log(this_re*this_re+this_im*this_im)/(2*n));
+    double r_phi=std::atan2(this_im, this_re)/n;
+    double r_re=r_abs*cos(r_phi);
+    double r_im=r_abs*sin(r_phi);
+    zero(r_re, r_im);
+  };
+  return *this;
 }
 
 template<typename BASE>
-void complex<BASE>::ln_approx()
+complex<BASE> &complex<BASE>::ln_approx()
 {
   double r=re.toDouble();
   double i=im.toDouble();
-  zero(std::log(r*r+i*i)/2, std::atan2(i, r));
+  return zero(std::log(r*r+i*i)/2, std::atan2(i, r));
 }
 
 template<typename BASE>
-void complex<BASE>::exp_approx()
+complex<BASE> &complex<BASE>::exp_approx()
 {
   double d=exp(re.toDouble());
   double p=im.toDouble();
-  zero(d*std::cos(p), d*std::sin(p));
+  return zero(d*std::cos(p), d*std::sin(p));
 }
 
 template<typename BASE>
-void complex<BASE>::sign(Scratchpad *tmp)
+complex<BASE> &complex<BASE>::sign()
 {
-  getMag_tmp(tmp);
+  getMag_tmp();
   tmp->tmp1.sqrt();
   tmp->tmp1.recip();
   re.mul(tmp->tmp1);
   im.mul(tmp->tmp1);
+  return *this;
 }
 
 template<typename BASE>
-void complex<BASE>::cossin(number<BASE> &angle, Scratchpad *tmp)
+complex<BASE> &complex<BASE>::cossin(number<BASE> &angle)
 {
-  zero(cos(angle.toDouble()), sin(angle.toDouble()));
-  (void)tmp;
+  return zero(cos(angle.toDouble()), sin(angle.toDouble()));
 }
 
 template<typename BASE>
-void complex<BASE>::arctan2(number<BASE> *result, Scratchpad *tmp) const
+void complex<BASE>::arctan2(number<BASE> *result) const
 {
   if (im.is0() && re.isl0())
     result->zero(std::atan2(-0, 1));
@@ -2863,7 +3948,7 @@ double complex<BASE>::getMag_double() const
 }
 
 template<typename BASE>
-const number<BASE> *complex<BASE>::getMag_tmp(Scratchpad *tmp) const
+const number<BASE> *complex<BASE>::getMag_tmp() const
 {
   tmp->tmp1.assign(re);
   tmp->tmp1.sqr();
@@ -2874,7 +3959,7 @@ const number<BASE> *complex<BASE>::getMag_tmp(Scratchpad *tmp) const
 }
 
 template<typename BASE>
-const number<BASE> *complex<BASE>::getMag1_tmp(Scratchpad *tmp) const
+const number<BASE> *complex<BASE>::getMag1_tmp() const
 {
   //TODO: merge with mag_cmp_1
   tmp->tmp1.assign(re);
@@ -2887,7 +3972,7 @@ const number<BASE> *complex<BASE>::getMag1_tmp(Scratchpad *tmp) const
 }
 
 template<typename BASE>
-const number<BASE> *complex<BASE>::getDist1_tmp(Scratchpad *tmp) const
+const number<BASE> *complex<BASE>::getDist1_tmp() const
 {
   //TODO: add parameter   double from=1.0
   //      merge with getMag_tmp()
@@ -2901,12 +3986,12 @@ const number<BASE> *complex<BASE>::getDist1_tmp(Scratchpad *tmp) const
 }
 
 template<typename BASE>
-const number<BASE> *complex<BASE>::mulreT_tmp(const complex *other, Scratchpad *tmp) const
+const number<BASE> *complex<BASE>::mulreT_tmp(complex const &other) const
 {
   tmp->tmp1.assign(re);
   tmp->tmp2.assign(im);
-  tmp->tmp1.mul(other->re);
-  tmp->tmp2.mul(other->im);
+  tmp->tmp1.mul(other.re);
+  tmp->tmp2.mul(other.im);
   tmp->tmp1.add(tmp->tmp2);
   return &tmp->tmp1;
 }
@@ -2918,26 +4003,26 @@ const number<BASE> *complex<BASE>::mulreT_tmp(const complex *other, Scratchpad *
  * @return >0 if this to other is counterclockwise
  */
 template<typename BASE>
-const number<BASE> *complex<BASE>::ccw_tmp(const complex *other, Scratchpad *tmp) const
+const number<BASE> *complex<BASE>::ccw_tmp(complex const &other) const
 {
   //im(other/this)=im((o.re+i*o.im)/(t.re+i*t.im))=im((o.re+i*o.im)*(t.re-i*t.im)/((t.re+i*t.im)*(t.re-i*t.im)))=
   //im((o.re*t.re+o.im*t.im+i*(o.im*t.re-o.re*t.im))/(t.re*t.re+t.im*t.im))=
   //(t.re*o.im-t.im*o.re)/(t.re*t.re+t.im*t.im)
   tmp->tmp1.assign(re);
   tmp->tmp2.assign(im);
-  tmp->tmp1.mul(other->im);
-  tmp->tmp2.mul(other->re);
+  tmp->tmp1.mul(other.im);
+  tmp->tmp2.mul(other.re);
   tmp->tmp1.sub(tmp->tmp2); //re*o.im-im*o.re
   return &tmp->tmp1;
 }
 
 template<typename BASE>
-double complex<BASE>::dist2_double(const complex *other, Scratchpad *tmp) const
+double complex<BASE>::dist2_double(complex const &other) const
 {
   tmp->tmp1.assign(re);
   tmp->tmp2.assign(im);
-  tmp->tmp1.sub(other->re);
-  tmp->tmp2.sub(other->im);
+  tmp->tmp1.sub(other.re);
+  tmp->tmp2.sub(other.im);
   /*tmp->tmp1.sqr();
   tmp->tmp2.sqr();
   tmp->tmp1.add(tmp->tmp2);
@@ -2947,12 +4032,12 @@ double complex<BASE>::dist2_double(const complex *other, Scratchpad *tmp) const
 }
 
 template<typename BASE>
-const number<BASE> *complex<BASE>::dist2_tmp(const complex *other, Scratchpad *tmp) const
+const number<BASE> *complex<BASE>::dist2_tmp(complex const &other) const
 {
   tmp->tmp1.assign(re);
   tmp->tmp2.assign(im);
-  tmp->tmp1.sub(other->re);
-  tmp->tmp2.sub(other->im);
+  tmp->tmp1.sub(other.re);
+  tmp->tmp2.sub(other.im);
   tmp->tmp1.sqr();
   tmp->tmp2.sqr();
   tmp->tmp1.add(tmp->tmp2);
@@ -2960,7 +4045,7 @@ const number<BASE> *complex<BASE>::dist2_tmp(const complex *other, Scratchpad *t
 }
 
 template<typename BASE>
-void complex<BASE>::from_pmdist(const complex &one, const complex &second, Scratchpad *tmp)
+complex<BASE> &complex<BASE>::from_pmdist(const complex &one, const complex &second)
 {
   //(a-c)^2+(b-d)^2=a^2-2*a*c+c^2+b^2-2*b*d+d^2=a^2+b^2+c^2+d^2 -2*a*c-2*b*d
   //(a+c)^2+(b+d)^2=a^2+2*a*c+c^2+b^2+2*b*d+d^2=a^2+b^2+c^2+d^2 +2*a*c+2*b*d
@@ -2986,13 +4071,14 @@ void complex<BASE>::from_pmdist(const complex &one, const complex &second, Scrat
   im.assign(re);
   re.sub(tmp->tmp1);
   im.add(tmp->tmp1);
+  return *this;
 }
 
 template<typename BASE>
-bool complex<BASE>::isequal(const complex *other) const
+bool complex<BASE>::isequal(complex const &other) const
 {
-  return re.isequal(other->re) &&
-      im.isequal(other->im);
+  return re.isequal(other.re) &&
+         im.isequal(other.im);
 }
 
 template<typename BASE>
@@ -3002,14 +4088,21 @@ bool complex<BASE>::is0() const
 }
 
 template<typename BASE>
-bool complex<BASE>::isNegative() const
+bool complex<BASE>::isle0() const
+{
+  //im<0 || im==0 && re<0
+  return im.isl0() || (im.is0() && re.isle0());
+}
+
+template<typename BASE>
+bool complex<BASE>::isl0() const
 {
   //im<0 || im==0 && re<0
   return im.isl0() || (im.is0() && re.isl0());
 }
 
 template<typename BASE>
-int complex<BASE>::mag_cmp_1(Scratchpad *tmp) const
+std::strong_ordering complex<BASE>::mag_cmp_1() const
 {
   //first reduce fz_re, fz_im to 2nd octant:
   //  fz.re>=0, fz.im>=0, fz.im>=fz.re
@@ -3027,10 +4120,10 @@ int complex<BASE>::mag_cmp_1(Scratchpad *tmp) const
   if ((tmp->tmp1.toDouble()>=0.71) || //im>=re>=0.71 -> mag>=1.0082
       (tmp->tmp2.toDouble()>=1.01))   //im>=1.01 -> mag>=1.01
   {
-    return 1;
+    return std::strong_ordering::greater;//+1
   }
   else if (tmp->tmp2.toDouble()<=0.70) //0.70>=im>=re -> mag<=0.98
-    return -1;
+    return std::strong_ordering::less;//-1
   else
   { //   re*re+im*im>1
     //   gets inaccurate for re~0, im~1
@@ -3281,20 +4374,23 @@ void complex_double_quadratic2(double *res1_re, double *res1_im,
 template class number<double>;
 //template void number<double>::assign_across<double>(const number<double> *src);
 template class complex<double>;
-template class complex<number_a *>;
-template void complex<double>::assign_across<number_a *>(const complex<number_a *> *src);
-template void complex<double>::assign_across<double>(const complex<double> *src);
-template void complex<number_a *>::assign_across<number_a *>(const complex<number_a *> *src);
+template class complex<number_any>;
+template void complex<double>::assign_across<number_any>(const complex<number_any> &src);
+template void complex<double>::assign_across<double>(const complex<double> &src);
+template void complex<number_any>::assign_across<number_any>(const complex<number_any> &src);
 #if !NUMBER_DOUBLE_ONLY
 template class complex<__float128>;
-template void complex<__float128>::assign_across<number_a *>(const complex<number_a *> *src);
-template void complex<__float128>::assign_across<__float128>(const complex<__float128> *src);
+template void complex<__float128>::assign_across<number_any>(const complex<number_any> &src);
+template void complex<__float128>::assign_across<__float128>(const complex<__float128> &src);
 template class complex<dd_real>;
-template void complex<dd_real>::assign_across<number_a *>(const complex<number_a *> *src);
-template void complex<dd_real>::assign_across<dd_real>(const complex<dd_real> *src);
+template void complex<dd_real>::assign_across<number_any>(const complex<number_any> &src);
+template void complex<dd_real>::assign_across<dd_real>(const complex<dd_real> &src);
+template class complex<dq_real>;
+template void complex<dq_real>::assign_across<number_any>(const complex<number_any> &src);
+template void complex<dq_real>::assign_across<dq_real>(const complex<dq_real> &src);
 template class complex<real642>;
-template void complex<real642>::assign_across<number_a *>(const complex<number_a *> *src);
-template void complex<real642>::assign_across<real642>(const complex<real642> *src);
+template void complex<real642>::assign_across<number_any>(const complex<number_any> &src);
+template void complex<real642>::assign_across<real642>(const complex<real642> &src);
 
 #endif
 /*template class complex<worker_multi_float128>;

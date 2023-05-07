@@ -5,7 +5,7 @@
 #include <QString>
 
 #include "double_double.hpp"
-#include "multiprec.hpp"
+//#include "multiprec.hpp"
 
 #define NUMBER_DOUBLE_EXISTS 1
 #define NUMBER_DOUBLE_ONLY 0
@@ -39,6 +39,15 @@ bool enum_is_one_of(E value)
   return ((value==vals) || ...);
 }
 
+//never seen before... yet another failure from the C++ commitee
+static_assert(sizeof(std::strong_ordering::less)==1, "change the following cast");
+constexpr int strong_ordering_cast(std::strong_ordering val) { return std::bit_cast<int8_t>(val); }
+typedef enum
+{
+    less=strong_ordering_cast(std::strong_ordering::less),
+    equal=strong_ordering_cast(std::strong_ordering::equal),
+    greater=strong_ordering_cast(std::strong_ordering::greater),
+} strong_ordering;
 
 enum NumberType { typeEmpty
 #if NUMBER_DOUBLE_EXISTS
@@ -52,7 +61,13 @@ enum NumberType { typeEmpty
 #endif
           };
 
-typedef dd_real dq_real;
+//typedef dd_real dq_real;
+class dq_real: public dd_real
+{
+  public:
+  dq_real(): dd_real() {} //hi(0), lo_(0) { }
+  dq_real(double h, double l): dd_real(h, l) {} //hi(h), lo_(l) { }
+};
 
 struct real642
 {
@@ -71,6 +86,87 @@ template <> struct NumberTypeFromBase<real642> { static constexpr NumberType nty
 
 extern int CreatedInstancesOfNumber;
 
+template<typename BASE>
+class number;
+
+using number_any=std::variant<std::monostate, number<double>, number<__float128>, number<dd_real>, number<dq_real>, number<real642>>;
+
+template<typename T>
+concept IMandelNumber_ = requires(T a, T b)
+{
+  //no worky using namespace std;
+  //simple way:
+  //{ a.add(b) } -> std::same_as<T>;
+  //strict way:
+  //requires std::same_as<decltype ( &T::add ), T &(T::*)(T const &)>;
+
+  { a.eps2() } -> std::same_as<double>;
+  requires std::same_as<decltype ( &T::eps234 ), double(T::*)() const>;
+
+  //requires std::same_as<decltype ( &T::zero ), T &(T::*)(double val)>;
+  requires std::same_as<decltype ( static_cast<T &(T::*)(double x)>(&T::zero) ), T &(T::*)(double)>;
+  requires std::same_as<decltype ( &T::assign ), T &(T::*)(T const &) noexcept>;
+  //will solve overloads later...maybe  requires std::same_as<decltype ( &T::assign_across ), T &(T::*)(number_a const &)>;
+  requires std::same_as<decltype ( &T::chs ), T &(T::*)()>;
+  requires std::same_as<decltype ( &T::lshift ), T &(T::*)(int shoft)>;
+  requires std::same_as<decltype ( &T::add_double ), T &(T::*)(double val)>;
+  requires std::same_as<decltype ( &T::mul_double ), T &(T::*)(double val)>;
+  requires std::same_as<decltype ( &T::add ), T &(T::*)(T const &)>;
+  requires std::same_as<decltype ( &T::sub ), T &(T::*)(T const &)>;
+  requires std::same_as<decltype ( &T::rsub ), T &(T::*)(T const &)>;
+  //requires std::same_as<decltype ( &T::mul ), T &(T::*)(T const &)>;
+  //select the right obverload
+  requires std::same_as<decltype ( static_cast<T &(T::*)(T const &)>(&T::mul) ), T &(T::*)(T const &)>;
+  requires std::same_as<decltype ( &T::sqr ), T &(T::*)()>;
+  requires std::same_as<decltype ( &T::recip ), T &(T::*)()>;
+  requires std::same_as<decltype ( &T::sqrt ), T &(T::*)()>;
+  requires std::same_as<decltype ( &T::compare ), std::strong_ordering (T::*)(T const &other) const>; //operator<=>
+  requires std::same_as<decltype ( &T::isequal ), bool (T::*)(T const &other) const>; //operator==
+  requires std::same_as<decltype ( &T::is0 ), bool (T::*)() const>; // ==0
+  requires std::same_as<decltype ( &T::isle ), bool(T::*)(T const &other) const>; //operator<=
+  requires std::same_as<decltype ( &T::isle0 ), bool (T::*)() const>; // <=0
+  requires std::same_as<decltype ( &T::isl0 ), bool (T::*)() const>; // <0
+
+  requires std::same_as<decltype ( &T::toString ), QString (T::*)() const>;
+
+/* maybe later
+  virtual NumberType ntype() const=0;// { return this->_ntype; }
+  virtual NumberType raw_ntype() const=0;// { return this->_ntype; }
+  virtual void readFrom(void *storage, int index)=0; //BASE storage[index]
+  virtual void writeTo(void *storage, int index) const=0; //BASE storage[index]
+*/
+  requires std::is_nothrow_assignable_v<T, T>;
+  requires std::is_nothrow_copy_assignable_v<T>;
+  requires std::is_nothrow_move_constructible_v<T>;
+  requires std::is_nothrow_copy_constructible_v<T>;
+  requires std::is_move_assignable_v<T>;
+  //requires std::is_trivially_copyable_v<T>;
+};
+
+template<typename T>
+concept IMandelReal = requires(T a, T b)
+{
+  requires IMandelNumber_<T>;
+  requires std::same_as<decltype ( &T::round ), T &(T::*)()>;
+  requires std::same_as<decltype ( &T::frac ), T &(T::*)()>;
+  requires std::same_as<decltype ( &T::mod1 ), T &(T::*)()>;
+  requires std::same_as<decltype ( &T::radixfloor ), double (T::*)(T const &other) const>;
+  requires std::same_as<decltype ( &T::reduce_angle ), bool (T::*)()>;
+  requires std::same_as<decltype ( &T::add_pi ), T &(T::*)(double val)>;
+  requires std::same_as<decltype ( &T::isl1 ), bool (T::*)() const>; // <1
+  requires std::same_as<decltype ( &T::min ), T &(T::*)(T const &)>;
+
+  requires std::same_as<decltype ( &T::toRound ), int (T::*)() const>;
+  requires std::same_as<decltype ( &T::toDouble ), double (T::*)() const>;
+};
+
+template<typename T>
+concept IMandelComplex = requires(T a, T b)
+{
+  requires IMandelNumber_<T>;
+};
+
+#if 0
 class number_a
 {
 protected:
@@ -110,7 +206,7 @@ public:
   virtual double radixfloor(const number_a &other) const=0; //nearest smaller power of 2 (1.5->1->1)
   virtual void recip()=0;
   virtual void sqrt()=0;
-  virtual bool reduceAngle()=0; //one step towards -pi<=x<pi, true if changed
+  virtual bool reduce_angle()=0; //one step towards -pi<=x<pi, true if changed
   virtual void add_pi(double x)=0;
   virtual int compare(const number_a &other) const=0; //return -1 if <, 0 if =, +1 if >; std::strong_ordering not in my compiler yet
   virtual bool isequal(const number_a &other) const=0; //return store==other
@@ -125,8 +221,109 @@ public:
   virtual int toRound() const=0;
   virtual double toDouble() const=0;
 };
+#endif
 
-template <typename BASE>
+template<typename BASE>
+class number
+{
+  protected:
+  BASE store; //either "double" for special optimized template
+      //or "double *" for universal implementation
+      //going meta by using BASE="number<actual base> *"
+  friend class number<double>;
+  friend class number<__float128>;
+  friend class number<dd_real>;
+  friend class number<dq_real>;
+  friend class number<real642>;
+  //friend class number<number<bool> *>;
+  public:
+  double eps2() const;
+  double eps234() const;
+  number(): store() { } //for ShareableViewInfo
+  number(const number &x) noexcept: store(x.store) { };
+  number(number &&x) noexcept: store() { x.swap(*this); }
+  number(NumberType ntype);
+  void constructLateBecauseQtIsAwesome(NumberType ntype);
+  void swap(number &other) noexcept { std::swap(store, other.store); }
+  //number(BASE store): store(store) {}
+  ~number();
+  NumberType ntype() const;// { return this->_ntype; }
+  NumberType raw_ntype() const;
+  void readFrom(void *storage, int index); //BASE storage[index]
+  void writeTo(void *storage, int index) const; //BASE storage[index]
+  static BASE *convert_block(NumberType old_type, const void *old_data, int count);
+
+  number &zero(double val=0);
+  number &assign(const number &src) noexcept;// { store=src.store; return *this; } //or { BASE tmp(src.store); std::swap(tmp, store); return *this; }
+  //number &operator=(number &src) noexcept { swap(src); return *this; } //required by std::variant<>
+  number &operator=(number src) noexcept { swap(src); return *this; }
+  //void assign(const MandelNumber &src);
+  //number &assign_across(number_a const &src);
+  template<typename OTHER>
+  number<BASE> &assign_across(number<OTHER> const &src);
+  number &chs();
+  number &lshift(int shoft); // self <<= shoft; 1 lshift -10000 = 0 not error
+  number &round();
+  number &frac(); //-1<result<1
+  number &mod1(); //0<=result<1
+  number &add_double(double x);
+  number &mul_double(double x);
+  //void add(const number_a &other);
+  number &add(number const &other);
+  //void sub(const number_a &other);
+  number &sub(number const &other);
+  //virtual void rsub(const number_a &other) override;
+  number &rsub(number const &other);
+  //virtual void mul(const number_a &other) override;
+  number &mul(number const &other);
+  number &sqr();
+  //virtual double radixfloor(const number_a &other) const override;
+  double radixfloor(number const &other) const; //nearest smaller power of 2 (1.5->1->1)
+  number &recip();
+  number &sqrt();
+  bool reduce_angle();
+  number &add_pi(double x);
+  //virtual int compare(const number_a &other) const override; //return -1 if <, 0 if =, +1 if >; std::strong_ordering not in my compiler yet
+  std::strong_ordering compare(number const &other) const; //return -1 if <, 0 if =, +1 if >; std::strong_ordering not in my compiler yet
+  std::strong_ordering operator<=>(number const &other) const { return compare(other); }
+  //virtual bool isequal(const number_a &other) const override; //return store==other
+  bool isequal(number const &other) const; //return store==other
+  bool is0() const;
+  //virtual bool isle(const number_a &other) const override; //return store<=other
+  bool isle(number const &other) const; //return store<=other
+  bool isle0() const; //return store<=0
+  bool isl0() const; //return store<0
+  bool isl1() const; //return store<1
+  //virtual void min(const number_a &other) override;
+  number &min(number const &other);
+
+  QString toString() const;
+  int toRound() const;
+  double toDouble() const;
+
+  //static_assert(std::is_nothrow_assignable_v<number<BASE>, number<BASE>>, "why how");
+  //static_assert(std::is_nothrow_copy_assignable_v<number<BASE>>, "why how");
+  //static_assert(std::is_nothrow_move_constructible_v<number<BASE>>, "why how");
+  //static_assert(std::is_nothrow_copy_constructible_v<number<BASE>>, "why how");
+};
+
+static_assert(IMandelReal<number<double>>, "fix that");
+static_assert(sizeof(number<double>)==sizeof(double), "fix this");
+/*static_assert(std::is_nothrow_assignable_v<number<double>, number<double>>, "why how");
+static_assert(std::is_nothrow_copy_assignable_v<number<double>>, "why how");
+static_assert(std::is_nothrow_move_constructible_v<number<double>>, "why how");
+static_assert(std::is_nothrow_copy_constructible_v<number<double>>, "why how");*/
+
+//static_assert(Number_double requires IMandelNumber, "fix that");
+static_assert(IMandelReal<number<__float128>>, "fix that");
+static_assert(sizeof(number<__float128>)==sizeof(__float128), "fix this");
+
+static_assert(IMandelReal<number<dd_real>>, "fix that");
+static_assert(IMandelReal<number<real642>>, "fix that");
+static_assert(IMandelReal<number<number_any>>, "fix that");
+
+#if 0
+template <IMandelNumber BASE>
 class number: public number_a
 {
 protected:
@@ -189,7 +386,7 @@ public:
   double radixfloor(const number<BASE> &other) const; //nearest smaller power of 2 (1.5->1->1)
   virtual void recip() override;
   virtual void sqrt() override;
-  virtual bool reduceAngle() override;
+  virtual bool reduce_angle() override;
   virtual void add_pi(double x) override;
   virtual int compare(const number_a &other) const override; //return -1 if <, 0 if =, +1 if >; std::strong_ordering not in my compiler yet
   int compare(const number<BASE> &other) const; //return -1 if <, 0 if =, +1 if >; std::strong_ordering not in my compiler yet
@@ -208,68 +405,85 @@ public:
   virtual int toRound() const override;
   virtual double toDouble() const override;
 };
+#endif
 
 template <typename BASE>
 class complex
 {
-public:
+  public:
   struct Scratchpad
   {
-    number<BASE> tmp1;
-    number<BASE> tmp2;
-    number<BASE> tmp3;
-    number<BASE> tmp4;
-    Scratchpad(): tmp1(), tmp2(), tmp3(), tmp4() { }
-    Scratchpad(NumberType ntype): tmp1(ntype), tmp2(ntype), tmp3(ntype), tmp4(ntype) { }
+      NumberType ntype;
+      number<BASE> tmp1;
+      number<BASE> tmp2;
+      number<BASE> tmp3;
+      number<BASE> tmp4;
+      Scratchpad(): ntype(NumberType::typeEmpty), tmp1(), tmp2(), tmp3(), tmp4() { }
+      Scratchpad(NumberType ntype): ntype(ntype), tmp1(ntype), tmp2(ntype), tmp3(ntype), tmp4(ntype) { }
   };
+protected:
+  Scratchpad *tmp;
+public:
   number<BASE> re;
   number<BASE> im;
+  double eps2() const { return re.eps2(); }
+  double eps234() const { return re.eps234(); }
   complex(): re(), im() { }
-  complex(NumberType ntype): re(ntype), im(ntype) { }
+  //complex(NumberType ntype): re(ntype), im(ntype) { }
+  complex(Scratchpad *spad): tmp(spad), re(spad->ntype), im(spad->ntype) { }
+  complex(complex const &src) noexcept: tmp(src.tmp), re(src.re), im(src.im) { }
   //complex(BASE re, BASE im): re(re), im(im) { }
   void readFrom(void *storage, int index); //BASE storage[index], [index+1]
   void writeTo(void *storage, int index) const; //BASE storage[index], [index+1]
-  void zero(double r=0, double i=0);
-  void assign(const complex *other);
+  complex &zero(double r=0);
+  complex &zero(double r, double i);
+  complex &assign(const complex &other) noexcept;
   template <typename OTHER_BASE>
-  void assign_across(const complex<OTHER_BASE> *src);
+  void assign_across(const complex<OTHER_BASE> &src);
   //void assign_across(const BASE re, const BASE im);
-  void lshift(int shoft);
+  complex &lshift(int shoft);
   //add_double(r), add_double(r, i)
-  void mul_double(double m);
-  void add(const complex *const other);
-  void chs();
-  void sub(const complex *other); //this=this-other
-  void rsub(const complex *other); //this=other-this
-  void sqr(Scratchpad *tmp);
-  void mul(const number<BASE> &other); //maybe called "scale"
-  void mul(const complex *other, Scratchpad *tmp);
-  void recip(Scratchpad *tmp);
-  void recip_prepared(Scratchpad *tmp);
-  void sqrt(Scratchpad *tmp);
-  void pow_int(int n, Scratchpad *tmp); //this^n
-  void root_approx(int n); //this^(1/n), most real root; only in double precision
-  void ln_approx(); //this:=ln(this), only in double precision
-  void exp_approx(); //this:=exp(this), only in double precision
-  void sign(Scratchpad *tmp); //this/=sqrt(this.mag())
-  void cossin(number<BASE> &angle, Scratchpad *tmp);
-  void arctan2(number<BASE> *result, Scratchpad *tmp) const;
+  complex &add_double(double a) { re.add_double(a); return *this; }
+  complex &mul_double(double m);
+  complex &add(const complex &other);
+  complex &chs();
+  complex &sub(const complex &other); //this=this-other
+  complex &rsub(const complex &other); //this=other-this
+  complex &sqr();
+  complex &mul(const number<BASE> &other); //maybe called "scale"
+  complex &mul(const complex &other);
+  complex &recip();
+  complex &recip_prepared();
+  complex &sqrt();
+  complex &pow_uint(unsigned int n); //this^n
+  complex &root_approx(int n); //this^(1/n), most real root; only in double precision
+  complex &ln_approx(); //this:=ln(this), only in double precision
+  complex &exp_approx(); //this:=exp(this), only in double precision
+  complex &sign(); //this/=sqrt(this.mag())
+  complex &cossin(number<BASE> &angle);
+  void arctan2(number<BASE> *result) const;
   double getMag_double() const;
-  const number<BASE> *getMag_tmp(Scratchpad *tmp) const;
-  const number<BASE> *getMag1_tmp(Scratchpad *tmp) const;
-  const number<BASE> *getDist1_tmp(Scratchpad *tmp) const;
-  const number<BASE> *mulreT_tmp(const complex *other, Scratchpad *tmp) const; //Re(this*conjugate(other)) = re*o->re+im*o->im
-  const number<BASE> *ccw_tmp(const complex *other, Scratchpad *tmp) const; //"counterclockwise" Im(other/this)*|this|^2 = re*o.im-im*o.re
-  double dist2_double(const complex *other, Scratchpad *tmp) const;
-  const number<BASE> *dist2_tmp(const complex *other, Scratchpad *tmp) const;
-  void from_pmdist(const complex &one, const complex &second, Scratchpad *tmp); //re:=|o-s|^2, im:=|o+s|^2
-  bool isequal(const complex *other) const;
+  const number<BASE> *getMag_tmp() const;
+  const number<BASE> *getMag1_tmp() const;
+  const number<BASE> *getDist1_tmp() const;
+  const number<BASE> *mulreT_tmp(const complex &other) const; //Re(this*conjugate(other)) = re*o->re+im*o->im
+  const number<BASE> *ccw_tmp(const complex &other) const; //"counterclockwise" Im(other/this)*|this|^2 = re*o.im-im*o.re
+  double dist2_double(const complex &other) const;
+  const number<BASE> *dist2_tmp(const complex &other) const;
+  complex &from_pmdist(const complex &one, const complex &second); //re:=|o-s|^2, im:=|o+s|^2
+  std::strong_ordering compare(complex const &other) const; //compare as vector, im more important
+  bool isequal(const complex &other) const;
+  bool isle(const complex &other) const { switch(strong_ordering_cast(im<=>other.im)) { case less: return true;
+                                                                  case greater: return false;
+                                                                  default: return re.isle(other.re); } }
   bool is0() const;
-  bool isNegative() const; //im<0 || im==0 && re<0
-  int mag_cmp_1(Scratchpad *tmp) const; //(mag() <=> 1) -> -1,0,+1, better return (double)(mag()-1)
+  bool isle0() const; // { return isl0() || is0(); }
+  bool isl0() const; //was isNegative() im<0 || im==0 && re<0
+  std::strong_ordering mag_cmp_1() const; //(mag() <=> 1) -> -1,0,+1, better return (double)(mag()-1)
   QString toString() const;
 };
 
+static_assert(IMandelComplex<complex<double>>, "oh well");
 
 double sqr_double(double x); //no one ever needed this function before year 2022, right?
 void complex_double_sqrt(double *res_re, double *res_im, double in_re, double in_im); //res_re>=0
@@ -282,4 +496,13 @@ void complex_double_quadratic2(double *res1_re, double *res1_im,
                                double a_re, double a_im, double b2_re, double b2_im, double c_re, double c_im);
 
 } // namespace MandelMath
+
+namespace std { namespace __detail { namespace __variant {
+/*template<> struct _Never_valueless_alt<MandelMath::number<double>>: std::bool_constant<true> { };
+template<> struct _Never_valueless_alt<MandelMath::number<__float128>>: std::bool_constant<true> { };
+template<> struct _Never_valueless_alt<MandelMath::number<MandelMath::dd_real>>: std::bool_constant<true> { };
+template<> struct _Never_valueless_alt<MandelMath::number<MandelMath::dq_real>>: std::bool_constant<true> { };
+template<> struct _Never_valueless_alt<MandelMath::number<MandelMath::real642>>: std::bool_constant<true> { };*/
+template<> constexpr bool __never_valueless<std::monostate, MandelMath::number<double>, MandelMath::number<__float128>, MandelMath::number<MandelMath::dd_real>, MandelMath::number<MandelMath::dq_real>, MandelMath::number<MandelMath::real642>>() { return true; }
+} } }
 #endif // MANDELMATH_NUMBER_HPP
