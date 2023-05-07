@@ -7234,6 +7234,7 @@ template struct JuliaPoint<double>;
 template struct JuliaPoint<MandelMath::number_any>;
 template class LaguerreStep<double>;
 template class MandelLoopEvaluator<double>;
+template class MandelLoopEvaluator<MandelMath::number_any>;
 template class MandelEvaluator<double>;
 template class MandelEvaluator<MandelMath::number_any>;
 template void ComputeMandelParams<double>::assign_across<MandelMath::number_any>(const ComputeMandelParams<MandelMath::number_any> &src);
