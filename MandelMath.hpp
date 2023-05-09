@@ -5,7 +5,7 @@
 #include <QString>
 
 #include "double_double.hpp"
-#include "multiprec.hpp"
+//#include "multiprec.hpp"
 
 #define NUMBER_DOUBLE_EXISTS 1
 #define NUMBER_DOUBLE_ONLY 0
@@ -39,6 +39,15 @@ bool enum_is_one_of(E value)
   return ((value==vals) || ...);
 }
 
+//never seen before... yet another failure from the C++ commitee
+static_assert(sizeof(std::strong_ordering::less)==1, "change the following cast");
+constexpr int strong_ordering_cast(std::strong_ordering val) { return std::bit_cast<int8_t>(val); }
+typedef enum
+{
+    less=strong_ordering_cast(std::strong_ordering::less),
+    equal=strong_ordering_cast(std::strong_ordering::equal),
+    greater=strong_ordering_cast(std::strong_ordering::greater),
+} strong_ordering;
 
 enum NumberType { typeEmpty
 #if NUMBER_DOUBLE_EXISTS
@@ -52,7 +61,13 @@ enum NumberType { typeEmpty
 #endif
           };
 
-typedef dd_real dq_real;
+//typedef dd_real dq_real;
+class dq_real: public dd_real
+{
+  public:
+  dq_real(): dd_real() {} //hi(0), lo_(0) { }
+  dq_real(double h, double l): dd_real(h, l) {} //hi(h), lo_(l) { }
+};
 
 struct real642
 {
@@ -92,41 +107,44 @@ public:
   virtual void writeTo(void *storage, int index) const=0; //BASE storage[index]
   //static void *convert_block(NumberType old_type, const void *old_data, int count);
 
-  virtual void zero(double val=0)=0;
-  virtual void assign(const number_a &src)=0;
-  virtual void assign_across(const number_a *src)=0;
-  virtual void chs()=0;
-  virtual void lshift(int shoft)=0; // self <<= shoft; 1 lshift -10000 = 0 not error
-  virtual void round()=0;
-  virtual void frac()=0; //-1<result<1
-  virtual void mod1()=0; //0<=result<1
-  virtual void add_double(double x)=0;
-  virtual void mul_double(double x)=0;
-  virtual void add(const number_a &other)=0;
-  virtual void sub(const number_a &other)=0;
-  virtual void rsub(const number_a &other)=0;
-  virtual void mul(const number_a &other)=0;
-  virtual void sqr()=0;
+  virtual number_a &zero(double val=0)=0;
+  virtual number_a &assign(const number_a &src)=0;
+  virtual number_a &assign_across(const number_a &src)=0;
+  virtual number_a &chs()=0;
+  virtual number_a &lshift(int shoft)=0; // self <<= shoft; 1 lshift -10000 = 0 not error
+  virtual number_a &round()=0;
+  virtual number_a &frac()=0; //-1<result<1
+  virtual number_a &mod1()=0; //0<=result<1
+  virtual number_a &add_double(double x)=0;
+  virtual number_a &mul_double(double x)=0;
+  virtual number_a &add(const number_a &other)=0;
+  virtual number_a &sub(const number_a &other)=0;
+  virtual number_a &rsub(const number_a &other)=0;
+  virtual number_a &mul(const number_a &other)=0;
+  virtual number_a &sqr()=0;
   virtual double radixfloor(const number_a &other) const=0; //nearest smaller power of 2 (1.5->1->1)
-  virtual void recip()=0;
-  virtual void sqrt()=0;
-  virtual bool reduceAngle()=0; //one step towards -pi<=x<pi, true if changed
-  virtual void add_pi(double x)=0;
-  virtual int compare(const number_a &other) const=0; //return -1 if <, 0 if =, +1 if >; std::strong_ordering not in my compiler yet
+  virtual number_a &recip()=0;
+  virtual number_a &sqrt()=0;
+  virtual bool reduce_angle()=0; //one step towards -pi<=x<pi, true if changed
+  virtual number_a &add_pi(double x)=0;
+  virtual std::strong_ordering compare(const number_a &other) const=0; //return -1 if <, 0 if =, +1 if >; std::strong_ordering not in my compiler yet
+  std::strong_ordering operator<=>(number_a const &other) const { return compare(other); }
   virtual bool isequal(const number_a &other) const=0; //return store==other
   virtual bool is0() const=0;
   virtual bool isle(const number_a &other) const=0; //return store<=other
   virtual bool isle0() const=0; //return store<=0
   virtual bool isl0() const=0; //return store<0
   virtual bool isl1() const=0; //return store<1
-  virtual void min(const number_a &other)=0;
+  virtual number_a &min(const number_a &other)=0;
 
   virtual QString toString() const=0;
   virtual int toRound() const=0;
   virtual double toDouble() const=0;
 };
 
-template <typename BASE>
+using number_any=number_a *;
+
+template<typename BASE>
 class number: public number_a
 {
 protected:
@@ -136,16 +154,18 @@ protected:
   friend class number<double>;
   friend class number<__float128>;
   friend class number<dd_real>;
+  friend class number<dq_real>;
   friend class number<real642>;
   friend class number<number_a *>;
 public:
   virtual double eps2() const override;
   virtual double eps234() const override;
   number(): number_a(), store() { } //for ShareableViewInfo
-  number(number &x)=delete;
-  number(number &&x)=delete;
+  number(const number &x) noexcept;
+  number(number &&x) noexcept: store() { x.swap(*this); };
   number(NumberType ntype);
   void constructLateBecauseQtIsAwesome(NumberType ntype);
+  void swap(number &other) noexcept { std::swap(store, other.store); }
   //number(BASE store): store(store) {}
   virtual ~number() override;
   virtual NumberType ntype() const override;// { return this->_ntype; }
@@ -161,38 +181,40 @@ public:
   //virtual void assign_block(int dst, const Allocator<worker_multi> *src)
    //{ int first, capac; src->_getFirstCapac(first, capac); assign_block(dst, src->worker, first, capac); }
 
-  virtual void zero(double val=0) override;
-  virtual void assign(const number_a &src) override;
-  void assign(const number<BASE> &src);
-  virtual void assign_across(const number_a *src) override;
+  virtual number &zero(double val=0) override;
+  virtual number &assign(const number_a &src) override;
+  number &assign(const number<BASE> &src) noexcept;
+  virtual number &assign_across(const number_a &src) override;
   //template <typename OTHER_BASE>
   //void assign_across(const number<OTHER_BASE> *src);
-  void assign_across(const number<BASE> *src);
+  number &assign_across(const number<BASE> &src);
   //void assign_across(BASE src);
-  virtual void chs() override;
-  virtual void lshift(int shoft) override; // self <<= shoft; 1 lshift -10000 = 0 not error
-  virtual void round() override;
-  virtual void frac() override; //-1<result<1
-  virtual void mod1() override; //0<=result<1
-  virtual void add_double(double x) override;
-  virtual void mul_double(double x) override;
-  virtual void add(const number_a &other) override;
-  void add(const number<BASE> &other);
-  virtual void sub(const number_a &other) override;
-  void sub(const number<BASE> &other);
-  virtual void rsub(const number_a &other) override;
-  void rsub(const number<BASE> &other);
-  virtual void mul(const number_a &other) override;
-  void mul(const number<BASE> &other);
-  virtual void sqr() override;
+  virtual number &chs() override;
+  virtual number &lshift(int shoft) override; // self <<= shoft; 1 lshift -10000 = 0 not error
+  virtual number &round() override;
+  virtual number &frac() override; //-1<result<1
+  virtual number &mod1() override; //0<=result<1
+  virtual number &add_double(double x) override;
+  virtual number &mul_double(double x) override;
+  virtual number &add(const number_a &other) override;
+  number &add(const number<BASE> &other);
+  virtual number &sub(const number_a &other) override;
+  number &sub(const number<BASE> &other);
+  virtual number &rsub(const number_a &other) override;
+  number &rsub(const number<BASE> &other);
+  virtual number &mul(const number_a &other) override;
+  number &mul(const number<BASE> &other);
+  virtual number &sqr() override;
   virtual double radixfloor(const number_a &other) const override;
   double radixfloor(const number<BASE> &other) const; //nearest smaller power of 2 (1.5->1->1)
-  virtual void recip() override;
-  virtual void sqrt() override;
-  virtual bool reduceAngle() override;
-  virtual void add_pi(double x) override;
-  virtual int compare(const number_a &other) const override; //return -1 if <, 0 if =, +1 if >; std::strong_ordering not in my compiler yet
-  int compare(const number<BASE> &other) const; //return -1 if <, 0 if =, +1 if >; std::strong_ordering not in my compiler yet
+  virtual number &recip() override;
+  virtual number &sqrt() override;
+  virtual bool reduce_angle() override;
+  virtual number &add_pi(double x) override;
+  virtual std::strong_ordering compare(const number_a &other) const override; //return -1 if <, 0 if =, +1 if >; std::strong_ordering not in my compiler yet
+  std::strong_ordering compare(const number<BASE> &other) const; //return -1 if <, 0 if =, +1 if >; std::strong_ordering not in my compiler yet
+  std::strong_ordering operator<=>(number_a const &other) const { return compare(other); }
+  std::strong_ordering operator<=>(number<BASE> const &other) const { return compare(other); }
   virtual bool isequal(const number_a &other) const override; //return store==other
   bool isequal(const number<BASE> &other) const; //return store==other
   virtual bool is0() const override;
@@ -201,8 +223,8 @@ public:
   virtual bool isle0() const override; //return store<=0
   virtual bool isl0() const override; //return store<0
   virtual bool isl1() const override; //return store<1
-  virtual void min(const number_a &other) override;
-  void min(const number<BASE> &other);
+  virtual number &min(const number_a &other) override;
+  number &min(const number<BASE> &other);
 
   virtual QString toString() const override;
   virtual int toRound() const override;
@@ -212,61 +234,76 @@ public:
 template <typename BASE>
 class complex
 {
-public:
+  public:
   struct Scratchpad
   {
-    number<BASE> tmp1;
-    number<BASE> tmp2;
-    number<BASE> tmp3;
-    number<BASE> tmp4;
-    Scratchpad(): tmp1(), tmp2(), tmp3(), tmp4() { }
-    Scratchpad(NumberType ntype): tmp1(ntype), tmp2(ntype), tmp3(ntype), tmp4(ntype) { }
+      NumberType ntype;
+      number<BASE> tmp1;
+      number<BASE> tmp2;
+      number<BASE> tmp3;
+      number<BASE> tmp4;
+      Scratchpad(): ntype(NumberType::typeEmpty), tmp1(), tmp2(), tmp3(), tmp4() { }
+      Scratchpad(NumberType ntype): ntype(ntype), tmp1(ntype), tmp2(ntype), tmp3(ntype), tmp4(ntype) { }
   };
+protected:
+  Scratchpad *tmp;
+public:
   number<BASE> re;
   number<BASE> im;
+  double eps2() const { return re.eps2(); }
+  double eps234() const { return re.eps234(); }
   complex(): re(), im() { }
-  complex(NumberType ntype): re(ntype), im(ntype) { }
+  //complex(NumberType ntype): re(ntype), im(ntype) { }
+  complex(Scratchpad *spad): tmp(spad), re(spad->ntype), im(spad->ntype) { }
+  complex(complex const &src) noexcept: tmp(src.tmp), re(src.re), im(src.im) { }
   //complex(BASE re, BASE im): re(re), im(im) { }
   void readFrom(void *storage, int index); //BASE storage[index], [index+1]
   void writeTo(void *storage, int index) const; //BASE storage[index], [index+1]
-  void zero(double r=0, double i=0);
-  void assign(const complex *other);
+  complex &zero(double r=0);
+  complex &zero(double r, double i);
+  complex &assign(const complex &other) noexcept;
   template <typename OTHER_BASE>
-  void assign_across(const complex<OTHER_BASE> *src);
+  complex &assign_across(const complex<OTHER_BASE> &src);
   //void assign_across(const BASE re, const BASE im);
-  void lshift(int shoft);
+  complex &lshift(int shoft);
   //add_double(r), add_double(r, i)
-  void mul_double(double m);
-  void add(const complex *const other);
-  void chs();
-  void sub(const complex *other); //this=this-other
-  void rsub(const complex *other); //this=other-this
-  void sqr(Scratchpad *tmp);
-  void mul(const number<BASE> &other); //maybe called "scale"
-  void mul(const complex *other, Scratchpad *tmp);
-  void recip(Scratchpad *tmp);
-  void recip_prepared(Scratchpad *tmp);
-  void sqrt(Scratchpad *tmp);
-  void pow_int(int n, Scratchpad *tmp); //this^n
-  void root_approx(int n); //this^(1/n), most real root; only in double precision
-  void ln_approx(); //this:=ln(this), only in double precision
-  void exp_approx(); //this:=exp(this), only in double precision
-  void sign(Scratchpad *tmp); //this/=sqrt(this.mag())
-  void cossin(number<BASE> &angle, Scratchpad *tmp);
-  void arctan2(number<BASE> *result, Scratchpad *tmp) const;
+  complex &add_double(double a) { re.add_double(a); return *this; }
+  complex &mul_double(double m);
+  complex &add(const complex &other);
+  complex &chs();
+  complex &sub(const complex &other); //this=this-other
+  complex &rsub(const complex &other); //this=other-this
+  complex &sqr();
+  complex &mul(const number<BASE> &other); //maybe called "scale"
+  complex &mul(const complex &other);
+  complex &recip();
+  complex &recip_prepared();
+  complex &sqrt();
+  complex &pow_uint(unsigned int n); //this^n
+  complex &root_approx(int n); //this^(1/n), most real root; only in double precision
+  complex &ln_approx(); //this:=ln(this), only in double precision
+  complex &exp_approx(); //this:=exp(this), only in double precision
+  complex &sign(); //this/=sqrt(this.mag())
+  complex &cossin(number<BASE> &angle);
+  void arctan2(number<BASE> *result) const;
   double getMag_double() const;
-  const number<BASE> *getMag_tmp(Scratchpad *tmp) const;
-  const number<BASE> *getMag1_tmp(Scratchpad *tmp) const;
-  const number<BASE> *getDist1_tmp(Scratchpad *tmp) const;
-  const number<BASE> *mulreT_tmp(const complex *other, Scratchpad *tmp) const; //Re(this*conjugate(other)) = re*o->re+im*o->im
-  const number<BASE> *ccw_tmp(const complex *other, Scratchpad *tmp) const; //"counterclockwise" Im(other/this)*|this|^2 = re*o.im-im*o.re
-  double dist2_double(const complex *other, Scratchpad *tmp) const;
-  const number<BASE> *dist2_tmp(const complex *other, Scratchpad *tmp) const;
-  void from_pmdist(const complex &one, const complex &second, Scratchpad *tmp); //re:=|o-s|^2, im:=|o+s|^2
-  bool isequal(const complex *other) const;
+  const number<BASE> *getMag_tmp() const;
+  const number<BASE> *getMag1_tmp() const;
+  const number<BASE> *getDist1_tmp() const;
+  const number<BASE> *mulreT_tmp(const complex &other) const; //Re(this*conjugate(other)) = re*o->re+im*o->im
+  const number<BASE> *ccw_tmp(const complex &other) const; //"counterclockwise" Im(other/this)*|this|^2 = re*o.im-im*o.re
+  double dist2_double(const complex &other) const;
+  const number<BASE> *dist2_tmp(const complex &other) const;
+  complex &from_pmdist(const complex &one, const complex &second); //re:=|o-s|^2, im:=|o+s|^2
+  std::strong_ordering compare(complex const &other) const; //compare as vector, im more important
+  bool isequal(const complex &other) const;
+  bool isle(const complex &other) const { switch(strong_ordering_cast(im<=>other.im)) { case less: return true;
+                                                                  case greater: return false;
+                                                                  default: return re.isle(other.re); } }
   bool is0() const;
-  bool isNegative() const; //im<0 || im==0 && re<0
-  int mag_cmp_1(Scratchpad *tmp) const; //(mag() <=> 1) -> -1,0,+1, better return (double)(mag()-1)
+  bool isle0() const; // { return isl0() || is0(); }
+  bool isl0() const; //was isNegative() im<0 || im==0 && re<0
+  std::strong_ordering mag_cmp_1() const; //(mag() <=> 1) -> -1,0,+1, better return (double)(mag()-1)
   QString toString() const;
 };
 

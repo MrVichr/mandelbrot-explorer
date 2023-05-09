@@ -1,6 +1,6 @@
 QT += quick
 
-CONFIG += c++11
+CONFIG += c++20
 CONFIG += force_debug_info
 
 # You can make your code fail to compile if it uses deprecated APIs.
@@ -9,8 +9,13 @@ CONFIG += force_debug_info
 
 #helps with templated version but not much with virtual version
 #removes dbgPoint :-(
-#QMAKE_CXXFLAGS_DEBUG += -O9
-#QMAKE_CFLAGS_DEBUG += -O9
+#QMAKE_CXXFLAGS_DEBUG += -O3
+#QMAKE_CFLAGS_DEBUG += -O3
+QMAKE_CXXFLAGS_DEBUG += -fconcepts-diagnostics-depth=9
+#QMAKE_CXXFLAGS_RELEASE += -O3
+#QMAKE_CXXFLAGS_RELEASE_WITH_DEBUGINFO += -O3
+#QMAKE_CFLAGS_RELEASE += -O3
+#QMAKE_CFLAGS_RELEASE_WITH_DEBUGINFO += -O3
 
 SOURCES += \
         JuliaModel.cpp \

@@ -557,9 +557,9 @@ Window {
             {
               if (r.checked)
               {
-                m.writeToImage(c.getBaseImage());
+                var wtitime=m.writeToImage(c.getBaseImage());
                 c.update();
-                labelXY.text=m.getTextXY();
+                labelXY.text=m.getTextXY()+" ["+wtitime+"]";
                 labelInfoGen.text=m.getTextInfoGen();
                 labelInfoSpec.text=m.getTextInfoSpec();
                 m.getTimes();

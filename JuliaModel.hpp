@@ -20,12 +20,12 @@ public:
   JuliaModel();
   ~JuliaModel();
   Q_INVOKABLE void startRunning();
-  void transformStore(void *old_points, JuliaPointStore *old_store, int old_width, int old_height, const MandelMath::complex<MandelMath::number_a *> *old_c,
-                      void *new_points, JuliaPointStore *new_store, int new_width, int new_height, const MandelMath::complex<MandelMath::number_a *> *new_c,
+  void transformStore(void *old_points, JuliaPointStore *old_store, int old_width, int old_height, const MandelMath::complex<MandelMath::number_any> &old_c,
+                      void *new_points, JuliaPointStore *new_store, int new_width, int new_height, const MandelMath::complex<MandelMath::number_any> &new_c,
                       int inlog, int new_step_log);
   void recomputeRoot(int max_effort);
   Q_INVOKABLE void setParams(ShareableViewInfo viewInfo);
-  void setView(const MandelMath::complex<MandelMath::number_a *> *c, double scale);
+  void setView(MandelMath::complex<MandelMath::number_any> const &c, double scale);
   Q_INVOKABLE void drag(double delta_x, double delta_y);
   Q_INVOKABLE void zoom(double x, double y, int inlog);
   Q_INVOKABLE void setImageSize(int width, int height);
@@ -33,7 +33,7 @@ public:
   void startNewEpoch();
   //void giveWorkAll();
   Q_INVOKABLE int writeToImage(ShareableImageWrapper img);
-  void reimToPixel(int *circ_x, int *circ_y, const MandelMath::complex<MandelMath::number_a *> *c, MandelMath::number<MandelMath::number_a *> *tmp);
+  void reimToPixel(int *circ_x, int *circ_y, MandelMath::complex<MandelMath::number_any> const &z, MandelMath::number<MandelMath::number_any> *tmp);
   Q_INVOKABLE void paintOrbit(ShareableImageWrapper image, int x, int y);
   Q_INVOKABLE QString pixelXtoRE_str(int x);
   Q_INVOKABLE QString pixelYtoIM_str(int y);
@@ -45,9 +45,9 @@ public:
   {
     static constexpr int LEN=4;
     int period; //TODO: 0 doesn't seem to be the best choice for "no interior", MAXINT would better
-    MandelMath::complex<MandelMath::number_a *> c;
-    MandelMath::complex<MandelMath::number_a *> root;
-    Params(MandelMath::NumberType ntype, const Params *source);
+    MandelMath::complex<MandelMath::number_any> c;
+    MandelMath::complex<MandelMath::number_any> root;
+    Params(MandelMath::complex<MandelMath::number_any>::Scratchpad *spad, const Params *source);
   };
 
 
@@ -174,10 +174,10 @@ protected:
     double step_size; //TODO: should use special methods on number to add, mul and div by 2^-step_log
     int cached_center_re_mod; //(center/step) mod 32768
     int cached_center_im_mod;
-    Position(MandelMath::NumberType ntype, const Position *source);
+    Position(MandelMath::complex<MandelMath::number_any>::Scratchpad *spad, const Position *source);
     ~Position();
     //void assign(Position *src);
-    void setView(const MandelMath::complex<MandelMath::number_a *> *c, double scale);
+    void setView(MandelMath::complex<MandelMath::number_any> const &c, double scale);
     void move(int delta_x, int delta_y);
     void scale(int inlog, int center_x, int center_y);
     void updateCachedDepth();
@@ -198,14 +198,14 @@ protected:
   struct PrecisionRecord
   {
     MandelMath::NumberType ntype;
-    JuliaPoint<MandelMath::number_a *> wtiPoint;
+    Orbit orbit;
+    JuliaPoint<MandelMath::number_any> wtiPoint;
     Params params;
     Position position;
-    Orbit orbit;
-    MandelMath::number<MandelMath::number_a *> tmp_place;
+    MandelMath::number<MandelMath::number_any> tmp_place;
     void *points; //array<double|float128|...>[width*height]
     int threadCount;
-    MandelEvaluator<MandelMath::number_a *> **threads;
+    MandelEvaluator<MandelMath::number_any> **threads;
     PrecisionRecord(MandelMath::NumberType ntype, PrecisionRecord *source, JuliaModel *doneReceiver);
     ~PrecisionRecord();
     //constexpr static int LEN=Params::LEN+JuliaPoint<MandelMath::number_a *>::LEN+Position::LEN+Orbit::LEN  +4   +1;
