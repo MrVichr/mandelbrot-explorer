@@ -205,7 +205,12 @@ protected:
     MandelMath::number<MandelMath::number_any> tmp_place;
     void *points; //array<double|float128|...>[width*height]
     int threadCount;
-    MandelEvaluator<MandelMath::number_any> **threads;
+    std::variant<std::nullptr_t,
+                 MandelEvaluator<double> **,
+                 MandelEvaluator<__float128> **,
+                 MandelEvaluator<MandelMath::dd_real> **,
+                 MandelEvaluator<MandelMath::dq_real> **,
+                 MandelEvaluator<MandelMath::real642> **> threads;
     PrecisionRecord(MandelMath::NumberType ntype, PrecisionRecord *source, JuliaModel *doneReceiver);
     ~PrecisionRecord();
     //constexpr static int LEN=Params::LEN+JuliaPoint<MandelMath::number_a *>::LEN+Position::LEN+Orbit::LEN  +4   +1;

@@ -50,10 +50,15 @@ JuliaModel::~JuliaModel()
 
 void JuliaModel::startRunning()
 {
-  for (int t=0; t<precisionRecord->threadCount; t++)
-  {
-    precisionRecord->threads[t]->startRunning();
-  }
+  MandelMath::visit([](auto &threads, int threadCount){
+      if constexpr (!std::is_same_v<std::decay_t<decltype(threads)>, std::nullptr_t>)
+      {
+        for (int t=0; t<threadCount; t++)
+        {
+          threads[t]->startRunning();
+        }
+      };
+  }, precisionRecord->threads, precisionRecord->threadCount);
 }
 
 QString JuliaModel::pixelXtoRE_str(int x)
@@ -382,46 +387,16 @@ void JuliaModel::recomputeRoot(int max_effort)
 
   precisionRecord->params.root.assign(evaluator.currentParams.julia.root);
 
-  switch (precisionRecord->ntype)
-  {
-    case MandelMath::NumberType::typeEmpty:
-    case MandelMath::NumberType::typeDouble:
-      for (int t=0; t<precisionRecord->threadCount; t++)
+  MandelMath::visit([](auto &threads, int threadCount, MandelEvaluator<MandelMath::number_any> &evaluator){
+      if constexpr (!std::is_same_v<std::decay_t<decltype(threads)>, std::nullptr_t>)
       {
-        MandelEvaluator<double> *athread=((MandelEvaluator<double> *)precisionRecord->threads[t]);
-        athread->currentParams.julia.assign_across(evaluator.currentParams.julia);
-      }
-      break;
-    case MandelMath::NumberType::typeFloat128:
-      for (int t=0; t<precisionRecord->threadCount; t++)
-      {
-        MandelEvaluator<__float128> *athread=((MandelEvaluator<__float128> *)precisionRecord->threads[t]);
-        athread->currentParams.julia.assign_across(evaluator.currentParams.julia);
-      }
-      break;
-    case MandelMath::NumberType::typeDDouble:
-      for (int t=0; t<precisionRecord->threadCount; t++)
-      {
-        MandelEvaluator<MandelMath::dd_real> *athread=((MandelEvaluator<MandelMath::dd_real> *)precisionRecord->threads[t]);
-        athread->currentParams.julia.assign_across(evaluator.currentParams.julia);
-      }
-      break;
-    case MandelMath::NumberType::typeQDouble:
-      for (int t=0; t<precisionRecord->threadCount; t++)
-      {
-        MandelEvaluator<MandelMath::dq_real> *athread=((MandelEvaluator<MandelMath::dq_real> *)precisionRecord->threads[t]);
-        athread->currentParams.julia.assign_across(evaluator.currentParams.julia);
-      }
-      break;
-    case MandelMath::NumberType::typeReal642:
-      for (int t=0; t<precisionRecord->threadCount; t++)
-      {
-        MandelEvaluator<MandelMath::real642> *athread=((MandelEvaluator<MandelMath::real642> *)precisionRecord->threads[t]);
-        athread->currentParams.julia.assign_across(evaluator.currentParams.julia);
-      }
-      break;
-  }
-
+        //using Evaluator=std::remove_pointer_t<std::remove_pointer_t<std::remove_reference_t<decltype(threads)>>>;
+        for (int t=0; t<threadCount; t++)
+        {
+          threads[t]->currentParams.julia.assign_across(evaluator.currentParams.julia);
+        }
+      };
+  }, precisionRecord->threads, precisionRecord->threadCount, evaluator);
 }
 
 void JuliaModel::setParams(ShareableViewInfo viewInfo)
@@ -764,11 +739,16 @@ void JuliaModel::startNewEpoch()
     if (precisionRecord->threads[t]->currentParams.pixelIndex<0)
       giveWork(precisionRecord->threads[t]);
 #else
-  for (int t=0; t<precisionRecord->threadCount; t++)
-  {
-    //giveWorkToThread(precisionRecord->threads[t]);
-    precisionRecord->threads[t]->workIfEpoch=epoch;
-  }
+  MandelMath::visit([](auto &threads, int threadCount, int epoch){
+      if constexpr (!std::is_same_v<std::decay_t<decltype(threads)>, std::nullptr_t>)
+      {
+        for (int t=0; t<threadCount; t++)
+        {
+          //giveWorkToThread(precisionRecord->threads[t]);
+          threads[t]->workIfEpoch=epoch;
+        }
+      };
+  }, precisionRecord->threads, precisionRecord->threadCount, epoch);
   _threadsWorking+=precisionRecord->threadCount;
   emit triggerJuliaThreaded(epoch, precisionRecord->params.period); //::invokeMethod cannot pass parameters, but ::connect can
 #endif
@@ -2523,7 +2503,7 @@ JuliaModel::PrecisionRecord::PrecisionRecord(MandelMath::NumberType ntype, Preci
   params(&orbit.evaluator.tmp, source?&source->params:nullptr),
   position(&orbit.evaluator.tmp, source?&source->position:nullptr),
   tmp_place(ntype),
-  threadCount(source?source->threadCount:0), threads(nullptr)
+  threadCount(source?source->threadCount:0), threads()
 {
   if (threadCount<=0)
   { //first init
@@ -2536,133 +2516,74 @@ JuliaModel::PrecisionRecord::PrecisionRecord(MandelMath::NumberType ntype, Preci
   {
     case MandelMath::NumberType::typeEmpty:
     case MandelMath::NumberType::typeDouble:
-      threads=(MandelEvaluator<MandelMath::number_any> **)new MandelEvaluator<double> *[threadCount];
-      for (int t=0; t<threadCount; t++)
-      {
-        MandelEvaluator<double> *thread=new MandelEvaluator<double>(ntype, source==nullptr);
-        threads[t]=(MandelEvaluator<MandelMath::number_any> *)thread;
-        thread->threaded.give=[doneReceiver](MandelEvaluator<double> *me)
-            {
-              return doneReceiver->giveWorkThreaded(me);
-            };
-        thread->threaded.doneJulia=[doneReceiver](MandelEvaluator<double> *me, bool giveWork)
-            {
-              return doneReceiver->doneWorkThreaded(me, giveWork);
-            };
-        QObject::connect(&threads[t]->thread, &MandelEvaluatorThread::doneJuliaThreaded,
-                         doneReceiver, &JuliaModel::doneWorkInThread,
-                         Qt::ConnectionType::QueuedConnection);
-        QObject::connect(doneReceiver, &JuliaModel::triggerJuliaThreaded,
-                         &threads[t]->thread, &MandelEvaluatorThread::doJuliaThreaded,
-                         Qt::ConnectionType::QueuedConnection);
-      }
+      threads=new MandelEvaluator<double> *[threadCount];
       break;
+//somehow...
 #if !NUMBER_DOUBLE_ONLY
     case MandelMath::NumberType::typeFloat128:
-      threads=(MandelEvaluator<MandelMath::number_any> **)new MandelEvaluator<__float128> *[threadCount];
-      for (int t=0; t<threadCount; t++)
-      {
-        MandelEvaluator<__float128> *thread=new MandelEvaluator<__float128>(ntype, source==nullptr);
-        threads[t]=(MandelEvaluator<MandelMath::number_any> *)thread;
-        thread->threaded.give=[doneReceiver](MandelEvaluator<__float128> *me)
-            {
-              return doneReceiver->giveWorkThreaded<__float128>(me);
-            };
-        thread->threaded.doneJulia=[doneReceiver](MandelEvaluator<__float128> *me, bool giveWork)
-            {
-              return doneReceiver->doneWorkThreaded<__float128>(me, giveWork);
-            };
-        QObject::connect(&threads[t]->thread, &MandelEvaluatorThread::doneJuliaThreaded,
-                         doneReceiver, &JuliaModel::doneWorkInThread,
-                         Qt::ConnectionType::QueuedConnection);
-        QObject::connect(doneReceiver, &JuliaModel::triggerJuliaThreaded,
-                         &threads[t]->thread, &MandelEvaluatorThread::doJuliaThreaded,
-                         Qt::ConnectionType::QueuedConnection);
-      }
+      threads=new MandelEvaluator<__float128> *[threadCount];
       break;
     case MandelMath::NumberType::typeDDouble:
-      threads=(MandelEvaluator<MandelMath::number_any> **)new MandelEvaluator<MandelMath::dd_real> *[threadCount];
-      for (int t=0; t<threadCount; t++)
-      {
-        MandelEvaluator<MandelMath::dd_real> *thread=new MandelEvaluator<MandelMath::dd_real>(ntype, source==nullptr);
-        threads[t]=(MandelEvaluator<MandelMath::number_any> *)thread;
-        thread->threaded.give=[doneReceiver](MandelEvaluator<MandelMath::dd_real> *me)
-            {
-              return doneReceiver->giveWorkThreaded<MandelMath::dd_real>(me);
-            };
-        thread->threaded.doneJulia=[doneReceiver](MandelEvaluator<MandelMath::dd_real> *me, bool giveWork)
-            {
-              return doneReceiver->doneWorkThreaded<MandelMath::dd_real>(me, giveWork);
-            };
-        QObject::connect(&threads[t]->thread, &MandelEvaluatorThread::doneJuliaThreaded,
-                         doneReceiver, &JuliaModel::doneWorkInThread,
-                         Qt::ConnectionType::QueuedConnection);
-        QObject::connect(doneReceiver, &JuliaModel::triggerJuliaThreaded,
-                         &threads[t]->thread, &MandelEvaluatorThread::doJuliaThreaded,
-                         Qt::ConnectionType::QueuedConnection);
-      }
+      threads=new MandelEvaluator<MandelMath::dd_real> *[threadCount];
       break;
     case MandelMath::NumberType::typeQDouble:
-      threads=(MandelEvaluator<MandelMath::number_any> **)new MandelEvaluator<MandelMath::dq_real> *[threadCount];
-      for (int t=0; t<threadCount; t++)
-      {
-        MandelEvaluator<MandelMath::dq_real> *thread=new MandelEvaluator<MandelMath::dq_real>(ntype, source==nullptr);
-        threads[t]=(MandelEvaluator<MandelMath::number_any> *)thread;
-        thread->threaded.give=[doneReceiver](MandelEvaluator<MandelMath::dq_real> *me)
-            {
-              return doneReceiver->giveWorkThreaded<MandelMath::dq_real>(me);
-            };
-        thread->threaded.doneJulia=[doneReceiver](MandelEvaluator<MandelMath::dq_real> *me, bool giveWork)
-            {
-              return doneReceiver->doneWorkThreaded<MandelMath::dq_real>(me, giveWork);
-            };
-        QObject::connect(&threads[t]->thread, &MandelEvaluatorThread::doneJuliaThreaded,
-                         doneReceiver, &JuliaModel::doneWorkInThread,
-                         Qt::ConnectionType::QueuedConnection);
-        QObject::connect(doneReceiver, &JuliaModel::triggerJuliaThreaded,
-                         &threads[t]->thread, &MandelEvaluatorThread::doJuliaThreaded,
-                         Qt::ConnectionType::QueuedConnection);
-      }
+      threads=new MandelEvaluator<MandelMath::dq_real> *[threadCount];
       break;
     case MandelMath::NumberType::typeReal642:
-      threads=(MandelEvaluator<MandelMath::number_any> **)new MandelEvaluator<MandelMath::real642> *[threadCount];
-      for (int t=0; t<threadCount; t++)
-      {
-        MandelEvaluator<MandelMath::real642> *thread=new MandelEvaluator<MandelMath::real642>(ntype, source==nullptr);
-        threads[t]=(MandelEvaluator<MandelMath::number_any> *)thread;
-        thread->threaded.give=[doneReceiver](MandelEvaluator<MandelMath::real642> *me)
-            {
-              return doneReceiver->giveWorkThreaded<MandelMath::real642>(me);
-            };
-        thread->threaded.doneJulia=[doneReceiver](MandelEvaluator<MandelMath::real642> *me, bool giveWork)
-            {
-              return doneReceiver->doneWorkThreaded<MandelMath::real642>(me, giveWork);
-            };
-        QObject::connect(&threads[t]->thread, &MandelEvaluatorThread::doneJuliaThreaded,
-                         doneReceiver, &JuliaModel::doneWorkInThread,
-                         Qt::ConnectionType::QueuedConnection);
-        QObject::connect(doneReceiver, &JuliaModel::triggerJuliaThreaded,
-                         &threads[t]->thread, &MandelEvaluatorThread::doJuliaThreaded,
-                         Qt::ConnectionType::QueuedConnection);
-      }
+      threads=new MandelEvaluator<MandelMath::real642> *[threadCount];
       break;
 #endif
   }
+  MandelMath::visit([](auto &threads, PrecisionRecord &self, JuliaModel *doneReceiver, PrecisionRecord *source){
+      for (int t=0; t<self.threadCount; t++)
+      {
+        if constexpr (!std::is_same_v<std::decay_t<decltype(threads)>, std::nullptr_t>)
+        {
+          using Evaluator=std::remove_pointer_t<std::remove_pointer_t<std::remove_reference_t<decltype(threads)>>>;
+          Evaluator *thread=new Evaluator(self.ntype, source==nullptr);
+          threads[t]=thread;
+          thread->threaded.give=[doneReceiver](Evaluator *me)
+          {
+            return doneReceiver->giveWorkThreaded(me);
+          };
+          thread->threaded.doneJulia=[doneReceiver](Evaluator *me, bool giveWork)
+          {
+            return doneReceiver->doneWorkThreaded(me, giveWork);
+          };
+          QObject::connect(&thread->thread, &MandelEvaluatorThread::doneJuliaThreaded,
+                           doneReceiver, &JuliaModel::doneWorkInThread,
+                           Qt::ConnectionType::QueuedConnection);
+          QObject::connect(doneReceiver, &JuliaModel::triggerJuliaThreaded,
+                           &thread->thread, &MandelEvaluatorThread::doJuliaThreaded,
+                           Qt::ConnectionType::QueuedConnection);
+        }
+      }
+    }, threads, *this, doneReceiver, source);
 }
 
 JuliaModel::PrecisionRecord::~PrecisionRecord()
 {
-  for (int t=threadCount-1; t>=0; t--)
-  {
-    threads[t]->workIfEpoch=-1;
-    threads[t]->thread.quit();
-  }
-  for (int t=threadCount-1; t>=0; t--)
-  {
-    threads[t]->thread.wait(1000);
-    delete threads[t];
-  }
-  delete[] threads;
+  MandelMath::visit([](auto &threads, int threadCount){
+      if constexpr (!std::is_same_v<std::decay_t<decltype(threads)>, std::nullptr_t>)
+      {
+        for (int t=threadCount-1; t>=0; t--)
+        {
+            threads[t]->workIfEpoch=-1;
+            threads[t]->thread.quit();
+        }
+      };
+    }, threads, threadCount);
+  MandelMath::visit([](auto &threads, int threadCount){
+      if constexpr (!std::is_same_v<std::decay_t<decltype(threads)>, std::nullptr_t>)
+      {
+        for (int t=threadCount-1; t>=0; t--)
+        {
+          threads[t]->thread.wait(1000);
+          delete threads[t];
+        }
+        delete[] threads;
+      };
+    }, threads, threadCount);
   threadCount=0;
   threads=nullptr;
 }

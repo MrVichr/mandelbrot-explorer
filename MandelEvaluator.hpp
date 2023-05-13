@@ -448,6 +448,20 @@ public:
   MandelEvaluatorThread thread;
   //WORKER_MULTI *currentWorker;
   MandelMath::NumberType ntype; //typeEmpty for number_any ?
+
+  int workIfEpoch;
+  int pointsComputed;
+  qint64 totalNewtonIterations;
+  QElapsedTimer timeThreaded;
+  qint64 timeThreadedTotal;
+  QElapsedTimer timeOuter;
+  qint64 timeOuterTotal;
+  QElapsedTimer timeInner;
+  qint64 timeInnerTotal;
+  QElapsedTimer timeInvoke;
+  qint64 timeInvokePostTotal;
+  qint64 timeInvokeSwitchTotal;
+
   typename MandelMath::complex<BASE>::Scratchpad tmp;
   //from here on, layout is different with BASE -> ntype before tmp
   MandelEvaluator(MandelMath::NumberType ntype, bool dontRun);
@@ -462,19 +476,6 @@ public:
   //MandelMath::number_worker::Type currentType;
   //MandelMath::worker_multi::Allocator *currentAllocator;
   //void switchType(MandelMath::number_worker *worker);
-  int workIfEpoch;
-  int pointsComputed;
-  qint64 totalNewtonIterations;
-  QElapsedTimer timeThreaded;
-  qint64 timeThreadedTotal;
-  QElapsedTimer timeOuter;
-  qint64 timeOuterTotal;
-  QElapsedTimer timeInner;
-  qint64 timeInnerTotal;
-  QElapsedTimer timeInvoke;
-  qint64 timeInvokePostTotal;
-  qint64 timeInvokeSwitchTotal;
-
   struct ComputeParams
   {
     /*enum IndexIntoWorker

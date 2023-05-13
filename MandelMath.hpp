@@ -39,6 +39,64 @@ bool enum_is_one_of(E value)
   return ((value==vals) || ...);
 }
 
+template<int N, typename... Ts> using NthTypeOf =
+    typename std::tuple_element<N, std::tuple<Ts...>>::type;
+template<typename ...Options>
+auto visit(auto callable, std::variant<Options...> &vari, auto &...params)
+{
+  //using cases=std::make_index_sequence<sizeof...(Options)>;
+  auto index=vari.index(); //size_t
+  if constexpr (sizeof...(Options)>0)
+      if (index==0) return callable(std::get<0>(vari), params...); //__detail::__variant::__get<_Np>(__v);
+  if constexpr (sizeof...(Options)>1)
+      //if (index==1) return callable(std::get<1>(vari), params...);
+      if (index==1) return callable((NthTypeOf<1, Options...> &)vari, params...);
+  if constexpr (sizeof...(Options)>2)
+      if (index==2) return callable(std::get<2>(vari), params...);
+  if constexpr (sizeof...(Options)>3)
+      if (index==3) return callable(std::get<3>(vari), params...);
+  if constexpr (sizeof...(Options)>4)
+      if (index==4) return callable(std::get<4>(vari), params...);
+  if constexpr (sizeof...(Options)>5)
+      if (index==5) return callable(std::get<5>(vari), params...);
+  if constexpr (sizeof...(Options)>6)
+      if (index==6) return callable(std::get<6>(vari), params...);
+  using RT=decltype(callable((NthTypeOf<0, Options...> &)vari, params...));
+  [[unlikely]]
+  if constexpr (std::is_same_v<RT, std::strong_ordering>)
+      return std::strong_ordering::equal; //even more failure from C++ commitee
+  else
+      return RT();
+}
+
+template<typename ...Options>
+auto visit(auto callable, std::variant<Options...> const &vari, auto &...params)
+{
+  //using cases=std::make_index_sequence<sizeof...(Options)>;
+  auto index=vari.index(); //size_t
+  if constexpr (sizeof...(Options)>0)
+      if (index==0) return callable(std::get<0>(vari), params...); //__detail::__variant::__get<_Np>(__v);
+  if constexpr (sizeof...(Options)>1)
+      //if (index==1) return callable(std::get<1>(vari), params...);
+      if (index==1) return callable((NthTypeOf<1, Options...> const &)vari, params...);
+  if constexpr (sizeof...(Options)>2)
+      if (index==2) return callable(std::get<2>(vari), params...);
+  if constexpr (sizeof...(Options)>3)
+      if (index==3) return callable(std::get<3>(vari), params...);
+  if constexpr (sizeof...(Options)>4)
+      if (index==4) return callable(std::get<4>(vari), params...);
+  if constexpr (sizeof...(Options)>5)
+      if (index==5) return callable(std::get<5>(vari), params...);
+  if constexpr (sizeof...(Options)>6)
+      if (index==6) return callable(std::get<6>(vari), params...);
+  using RT=decltype(callable((NthTypeOf<0, Options...> &)vari, params...));
+  [[unlikely]]
+  if constexpr (std::is_same_v<RT, std::strong_ordering>)
+      return std::strong_ordering::equal; //even more failure from C++ commitee
+  else
+      return RT();
+}
+
 //never seen before... yet another failure from the C++ commitee
 static_assert(sizeof(std::strong_ordering::less)==1, "change the following cast");
 constexpr int strong_ordering_cast(std::strong_ordering val) { return std::bit_cast<int8_t>(val); }

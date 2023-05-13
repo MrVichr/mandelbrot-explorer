@@ -155,13 +155,18 @@ protected:
   {
     MandelMath::NumberType ntype;
     Orbit orbit;
-    LaguerrePoint<MandelMath::number_a *> wtiPoint;
+    LaguerrePoint<MandelMath::number_any> wtiPoint;
     Params params;
     Position position;
     MandelMath::number<MandelMath::number_any> tmp_place;
     void *points; //array<double|float128|...>[width*height]
     int threadCount;
-    MandelEvaluator<MandelMath::number_a *> **threads;
+    std::variant<std::nullptr_t,
+                 MandelEvaluator<double> **,
+                 MandelEvaluator<__float128> **,
+                 MandelEvaluator<MandelMath::dd_real> **,
+                 MandelEvaluator<MandelMath::dq_real> **,
+                 MandelEvaluator<MandelMath::real642> **> threads;
     PrecisionRecord(MandelMath::NumberType ntype, PrecisionRecord *source, LaguerreModel *doneReceiver);
     ~PrecisionRecord();
     //constexpr static int LEN=Params::LEN+LaguerrePoint<MandelMath::number_a *>::LEN+Position::LEN+Orbit::LEN  +4   +1;

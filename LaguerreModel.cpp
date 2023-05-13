@@ -43,10 +43,15 @@ LaguerreModel::~LaguerreModel()
 
 void LaguerreModel::startRunning()
 {
-  for (int t=0; t<precisionRecord->threadCount; t++)
-  {
-    precisionRecord->threads[t]->startRunning();
-  }
+  MandelMath::visit([](auto &threads, int threadCount){
+      if constexpr (!std::is_same_v<std::decay_t<decltype(threads)>, std::nullptr_t>)
+      {
+        for (int t=0; t<threadCount; t++)
+        {
+          threads[t]->startRunning();
+        }
+      };
+  }, precisionRecord->threads, precisionRecord->threadCount);
 }
 
 QString LaguerreModel::pixelXtoRE_str(int x)
@@ -244,45 +249,16 @@ void LaguerreModel::recomputeRoot(int max_effort)
     precisionRecord->params.root.zero(0, 0);
   }
 
-  switch (precisionRecord->ntype)
-  {
-    case MandelMath::NumberType::typeEmpty:
-    case MandelMath::NumberType::typeDouble:
-      for (int t=0; t<precisionRecord->threadCount; t++)
+  MandelMath::visit([](auto &threads, int threadCount, MandelEvaluator<MandelMath::number_any> &evaluator){
+      if constexpr (!std::is_same_v<std::decay_t<decltype(threads)>, std::nullptr_t>)
       {
-        MandelEvaluator<double> *athread=((MandelEvaluator<double> *)precisionRecord->threads[t]);
-        athread->currentParams.mandel.assign_across(precisionRecord->orbit.evaluator.currentParams.mandel);
-      }
-      break;
-    case MandelMath::NumberType::typeFloat128:
-      for (int t=0; t<precisionRecord->threadCount; t++)
-      {
-        MandelEvaluator<__float128> *athread=((MandelEvaluator<__float128> *)precisionRecord->threads[t]);
-        athread->currentParams.mandel.assign_across(precisionRecord->orbit.evaluator.currentParams.mandel);
-      }
-      break;
-    case MandelMath::NumberType::typeDDouble:
-      for (int t=0; t<precisionRecord->threadCount; t++)
-      {
-        MandelEvaluator<MandelMath::dd_real> *athread=((MandelEvaluator<MandelMath::dd_real> *)precisionRecord->threads[t]);
-        athread->currentParams.mandel.assign_across(precisionRecord->orbit.evaluator.currentParams.mandel);
-      }
-      break;
-    case MandelMath::NumberType::typeQDouble:
-      for (int t=0; t<precisionRecord->threadCount; t++)
-      {
-        MandelEvaluator<MandelMath::dq_real> *athread=((MandelEvaluator<MandelMath::dq_real> *)precisionRecord->threads[t]);
-        athread->currentParams.mandel.assign_across(precisionRecord->orbit.evaluator.currentParams.mandel);
-      }
-      break;
-    case MandelMath::NumberType::typeReal642:
-      for (int t=0; t<precisionRecord->threadCount; t++)
-      {
-        MandelEvaluator<MandelMath::real642> *athread=((MandelEvaluator<MandelMath::real642> *)precisionRecord->threads[t]);
-        athread->currentParams.mandel.assign_across(precisionRecord->orbit.evaluator.currentParams.mandel);
-      }
-      break;
-  }
+        //using Evaluator=std::remove_pointer_t<std::remove_pointer_t<std::remove_reference_t<decltype(threads)>>>;
+        for (int t=0; t<threadCount; t++)
+        {
+          threads[t]->currentParams.mandel.assign_across(evaluator.currentParams.mandel);
+        }
+      };
+  }, precisionRecord->threads, precisionRecord->threadCount, evaluator);
 }
 
 void LaguerreModel::setParams(ShareableViewInfo viewInfo)
@@ -627,11 +603,16 @@ void LaguerreModel::startNewEpoch()
     if (precisionRecord->threads[t]->currentParams.pixelIndex<0)
       giveWork(precisionRecord->threads[t]);
 #else
-  for (int t=0; t<precisionRecord->threadCount; t++)
-  {
-    //giveWorkToThread(precisionRecord->threads[t]);
-    precisionRecord->threads[t]->workIfEpoch=epoch;
-  }
+  MandelMath::visit([](auto &threads, int threadCount, int epoch){
+      if constexpr (!std::is_same_v<std::decay_t<decltype(threads)>, std::nullptr_t>)
+      {
+        for (int t=0; t<threadCount; t++)
+        {
+          //giveWorkToThread(precisionRecord->threads[t]);
+          threads[t]->workIfEpoch=epoch;
+        }
+      };
+  }, precisionRecord->threads, precisionRecord->threadCount, epoch);
   _threadsWorking+=precisionRecord->threadCount;
   emit triggerLaguerreThreaded(epoch, precisionRecord->params.period); //::invokeMethod cannot pass parameters, but ::connect can
 #endif
@@ -1651,7 +1632,7 @@ LaguerreModel::PrecisionRecord::PrecisionRecord(MandelMath::NumberType ntype, Pr
   params(&orbit.evaluator.tmp, source?&source->params:nullptr),
   position(&orbit.evaluator.tmp, source?&source->position:nullptr),
   tmp_place(ntype),
-  threadCount(source?source->threadCount:0), threads(nullptr)
+  threadCount(source?source->threadCount:0), threads()
 {
   if (threadCount<=0)
   { //first init
@@ -1662,135 +1643,76 @@ LaguerreModel::PrecisionRecord::PrecisionRecord(MandelMath::NumberType ntype, Pr
   };
   switch (ntype)
   {
-    case MandelMath::NumberType::typeEmpty:
-    case MandelMath::NumberType::typeDouble:
-      threads=(MandelEvaluator<MandelMath::number_any> **)new MandelEvaluator<double> *[threadCount];
-      for (int t=0; t<threadCount; t++)
-      {
-        MandelEvaluator<double> *thread=new MandelEvaluator<double>(ntype, source==nullptr);
-        threads[t]=(MandelEvaluator<MandelMath::number_any> *)thread;
-        thread->threaded.give=[doneReceiver](MandelEvaluator<double> *me)
-            {
-              return doneReceiver->giveWorkThreaded(me);
-            };
-        thread->threaded.doneLaguerre=[doneReceiver](MandelEvaluator<double> *me, int result, bool giveWork)
-            {
-              return doneReceiver->doneWorkThreaded(me, result, giveWork);
-            };
-        QObject::connect(&threads[t]->thread, &MandelEvaluatorThread::doneLaguerreThreaded,
-                         doneReceiver, &LaguerreModel::doneWorkInThread,
-                         Qt::ConnectionType::QueuedConnection);
-        QObject::connect(doneReceiver, &LaguerreModel::triggerLaguerreThreaded,
-                         &threads[t]->thread, &MandelEvaluatorThread::doLaguerreThreaded,
-                         Qt::ConnectionType::QueuedConnection);
-      }
-      break;
+  case MandelMath::NumberType::typeEmpty:
+  case MandelMath::NumberType::typeDouble:
+    threads=new MandelEvaluator<double> *[threadCount];
+    break;
+//somehow...
 #if !NUMBER_DOUBLE_ONLY
-    case MandelMath::NumberType::typeFloat128:
-      threads=(MandelEvaluator<MandelMath::number_any> **)new MandelEvaluator<__float128> *[threadCount];
-      for (int t=0; t<threadCount; t++)
-      {
-        MandelEvaluator<__float128> *thread=new MandelEvaluator<__float128>(ntype, source==nullptr);
-        threads[t]=(MandelEvaluator<MandelMath::number_any> *)thread;
-        thread->threaded.give=[doneReceiver](MandelEvaluator<__float128> *me)
-            {
-              return doneReceiver->giveWorkThreaded<__float128>(me);
-            };
-        thread->threaded.doneLaguerre=[doneReceiver](MandelEvaluator<__float128> *me, int result, bool giveWork)
-            {
-              return doneReceiver->doneWorkThreaded<__float128>(me, result, giveWork);
-            };
-        QObject::connect(&threads[t]->thread, &MandelEvaluatorThread::doneLaguerreThreaded,
-                         doneReceiver, &LaguerreModel::doneWorkInThread,
-                         Qt::ConnectionType::QueuedConnection);
-        QObject::connect(doneReceiver, &LaguerreModel::triggerLaguerreThreaded,
-                         &threads[t]->thread, &MandelEvaluatorThread::doLaguerreThreaded,
-                         Qt::ConnectionType::QueuedConnection);
-      }
-      break;
-    case MandelMath::NumberType::typeDDouble:
-      threads=(MandelEvaluator<MandelMath::number_any> **)new MandelEvaluator<MandelMath::dd_real> *[threadCount];
-      for (int t=0; t<threadCount; t++)
-      {
-        MandelEvaluator<MandelMath::dd_real> *thread=new MandelEvaluator<MandelMath::dd_real>(ntype, source==nullptr);
-        threads[t]=(MandelEvaluator<MandelMath::number_any> *)thread;
-        thread->threaded.give=[doneReceiver](MandelEvaluator<MandelMath::dd_real> *me)
-            {
-              return doneReceiver->giveWorkThreaded<MandelMath::dd_real>(me);
-            };
-        thread->threaded.doneLaguerre=[doneReceiver](MandelEvaluator<MandelMath::dd_real> *me, int result, bool giveWork)
-            {
-              return doneReceiver->doneWorkThreaded<MandelMath::dd_real>(me, result, giveWork);
-            };
-        QObject::connect(&threads[t]->thread, &MandelEvaluatorThread::doneLaguerreThreaded,
-                         doneReceiver, &LaguerreModel::doneWorkInThread,
-                         Qt::ConnectionType::QueuedConnection);
-        QObject::connect(doneReceiver, &LaguerreModel::triggerLaguerreThreaded,
-                         &threads[t]->thread, &MandelEvaluatorThread::doLaguerreThreaded,
-                         Qt::ConnectionType::QueuedConnection);
-      }
-      break;
-    case MandelMath::NumberType::typeQDouble:
-      threads=(MandelEvaluator<MandelMath::number_any> **)new MandelEvaluator<MandelMath::dq_real> *[threadCount];
-      for (int t=0; t<threadCount; t++)
-      {
-        MandelEvaluator<MandelMath::dq_real> *thread=new MandelEvaluator<MandelMath::dq_real>(ntype, source==nullptr);
-        threads[t]=(MandelEvaluator<MandelMath::number_any> *)thread;
-        thread->threaded.give=[doneReceiver](MandelEvaluator<MandelMath::dq_real> *me)
-            {
-              return doneReceiver->giveWorkThreaded<MandelMath::dq_real>(me);
-            };
-        thread->threaded.doneLaguerre=[doneReceiver](MandelEvaluator<MandelMath::dq_real> *me, int result, bool giveWork)
-            {
-              return doneReceiver->doneWorkThreaded<MandelMath::dq_real>(me, result, giveWork);
-            };
-        QObject::connect(&threads[t]->thread, &MandelEvaluatorThread::doneLaguerreThreaded,
-                         doneReceiver, &LaguerreModel::doneWorkInThread,
-                         Qt::ConnectionType::QueuedConnection);
-        QObject::connect(doneReceiver, &LaguerreModel::triggerLaguerreThreaded,
-                         &threads[t]->thread, &MandelEvaluatorThread::doLaguerreThreaded,
-                         Qt::ConnectionType::QueuedConnection);
-      }
-      break;
-    case MandelMath::NumberType::typeReal642:
-      threads=(MandelEvaluator<MandelMath::number_any> **)new MandelEvaluator<MandelMath::real642> *[threadCount];
-      for (int t=0; t<threadCount; t++)
-      {
-        MandelEvaluator<MandelMath::real642> *thread=new MandelEvaluator<MandelMath::real642>(ntype, source==nullptr);
-        threads[t]=(MandelEvaluator<MandelMath::number_any> *)thread;
-        thread->threaded.give=[doneReceiver](MandelEvaluator<MandelMath::real642> *me)
-            {
-              return doneReceiver->giveWorkThreaded<MandelMath::real642>(me);
-            };
-        thread->threaded.doneLaguerre=[doneReceiver](MandelEvaluator<MandelMath::real642> *me, int result, bool giveWork)
-            {
-              return doneReceiver->doneWorkThreaded<MandelMath::real642>(me, result, giveWork);
-            };
-        QObject::connect(&threads[t]->thread, &MandelEvaluatorThread::doneLaguerreThreaded,
-                         doneReceiver, &LaguerreModel::doneWorkInThread,
-                         Qt::ConnectionType::QueuedConnection);
-        QObject::connect(doneReceiver, &LaguerreModel::triggerLaguerreThreaded,
-                         &threads[t]->thread, &MandelEvaluatorThread::doLaguerreThreaded,
-                         Qt::ConnectionType::QueuedConnection);
-      }
-      break;
+  case MandelMath::NumberType::typeFloat128:
+    threads=new MandelEvaluator<__float128> *[threadCount];
+    break;
+  case MandelMath::NumberType::typeDDouble:
+    threads=new MandelEvaluator<MandelMath::dd_real> *[threadCount];
+    break;
+  case MandelMath::NumberType::typeQDouble:
+    threads=new MandelEvaluator<MandelMath::dq_real> *[threadCount];
+    break;
+  case MandelMath::NumberType::typeReal642:
+    threads=new MandelEvaluator<MandelMath::real642> *[threadCount];
+    break;
 #endif
   }
+  MandelMath::visit([](auto &threads, PrecisionRecord &self, LaguerreModel *doneReceiver, PrecisionRecord *source){
+      for (int t=0; t<self.threadCount; t++)
+      {
+        if constexpr (!std::is_same_v<std::decay_t<decltype(threads)>, std::nullptr_t>)
+        {
+          using Evaluator=std::remove_pointer_t<std::remove_pointer_t<std::remove_reference_t<decltype(threads)>>>;
+          Evaluator *thread=new Evaluator(self.ntype, source==nullptr);
+          threads[t]=thread;
+          thread->threaded.give=[doneReceiver](Evaluator *me)
+          {
+            return doneReceiver->giveWorkThreaded(me);
+          };
+          thread->threaded.doneLaguerre=[doneReceiver](Evaluator *me, int result, bool giveWork)
+          {
+            return doneReceiver->doneWorkThreaded(me, result, giveWork);
+          };
+          QObject::connect(&thread->thread, &MandelEvaluatorThread::doneLaguerreThreaded,
+                           doneReceiver, &LaguerreModel::doneWorkInThread,
+                           Qt::ConnectionType::QueuedConnection);
+          QObject::connect(doneReceiver, &LaguerreModel::triggerLaguerreThreaded,
+                           &thread->thread, &MandelEvaluatorThread::doLaguerreThreaded,
+                           Qt::ConnectionType::QueuedConnection);
+        }
+      }
+  }, threads, *this, doneReceiver, source);
 }
 
 LaguerreModel::PrecisionRecord::~PrecisionRecord()
 {
-  for (int t=threadCount-1; t>=0; t--)
-  {
-    threads[t]->workIfEpoch=-1;
-    threads[t]->thread.quit();
-  }
-  for (int t=threadCount-1; t>=0; t--)
-  {
-    threads[t]->thread.wait(1000);
-    delete threads[t];
-  }
-  delete[] threads;
+  MandelMath::visit([](auto &threads, int threadCount){
+      if constexpr (!std::is_same_v<std::decay_t<decltype(threads)>, std::nullptr_t>)
+      {
+          for (int t=threadCount-1; t>=0; t--)
+          {
+              threads[t]->workIfEpoch=-1;
+              threads[t]->thread.quit();
+          }
+      };
+  }, threads, threadCount);
+  MandelMath::visit([](auto &threads, int threadCount){
+      if constexpr (!std::is_same_v<std::decay_t<decltype(threads)>, std::nullptr_t>)
+      {
+          for (int t=threadCount-1; t>=0; t--)
+          {
+              threads[t]->thread.wait(1000);
+              delete threads[t];
+          }
+          delete[] threads;
+      };
+  }, threads, threadCount);
   threadCount=0;
   threads=nullptr;
 }

@@ -1809,8 +1809,8 @@ template <typename BASE>
 MandelEvaluator<BASE>::MandelEvaluator(MandelMath::NumberType ntype, bool dontRun):
   busyEpoch(0), thread((MandelEvaluator<MandelMath::number_any> *)this),
   ntype(MandelMath::NumberTypeFromBase<BASE>::ntype),
-  tmp(ntype),
   totalNewtonIterations(0),
+  tmp(ntype),
   currentParams(&tmp),
   laguerreData(&laguerreStore, &tmp),
   mandelData(&mandelDataStore, &tmp),

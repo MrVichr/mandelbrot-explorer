@@ -86,10 +86,15 @@ MandelModel::~MandelModel()
 
 void MandelModel::startRunning()
 {
-  for (int t=0; t<precisionRecord->threadCount; t++)
-  {
-    precisionRecord->threads[t]->startRunning();
-  }
+  MandelMath::visit([](auto &threads, int threadCount){
+      if constexpr (!std::is_same_v<std::decay_t<decltype(threads)>, std::nullptr_t>)
+      {
+        for (int t=0; t<threadCount; t++)
+        {
+          threads[t]->startRunning();
+        }
+      };
+  }, precisionRecord->threads, precisionRecord->threadCount);
 }
 
 QString MandelModel::pixelXtoRE_str(int x)
@@ -122,14 +127,19 @@ QString MandelModel::getTimes()
         arg((precisionRecord->threads[t]->timeInvokeSwitchTotal)/1000000000.0, 0, 'f', 3);
   */
   qint64 outer=0, inner=0, invokepost=0, invokeswitch=0, threaded=0;
-  for (int t=0; t<precisionRecord->threadCount; t++)
-  {
-    outer+=precisionRecord->threads[t]->timeOuterTotal;
-    inner+=precisionRecord->threads[t]->timeInnerTotal;
-    invokepost+=precisionRecord->threads[t]->timeInvokePostTotal;
-    invokeswitch+=precisionRecord->threads[t]->timeInvokeSwitchTotal;
-    threaded+=precisionRecord->threads[t]->timeThreadedTotal;
-  }
+  MandelMath::visit([](auto &threads, int threadCount, qint64 &outer, qint64 &inner, qint64 &invokepost, qint64 &invokeswitch, qint64 &threaded){
+      if constexpr (!std::is_same_v<std::decay_t<decltype(threads)>, std::nullptr_t>)
+      {
+        for (int t=0; t<threadCount; t++)
+        {
+          outer+=threads[t]->timeOuterTotal;
+          inner+=threads[t]->timeInnerTotal;
+          invokepost+=threads[t]->timeInvokePostTotal;
+          invokeswitch+=threads[t]->timeInvokeSwitchTotal;
+          threaded+=threads[t]->timeThreadedTotal;
+        }
+      };
+  }, precisionRecord->threads, precisionRecord->threadCount, outer, inner, invokepost, invokeswitch, threaded);
   result=QString("%1-%2,%3-%4 =%5,").
       arg((inner)/1000000000.0, 0, 'f', 3).
       arg((invokeswitch)/1000000000.0, 0, 'f', 3).
@@ -645,11 +655,16 @@ void MandelModel::startNewEpoch()
     if (precisionRecord->threads[t]->currentParams.pixelIndex<0)
       giveWork(precisionRecord->threads[t]);
 #else
-  for (int t=0; t<precisionRecord->threadCount; t++)
-  {
-    //giveWorkToThread(precisionRecord->threads[t]);
-    precisionRecord->threads[t]->workIfEpoch=epoch;
-  }
+  MandelMath::visit([](auto &threads, int threadCount, int epoch){
+      if constexpr (!std::is_same_v<std::decay_t<decltype(threads)>, std::nullptr_t>)
+      {
+        for (int t=0; t<threadCount; t++)
+        {
+          //giveWorkToThread(precisionRecord->threads[t]);
+          threads[t]->workIfEpoch=epoch;
+        }
+      };
+  }, precisionRecord->threads, precisionRecord->threadCount, epoch);
   _threadsWorking+=precisionRecord->threadCount;
   emit triggerComputeThreaded(epoch); //::invokeMethod cannot pass parameters, but ::connect can
 #endif
@@ -1040,8 +1055,16 @@ int MandelModel::writeToImage(ShareableImageWrapper image)
   //int indexOfWtiPoint, _discard_;
   {
     qint64 totalNewtons=0;
-    for (int t=0; t<precisionRecord->threadCount; t++)
-      totalNewtons+=precisionRecord->threads[t]->totalNewtonIterations;
+    MandelMath::visit([](auto &threads, int threadCount, qint64 &totalNewtons){
+        if constexpr (!std::is_same_v<std::decay_t<decltype(threads)>, std::nullptr_t>)
+        {
+          for (int t=0; t<threadCount; t++)
+          {
+            //giveWorkToThread(precisionRecord->threads[t]);
+            totalNewtons+=threads[t]->totalNewtonIterations;
+          }
+        };
+    }, precisionRecord->threads, precisionRecord->threadCount, totalNewtons);
     //indexOfWtiPoint=totalNewtons; //zoom0: 47167, zoom1: 188490, zoom2: 754210  with breaker
     (void)totalNewtons;           //       47238         188929         756264  without breaker
   }
@@ -2050,12 +2073,17 @@ MandelModel::Orbit::Bulb::~Bulb()
 {
 }
 
+template<typename B>
+struct BaseExtractor {};
+template<typename B>
+struct BaseExtractor<MandelEvaluator<B>> {typedef B ttt;};
+
 MandelModel::PrecisionRecord::PrecisionRecord(MandelMath::NumberType ntype, PrecisionRecord *source, MandelModel *doneReceiver):
   ntype(ntype), orbit(ntype), wtiPoint(nullptr, &orbit.evaluator.tmp),
   //, source?&source->orbit:nullptr),
   position(&orbit.evaluator.tmp, source?&source->position:nullptr),
   lagu_c(&orbit.evaluator.tmp), lagu_r(&orbit.evaluator.tmp), tmp_place(ntype),
-  threadCount(source?source->threadCount:0), threads(nullptr)
+  threadCount(source?source->threadCount:0), threads()
 {
   if (source)
   {
@@ -2074,145 +2102,76 @@ MandelModel::PrecisionRecord::PrecisionRecord(MandelMath::NumberType ntype, Prec
   };
   switch (ntype)
   {
-    case MandelMath::NumberType::typeEmpty:
-    case MandelMath::NumberType::typeDouble:
-      threads=(MandelEvaluator<MandelMath::number_any> **)new MandelEvaluator<double> *[threadCount];
-      for (int t=0; t<threadCount; t++)
-      {
-        MandelEvaluator<double> *thread=new MandelEvaluator<double>(ntype, source==nullptr);
-        threads[t]=(MandelEvaluator<MandelMath::number_any> *)thread;
-        //Qt not allowing parameters in invokeMethod makes it really easy... pfft
-        thread->threaded.give=[doneReceiver](MandelEvaluator<double> *me)
-            {
-              //return doneReceiver->giveWorkThreaded((MandelEvaluator<MandelMath::worker_multi_double> *)me);
-              return doneReceiver->giveWorkThreaded<double>(me);
-            };
-        thread->threaded.doneMandel=[doneReceiver](MandelEvaluator<double> *me, bool giveWork)
-            {
-              return doneReceiver->doneWorkThreaded<double>(me, giveWork);
-            };
-        QObject::connect(&thread->thread, &MandelEvaluatorThread::doneMandelThreaded,
-                         doneReceiver, &MandelModel::doneWorkInThread,
-                         Qt::ConnectionType::QueuedConnection);
-        QObject::connect(doneReceiver, &MandelModel::triggerComputeThreaded,
-                         &thread->thread, &MandelEvaluatorThread::doMandelThreaded,
-                         Qt::ConnectionType::QueuedConnection);
-      }
-      break;
+  case MandelMath::NumberType::typeEmpty:
+  case MandelMath::NumberType::typeDouble:
+    threads=new MandelEvaluator<double> *[threadCount];
+    break;
+//somehow...
 #if !NUMBER_DOUBLE_ONLY
-    case MandelMath::NumberType::typeFloat128:
-      threads=(MandelEvaluator<MandelMath::number_any> **)new MandelEvaluator<__float128> *[threadCount];
-      for (int t=0; t<threadCount; t++)
-      {
-        MandelEvaluator<__float128> *thread=new MandelEvaluator<__float128>(ntype, source==nullptr);
-        threads[t]=(MandelEvaluator<MandelMath::number_any> *)thread;
-        //Qt not allowing parameters in invokeMethod makes it really easy... pfft
-        thread->threaded.give=[doneReceiver](MandelEvaluator<__float128> *me)
-            {
-              //return doneReceiver->giveWorkThreaded((MandelEvaluator<MandelMath::worker_multi_double> *)me);
-              return doneReceiver->giveWorkThreaded<__float128>(me);
-            };
-        thread->threaded.doneMandel=[doneReceiver](MandelEvaluator<__float128> *me, bool giveWork)
-            {
-              return doneReceiver->doneWorkThreaded<__float128>(me, giveWork);
-            };
-        QObject::connect(&thread->thread, &MandelEvaluatorThread::doneMandelThreaded,
-                         doneReceiver, &MandelModel::doneWorkInThread,
-                         Qt::ConnectionType::QueuedConnection);
-        QObject::connect(doneReceiver, &MandelModel::triggerComputeThreaded,
-                         &thread->thread, &MandelEvaluatorThread::doMandelThreaded,
-                         Qt::ConnectionType::QueuedConnection);
-      }
-      break;
-    case MandelMath::NumberType::typeDDouble:
-      threads=(MandelEvaluator<MandelMath::number_any> **)new MandelEvaluator<MandelMath::dd_real> *[threadCount];
-      for (int t=0; t<threadCount; t++)
-      {
-        MandelEvaluator<MandelMath::dd_real> *thread=new MandelEvaluator<MandelMath::dd_real>(ntype, source==nullptr);
-        threads[t]=(MandelEvaluator<MandelMath::number_any> *)thread;
-        //Qt not allowing parameters in invokeMethod makes it really easy... pfft
-        thread->threaded.give=[doneReceiver](MandelEvaluator<MandelMath::dd_real> *me)
-            {
-              //return doneReceiver->giveWorkThreaded((MandelEvaluator<MandelMath::worker_multi_double> *)me);
-              return doneReceiver->giveWorkThreaded<MandelMath::dd_real>(me);
-            };
-        thread->threaded.doneMandel=[doneReceiver](MandelEvaluator<MandelMath::dd_real> *me, bool giveWork)
-            {
-              return doneReceiver->doneWorkThreaded<MandelMath::dd_real>(me, giveWork);
-            };
-        QObject::connect(&thread->thread, &MandelEvaluatorThread::doneMandelThreaded,
-                         doneReceiver, &MandelModel::doneWorkInThread,
-                         Qt::ConnectionType::QueuedConnection);
-        QObject::connect(doneReceiver, &MandelModel::triggerComputeThreaded,
-                         &thread->thread, &MandelEvaluatorThread::doMandelThreaded,
-                         Qt::ConnectionType::QueuedConnection);
-      }
-      break;
-    case MandelMath::NumberType::typeQDouble:
-      threads=(MandelEvaluator<MandelMath::number_any> **)new MandelEvaluator<MandelMath::dq_real> *[threadCount];
-      for (int t=0; t<threadCount; t++)
-      {
-        MandelEvaluator<MandelMath::dq_real> *thread=new MandelEvaluator<MandelMath::dq_real>(ntype, source==nullptr);
-        threads[t]=(MandelEvaluator<MandelMath::number_any> *)thread;
-        //Qt not allowing parameters in invokeMethod makes it really easy... pfft
-        thread->threaded.give=[doneReceiver](MandelEvaluator<MandelMath::dq_real> *me)
-            {
-              //return doneReceiver->giveWorkThreaded((MandelEvaluator<MandelMath::worker_multi_double> *)me);
-              return doneReceiver->giveWorkThreaded<MandelMath::dq_real>(me);
-            };
-        thread->threaded.doneMandel=[doneReceiver](MandelEvaluator<MandelMath::dq_real> *me, bool giveWork)
-            {
-              return doneReceiver->doneWorkThreaded<MandelMath::dq_real>(me, giveWork);
-            };
-        QObject::connect(&thread->thread, &MandelEvaluatorThread::doneMandelThreaded,
-                         doneReceiver, &MandelModel::doneWorkInThread,
-                         Qt::ConnectionType::QueuedConnection);
-        QObject::connect(doneReceiver, &MandelModel::triggerComputeThreaded,
-                         &thread->thread, &MandelEvaluatorThread::doMandelThreaded,
-                         Qt::ConnectionType::QueuedConnection);
-      }
-      break;
-    case MandelMath::NumberType::typeReal642:
-      threads=(MandelEvaluator<MandelMath::number_any> **)new MandelEvaluator<MandelMath::real642> *[threadCount];
-      for (int t=0; t<threadCount; t++)
-      {
-        MandelEvaluator<MandelMath::real642> *thread=new MandelEvaluator<MandelMath::real642>(ntype, source==nullptr);
-        threads[t]=(MandelEvaluator<MandelMath::number_any> *)thread;
-        //Qt not allowing parameters in invokeMethod makes it really easy... pfft
-        thread->threaded.give=[doneReceiver](MandelEvaluator<MandelMath::real642> *me)
-            {
-              //return doneReceiver->giveWorkThreaded((MandelEvaluator<MandelMath::worker_multi_double> *)me);
-              return doneReceiver->giveWorkThreaded<MandelMath::real642>(me);
-            };
-        thread->threaded.doneMandel=[doneReceiver](MandelEvaluator<MandelMath::real642> *me, bool giveWork)
-            {
-              return doneReceiver->doneWorkThreaded<MandelMath::real642>(me, giveWork);
-            };
-        QObject::connect(&thread->thread, &MandelEvaluatorThread::doneMandelThreaded,
-                         doneReceiver, &MandelModel::doneWorkInThread,
-                         Qt::ConnectionType::QueuedConnection);
-        QObject::connect(doneReceiver, &MandelModel::triggerComputeThreaded,
-                         &thread->thread, &MandelEvaluatorThread::doMandelThreaded,
-                         Qt::ConnectionType::QueuedConnection);
-      }
-      break;
+  case MandelMath::NumberType::typeFloat128:
+    threads=new MandelEvaluator<__float128> *[threadCount];
+    break;
+  case MandelMath::NumberType::typeDDouble:
+    threads=new MandelEvaluator<MandelMath::dd_real> *[threadCount];
+    break;
+  case MandelMath::NumberType::typeQDouble:
+    threads=new MandelEvaluator<MandelMath::dq_real> *[threadCount];
+    break;
+  case MandelMath::NumberType::typeReal642:
+    threads=new MandelEvaluator<MandelMath::real642> *[threadCount];
+    break;
 #endif
   }
+  MandelMath::visit([](auto &threads, PrecisionRecord &self, MandelModel *doneReceiver, PrecisionRecord *source){
+      for (int t=0; t<self.threadCount; t++)
+      {
+        if constexpr (!std::is_same_v<std::decay_t<decltype(threads)>, std::nullptr_t>)
+        {
+          using Evaluator=std::remove_pointer_t<std::remove_pointer_t<std::remove_reference_t<decltype(threads)>>>;
+          Evaluator *thread=new Evaluator(self.ntype, source==nullptr);
+          threads[t]=thread;
+          thread->threaded.give=[doneReceiver](Evaluator *me)
+          {
+            return doneReceiver->giveWorkThreaded(me);
+          };
+          thread->threaded.doneMandel=[doneReceiver](Evaluator *me, bool giveWork)
+          {
+            return doneReceiver->doneWorkThreaded<typename BaseExtractor<Evaluator>::ttt>(me, giveWork);
+          };
+          QObject::connect(&thread->thread, &MandelEvaluatorThread::doneMandelThreaded,
+                           doneReceiver, &MandelModel::doneWorkInThread,
+                           Qt::ConnectionType::QueuedConnection);
+          QObject::connect(doneReceiver, &MandelModel::triggerComputeThreaded,
+                           &thread->thread, &MandelEvaluatorThread::doMandelThreaded,
+                           Qt::ConnectionType::QueuedConnection);
+        }
+      }
+  }, threads, *this, doneReceiver, source);
 }
 
 MandelModel::PrecisionRecord::~PrecisionRecord()
 {
-  for (int t=threadCount-1; t>=0; t--)
-  {
-    threads[t]->workIfEpoch=-1;
-    threads[t]->thread.quit();
-  }
-  for (int t=threadCount-1; t>=0; t--)
-  {
-    threads[t]->thread.wait(1000);
-    delete threads[t];
-  }
-  delete[] threads;
+  MandelMath::visit([](auto &threads, int threadCount){
+      if constexpr (!std::is_same_v<std::decay_t<decltype(threads)>, std::nullptr_t>)
+      {
+          for (int t=threadCount-1; t>=0; t--)
+          {
+              threads[t]->workIfEpoch=-1;
+              threads[t]->thread.quit();
+          }
+      };
+  }, threads, threadCount);
+  MandelMath::visit([](auto &threads, int threadCount){
+      if constexpr (!std::is_same_v<std::decay_t<decltype(threads)>, std::nullptr_t>)
+      {
+          for (int t=threadCount-1; t>=0; t--)
+          {
+              threads[t]->thread.wait(1000);
+              delete threads[t];
+          }
+          delete[] threads;
+      };
+  }, threads, threadCount);
   threadCount=0;
   threads=nullptr;
 }
