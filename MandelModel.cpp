@@ -99,8 +99,7 @@ void MandelModel::startRunning()
 
 QString MandelModel::pixelXtoRE_str(int x)
 {
-  MandelMath::number<MandelMath::number_any> num(precisionRecord->ntype);
-  num.assign(precisionRecord->position.center.re);
+  MandelMath::number<MandelMath::number_any> num(precisionRecord->position.center.re);
   num.add_double((x - imageWidth/2)*precisionRecord->position.step_size);
   QString result=num.toString();
   return result;
@@ -108,8 +107,7 @@ QString MandelModel::pixelXtoRE_str(int x)
 
 QString MandelModel::pixelYtoIM_str(int y)
 {
-  MandelMath::number<MandelMath::number_any> num(precisionRecord->ntype);
-  num.assign(precisionRecord->position.center.im);
+  MandelMath::number<MandelMath::number_any> num(precisionRecord->position.center.im);
   num.add_double((y - imageHeight/2)*precisionRecord->position.step_size);
   QString result=num.toString();
   return result;
@@ -181,7 +179,7 @@ QString MandelModel::getTextInfoGen()
     return "-";
   int orbit_x, orbit_y;
   {
-    MandelMath::number<MandelMath::number_any> tmp(precisionRecord->ntype);
+    MandelMath::number<MandelMath::number_any> tmp(&precisionRecord->orbit.evaluator.tmp);
     reimToPixel(&orbit_x, &orbit_y, precisionRecord->orbit.evaluator.currentParams.mandel.first_z, &tmp);
   }
   if ((orbit_x<0) || (orbit_x>=imageWidth) || (orbit_y<0) | (orbit_y>=imageHeight))
@@ -231,7 +229,7 @@ QString MandelModel::getTextInfoSpec()
     return "-";
   int orbit_x, orbit_y;
   {
-    MandelMath::number<MandelMath::number_any> tmp(precisionRecord->ntype);
+    MandelMath::number<MandelMath::number_any> tmp(&precisionRecord->orbit.evaluator.tmp);
     reimToPixel(&orbit_x, &orbit_y, precisionRecord->orbit.evaluator.currentParams.mandel.first_z, &tmp);
   }
   if ((orbit_x<0) || (orbit_x>=imageWidth) || (orbit_y<0) | (orbit_y>=imageHeight))
@@ -285,7 +283,7 @@ QString MandelModel::getTextInfoSpec()
 
 ShareableViewInfo MandelModel::getViewInfo()
 {
-  ShareableViewInfo result(precisionRecord->ntype);
+  ShareableViewInfo result(&precisionRecord->orbit.evaluator.tmp);
   //MandelMath::complex<MandelMath::number_any>::Scratchpad spad(precisionRecord->ntype);
   //result.worker=orbit.worker;
   result.nth_fz=precisionRecord->orbit.evaluator.mandelData.store->near0iter_1;/*precisionRecord->orbit.evaluator.currentData.store->period;
@@ -314,7 +312,7 @@ ShareableViewInfo MandelModel::getViewInfo()
 
 ShareableViewInfo MandelModel::makeViewInfo(const QVariantMap &params)
 {
-  ShareableViewInfo result(precisionRecord->ntype);
+  ShareableViewInfo result(&precisionRecord->orbit.evaluator.tmp);
   result.view.zero(params.value("viewRe", 0.0).toDouble(), params.value("viewIm", 0.0).toDouble());
   result.scale=params.value("viewZoom", 0.0).toDouble();
   result.c.zero(params.value("cRe", 0.0).toDouble(), params.value("cIm", 0.0).toDouble());
@@ -395,8 +393,8 @@ void MandelModel::transformStore(void *old_points, MandelPointStore *old_store, 
   PixelPositionTransformer ytrans=PixelPositionTransformer(inlog, new_step_log);
   PixelPositionTransformer xtrans=PixelPositionTransformer(inlog, new_step_log);
   {
-    MandelMath::number<MandelMath::number_any> tmp(old_c->im.ntype());//precisionRecord->ntype);
-    tmp.assign(old_c->im);
+    MandelMath::number<MandelMath::number_any> tmp(old_c->im);
+    //tmp.assign(old_c->im);
     tmp.sub(new_c->im); //and reversing y at the last minute
     ytrans.setShift(&tmp, new_height);
 
@@ -749,7 +747,7 @@ void MandelModel::paintOrbit(ShareableImageWrapper image, int x, int y)
   //MandelMath::worker_multi::Allocator allo(storeWorker->getAllocator(), (y*imageWidth+x)*MandelPoint::LEN, MandelPoint::LEN, nullptr);
   //MandelPoint data_(&pointStore_[y*imageWidth+x], &allo);
   //MandelPoint *data=&orbit_->evaluator.currentData;
-  MandelMath::number<MandelMath::number_any> tmp(precisionRecord->ntype);
+  MandelMath::number<MandelMath::number_any> tmp(&precisionRecord->orbit.evaluator.tmp);
   MandelPointStore *resultStore=&pointStore[y*imageWidth+x];
   if (!precisionRecord->lagu_c.is0())
   {
@@ -1910,7 +1908,7 @@ void MandelModel::selectedPrecisionChanged()
 }
 
 
-MandelModel::Position::Position(MandelMath::complex<MandelMath::number_any>::Scratchpad *spad, const Position *source):
+MandelModel::Position::Position(MandelMath::number<MandelMath::number_any>::Scratchpad *spad, const Position *source):
   center(spad)
 {
   if (source)
@@ -2063,7 +2061,7 @@ MandelModel::Orbit::~Orbit()
   evaluator.thread.wait(1000);
 }
 
-MandelModel::Orbit::Bulb::Bulb(MandelMath::complex<MandelMath::number_any>::Scratchpad *spad):
+MandelModel::Orbit::Bulb::Bulb(MandelMath::number<MandelMath::number_any>::Scratchpad *spad):
   cb_unused(spad), rb_unused(spad), xc_unused(spad),
   baseZC_unused(spad), baseCC_unused(spad), baseFz(spad)
 {
@@ -2076,13 +2074,14 @@ MandelModel::Orbit::Bulb::~Bulb()
 template<typename B>
 struct BaseExtractor {};
 template<typename B>
-struct BaseExtractor<MandelEvaluator<B>> {typedef B ttt;};
+struct BaseExtractor<MandelEvaluator<B>> {using ttt=B;};
 
 MandelModel::PrecisionRecord::PrecisionRecord(MandelMath::NumberType ntype, PrecisionRecord *source, MandelModel *doneReceiver):
   ntype(ntype), orbit(ntype), wtiPoint(nullptr, &orbit.evaluator.tmp),
   //, source?&source->orbit:nullptr),
   position(&orbit.evaluator.tmp, source?&source->position:nullptr),
-  lagu_c(&orbit.evaluator.tmp), lagu_r(&orbit.evaluator.tmp), tmp_place(ntype),
+  lagu_c(&orbit.evaluator.tmp), lagu_r(&orbit.evaluator.tmp),
+  tmp_place(&orbit.evaluator.tmp),
   threadCount(source?source->threadCount:0), threads()
 {
   if (source)
@@ -2136,7 +2135,8 @@ MandelModel::PrecisionRecord::PrecisionRecord(MandelMath::NumberType ntype, Prec
           };
           thread->threaded.doneMandel=[doneReceiver](Evaluator *me, bool giveWork)
           {
-            return doneReceiver->doneWorkThreaded<typename BaseExtractor<Evaluator>::ttt>(me, giveWork);
+            //return doneReceiver->doneWorkThreaded<typename BaseExtractor<Evaluator>::ttt>(me, giveWork);
+              return doneReceiver->doneWorkThreaded<typename Evaluator::BASE>(me, giveWork);
           };
           QObject::connect(&thread->thread, &MandelEvaluatorThread::doneMandelThreaded,
                            doneReceiver, &MandelModel::doneWorkInThread,

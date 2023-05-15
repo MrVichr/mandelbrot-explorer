@@ -63,8 +63,7 @@ void JuliaModel::startRunning()
 
 QString JuliaModel::pixelXtoRE_str(int x)
 {
-  MandelMath::number<MandelMath::number_any> num(precisionRecord->ntype);
-  num.assign(precisionRecord->position.center.re);
+  MandelMath::number<MandelMath::number_any> num(precisionRecord->position.center.re);
   num.add_double((x - imageWidth/2)*precisionRecord->position.step_size);
   QString result=num.toString();
   return result;
@@ -72,8 +71,7 @@ QString JuliaModel::pixelXtoRE_str(int x)
 
 QString JuliaModel::pixelYtoIM_str(int y)
 {
-  MandelMath::number<MandelMath::number_any> num(precisionRecord->ntype);
-  num.assign(precisionRecord->position.center.im);
+  MandelMath::number<MandelMath::number_any> num(precisionRecord->position.center.im);
   num.add_double((y - imageHeight/2)*precisionRecord->position.step_size);
   QString result=num.toString();
   return result;
@@ -126,7 +124,7 @@ QString JuliaModel::getTextInfoGen()
     return "-";
   int orbit_x, orbit_y;
   {
-    MandelMath::number<MandelMath::number_any> tmp(precisionRecord->ntype);
+    MandelMath::number<MandelMath::number_any> tmp(&precisionRecord->orbit.evaluator.tmp);
     reimToPixel(&orbit_x, &orbit_y, precisionRecord->orbit.evaluator.currentParams.julia.first_z, &tmp);
   }
   if ((orbit_x<0) || (orbit_x>=imageWidth) || (orbit_y<0) | (orbit_y>=imageHeight))
@@ -211,7 +209,7 @@ QString JuliaModel::getTextInfoSpec()
     return "-";
   int orbit_x, orbit_y;
   {
-    MandelMath::number<MandelMath::number_any> tmp(precisionRecord->ntype);
+    MandelMath::number<MandelMath::number_any> tmp(&precisionRecord->orbit.evaluator.tmp);
     reimToPixel(&orbit_x, &orbit_y, precisionRecord->orbit.evaluator.currentParams.julia.first_z, &tmp);
   }
   if ((orbit_x<0) || (orbit_x>=imageWidth) || (orbit_y<0) | (orbit_y>=imageHeight))
@@ -500,8 +498,8 @@ void JuliaModel::transformStore(void *old_points, JuliaPointStore *old_store, in
   PixelPositionTransformer ytrans(inlog, new_step_log);
   PixelPositionTransformer xtrans(inlog, new_step_log);
   {
-    MandelMath::number<MandelMath::number_any> tmp(old_c.im.ntype());//precisionRecord->ntype);
-    tmp.assign(old_c.im);
+    MandelMath::number<MandelMath::number_any> tmp(old_c.im);
+    //tmp.assign(old_c.im);
     tmp.sub(new_c.im); //and reversing y at the last minute
     ytrans.setShift(&tmp, new_height);
 
@@ -809,7 +807,7 @@ void JuliaModel::paintOrbit(ShareableImageWrapper image, int x, int y)
     default: ;
   }*/
 
-  MandelMath::number<MandelMath::number_any> tmp(precisionRecord->ntype);
+  MandelMath::number<MandelMath::number_any> tmp(&precisionRecord->orbit.evaluator.tmp);
   {
     int circ_x, circ_y;
     painter.setBrush(Qt::BrushStyle::NoBrush);
@@ -2326,7 +2324,7 @@ void JuliaModel::selectedExteriorColoringChanged()
 
 }
 
-JuliaModel::Params::Params(MandelMath::complex<MandelMath::number_any>::Scratchpad *spad, const Params *source):
+JuliaModel::Params::Params(MandelMath::number<MandelMath::number_any>::Scratchpad *spad, const Params *source):
   period(source?source->period:1), c(spad), root(spad)
 {
   if (source)
@@ -2342,7 +2340,7 @@ JuliaModel::Params::Params(MandelMath::complex<MandelMath::number_any>::Scratchp
 }
 
 
-JuliaModel::Position::Position(MandelMath::complex<MandelMath::number_any>::Scratchpad *spad, const Position *source):
+JuliaModel::Position::Position(MandelMath::number<MandelMath::number_any>::Scratchpad *spad, const Position *source):
   center(spad)
 {
   if (source)
@@ -2502,7 +2500,7 @@ JuliaModel::PrecisionRecord::PrecisionRecord(MandelMath::NumberType ntype, Preci
   ntype(ntype), orbit(ntype), wtiPoint(nullptr, &orbit.evaluator.tmp),
   params(&orbit.evaluator.tmp, source?&source->params:nullptr),
   position(&orbit.evaluator.tmp, source?&source->position:nullptr),
-  tmp_place(ntype),
+  tmp_place(&orbit.evaluator.tmp),
   threadCount(source?source->threadCount:0), threads()
 {
   if (threadCount<=0)

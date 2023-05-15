@@ -130,7 +130,7 @@ protected:
     double step_size; //TODO: should use special methods on number to add, mul and div by 2^-step_log
     int cached_center_re_mod; //(center/step) mod 32768
     int cached_center_im_mod;
-    Position(MandelMath::complex<MandelMath::number_any>::Scratchpad *spad, const Position *source);
+    Position(MandelMath::number<MandelMath::number_any>::Scratchpad *spad, const Position *source);
     ~Position();
     //void assign(Position *src);
     void setView(MandelMath::complex<MandelMath::number_any> const &c, double scale);
@@ -159,7 +159,7 @@ protected:
       MandelMath::complex<MandelMath::number_any> baseFz;
       int foundMult_;
       bool is_card_unused;
-      Bulb(MandelMath::complex<MandelMath::number_any>::Scratchpad *spad);
+      Bulb(MandelMath::number<MandelMath::number_any>::Scratchpad *spad);
       ~Bulb();
       constexpr static int LEN=12;
     } bulb;

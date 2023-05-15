@@ -205,10 +205,26 @@ using number_any=number_a *;
 template<typename BASE>
 class number: public number_a
 {
+  public:
+  struct Scratchpad
+  {
+      NumberType ntype;
+      void *inner;
+      number<BASE> tmp1;
+      number<BASE> tmp2;
+      number<BASE> tmp3;
+      number<BASE> tmp4;
+      //Scratchpad(): ntype(NumberType::typeEmpty), inner(nullptr), tmp1(), tmp2(), tmp3(), tmp4() { }
+      Scratchpad(NumberType ntype);//: ntype(ntype), tmp1(this), tmp2(this), tmp3(this), tmp4(this), inner(nullptr) { }
+      //Scratchpad(Scratchpad *inner): ntype(inner->ntype), tmp1(this), tmp2(this), tmp3(this), tmp4(this), inner(inner) { }
+      ~Scratchpad();
+  };
 protected:
   BASE store; //either "double" for special optimized template
               //or "double *" for universal implementation
               //going meta by using BASE="number<actual base> *"
+  Scratchpad *tmp;
+  //friend class ::ShareableViewInfo;
   friend class number<double>;
   friend class number<__float128>;
   friend class number<dd_real>;
@@ -218,11 +234,11 @@ protected:
 public:
   virtual double eps2() const override;
   virtual double eps234() const override;
-  number(): number_a(), store() { } //for ShareableViewInfo
+  number(): number_a(), store(), tmp(nullptr) { } //for ShareableViewInfo
   number(const number &x) noexcept;
-  number(number &&x) noexcept: store() { x.swap(*this); };
-  number(NumberType ntype);
-  void constructLateBecauseQtIsAwesome(NumberType ntype);
+  number(number &&x) noexcept: store(), tmp(x.tmp) { x.swap(*this); };
+  number(Scratchpad *spad);
+  void constructLateBecauseQtIsAwesome(const number &arc); //starts to look like copy_construct
   void swap(number &other) noexcept { std::swap(store, other.store); }
   //number(BASE store): store(store) {}
   virtual ~number() override;
@@ -292,28 +308,19 @@ public:
 template <typename BASE>
 class complex
 {
-  public:
-  struct Scratchpad
-  {
-      NumberType ntype;
-      number<BASE> tmp1;
-      number<BASE> tmp2;
-      number<BASE> tmp3;
-      number<BASE> tmp4;
-      Scratchpad(): ntype(NumberType::typeEmpty), tmp1(), tmp2(), tmp3(), tmp4() { }
-      Scratchpad(NumberType ntype): ntype(ntype), tmp1(ntype), tmp2(ntype), tmp3(ntype), tmp4(ntype) { }
-  };
 protected:
+  using Scratchpad=typename number<BASE>::Scratchpad;
   Scratchpad *tmp;
 public:
   number<BASE> re;
   number<BASE> im;
   double eps2() const { return re.eps2(); }
   double eps234() const { return re.eps234(); }
-  complex(): re(), im() { }
+  complex(): tmp(nullptr), re(), im() { }
   //complex(NumberType ntype): re(ntype), im(ntype) { }
-  complex(Scratchpad *spad): tmp(spad), re(spad->ntype), im(spad->ntype) { }
+  complex(Scratchpad *spad): tmp(spad), re(spad), im(spad) { }
   complex(complex const &src) noexcept: tmp(src.tmp), re(src.re), im(src.im) { }
+  void constructLateBecauseQtIsAwesome(const complex &src);
   //complex(BASE re, BASE im): re(re), im(im) { }
   void readFrom(void *storage, int index); //BASE storage[index], [index+1]
   void writeTo(void *storage, int index) const; //BASE storage[index], [index+1]

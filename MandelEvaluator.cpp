@@ -33,7 +33,7 @@ void LaguerrePointStore::assign(const LaguerrePointStore *src)
 
 
 template<typename BASE>
-LaguerrePoint<BASE>::LaguerrePoint(LaguerrePointStore *store, MandelMath::complex<BASE>::Scratchpad *spad):
+LaguerrePoint<BASE>::LaguerrePoint(LaguerrePointStore *store, MandelMath::number<BASE>::Scratchpad *spad):
   store(store), r(spad), fz_r(spad), nth_fz(spad)
 {
 }
@@ -69,8 +69,8 @@ void LaguerrePoint<BASE>::zero(const MandelMath::complex<BASE> &c)
 }
 
 template <typename BASE>
-ComputeMandelParams<BASE>::ComputeMandelParams(MandelMath::complex<BASE>::Scratchpad *spad):
-  c(spad), bailout(spad->ntype), first_z(spad)
+ComputeMandelParams<BASE>::ComputeMandelParams(MandelMath::number<BASE>::Scratchpad *spad):
+  c(spad), bailout(spad), first_z(spad)
 {
   bailout.zero(4);
 }
@@ -110,11 +110,11 @@ void MandelPointStore::assign(const MandelPointStore *src)
 }
 
 template<typename BASE>
-MandelPoint<BASE>::MandelPoint(MandelPointStore *store, MandelMath::complex<BASE>::Scratchpad *spad):
-  store(store), f(spad), fc_c(spad), fz_r(spad), fz_c_mag(spad->ntype),
-  sure_fz_mag(spad->ntype), sure_startf(spad), lookper_startf(spad), lookper_nearr(spad),
-  lookper_nearr_dist(spad->ntype), lookper_totalFzmag(spad->ntype),
-  near0m(spad->ntype), nearzm(spad->ntype), root(spad), extangle(spad->ntype)
+MandelPoint<BASE>::MandelPoint(MandelPointStore *store, MandelMath::number<BASE>::Scratchpad *spad):
+  store(store), f(spad), fc_c(spad), fz_r(spad), fz_c_mag(spad),
+  sure_fz_mag(spad), sure_startf(spad), lookper_startf(spad), lookper_nearr(spad),
+  lookper_nearr_dist(spad), lookper_totalFzmag(spad),
+  near0m(spad), nearzm(spad), root(spad), extangle(spad)
 {
 }
 
@@ -228,9 +228,9 @@ void MandelPoint<BASE>::zero(const MandelMath::complex<BASE> &first_z)
 }
 
 template <typename BASE>
-ComputeJuliaParams<BASE>::ComputeJuliaParams(MandelMath::complex<BASE>::Scratchpad *spad):
+ComputeJuliaParams<BASE>::ComputeJuliaParams(MandelMath::number<BASE>::Scratchpad *spad):
   period(1), //must agree with c==0+0i
-  c(spad), root(spad), root0(spad), patchSizeExterior(0), bailout(spad->ntype), alphaShort(spad), alpha(spad), first_z(spad)
+  c(spad), root(spad), root0(spad), patchSizeExterior(0), bailout(spad), alphaShort(spad), alpha(spad), first_z(spad)
 {
   bailout.zero(4);
 }
@@ -277,13 +277,13 @@ void JuliaPointStore::assign(const JuliaPointStore *src)
 }
 
 template<typename BASE>
-JuliaPoint<BASE>::JuliaPoint(JuliaPointStore *store, MandelMath::complex<BASE>::Scratchpad *spad):
-  store(store), f(spad), fz_z(spad), fzz_z(spad), fz_z_mag(spad->ntype),
+JuliaPoint<BASE>::JuliaPoint(JuliaPointStore *store, MandelMath::number<BASE>::Scratchpad *spad):
+  store(store), f(spad), fz_z(spad), fzz_z(spad), fz_z_mag(spad),
   //sure_fz_mag(ntype), sure_startf(ntype), lookper_startf(ntype),
   lookper_distr(spad), lookper_fz(spad),
   //lookper_nearr_dist(ntype), lookper_totalFzmag(ntype),
-  nearzm(spad->ntype), near0fzm(spad->ntype), near0m(spad->ntype), since0fzm(spad->ntype), bigfzfzzm(spad->ntype), shrinkfactor(spad),
-  nearmrm(spad->ntype), nearmr_f(spad), nearmr_fz(spad), extangle(spad->ntype), nearmr(*this)
+  nearzm(spad), near0fzm(spad), near0m(spad), since0fzm(spad), bigfzfzzm(spad), shrinkfactor(spad),
+  nearmrm(spad), nearmr_f(spad), nearmr_fz(spad), extangle(spad), nearmr(*this)
 {
 }
 
@@ -506,39 +506,43 @@ void JuliaPoint<BASE>::NearMR::tap(ComputeJuliaParams<BASE> &params, MandelMath:
 #endif
 }
 
-ShareableViewInfo::ShareableViewInfo(ShareableViewInfo &src): QObject(),
-  view(src.view), c(src.c), nth_fz_limit(src.nth_fz_limit.ntype()),
-  scale(src.scale), nth_fz(src.nth_fz), max_root_effort(src.max_root_effort)
+ShareableViewInfo::ShareableViewInfo(ShareableViewInfo &src): ShareableViewInfo((ShareableViewInfo const &)src)
 {
   //view.assign(src.view);
   //c.assign(src.c);
-  nth_fz_limit.assign(src.nth_fz_limit);
+  //nth_fz_limit.assign(src.nth_fz_limit);
+  dbgPoint();
 }
 
-ShareableViewInfo::ShareableViewInfo(const ShareableViewInfo &src): ShareableViewInfo((ShareableViewInfo &)src)
+ShareableViewInfo::ShareableViewInfo(ShareableViewInfo const &src): QObject(),
+  spad(src.spad), view(src.view), c(src.c), nth_fz_limit(src.nth_fz_limit),
+  scale(src.scale), nth_fz(src.nth_fz), max_root_effort(src.max_root_effort)
 { //why do you need this?
   //doesn't "need" but calls it anyway dbgPoint();
+  dbgPoint();
 }
 
 ShareableViewInfo::ShareableViewInfo(ShareableViewInfo &&src): QObject(),
-  view(src.view), c(src.c), nth_fz_limit(src.nth_fz_limit.ntype()),
-  scale(src.scale), nth_fz(src.nth_fz), max_root_effort(src.max_root_effort)
+  spad(src.spad), view(std::move(src.view)), c(std::move(src.c)), nth_fz_limit(std::move(src.nth_fz_limit)),
+  scale(std::move(src.scale)), nth_fz(std::move(src.nth_fz)), max_root_effort(std::move(src.max_root_effort))
 {
   //view.assign(src.view);
   //c.assign(src.c);
-  nth_fz_limit.assign(src.nth_fz_limit);
+  //nth_fz_limit.assign(src.nth_fz_limit);
+  dbgPoint();
 }
 
 ShareableViewInfo &ShareableViewInfo::operator=(ShareableViewInfo &src)
 {
-  view.re.constructLateBecauseQtIsAwesome(src.view.re.ntype());
-  view.im.constructLateBecauseQtIsAwesome(src.view.im.ntype());
-  view.assign_across(src.view);
-  c.re.constructLateBecauseQtIsAwesome(src.c.re.ntype());
-  c.im.constructLateBecauseQtIsAwesome(src.c.im.ntype());
-  c.assign_across(src.c);
-  nth_fz_limit.constructLateBecauseQtIsAwesome(src.nth_fz_limit.ntype());
-  nth_fz_limit.assign(src.nth_fz_limit);
+  view.constructLateBecauseQtIsAwesome(src.view);
+  //view.re.constructLateBecauseQtIsAwesome(src.view.re);
+  //view.im.constructLateBecauseQtIsAwesome(src.view.im);
+  //view.assign(src.view);//view.assign_across(src.view); //really across? I think the "across" happens later
+  //c.re.constructLateBecauseQtIsAwesome(src.c.re);
+  //c.im.constructLateBecauseQtIsAwesome(src.c.im);
+  c.constructLateBecauseQtIsAwesome(src.c);//c.assign_across(src.c);
+  nth_fz_limit.constructLateBecauseQtIsAwesome(src.nth_fz_limit);
+  //nth_fz_limit.assign(src.nth_fz_limit);
   scale=src.scale;
   nth_fz=src.nth_fz;
   max_root_effort=src.max_root_effort;
@@ -551,8 +555,8 @@ ShareableViewInfo &ShareableViewInfo::operator=(ShareableViewInfo &&src)
 }
 
 template<typename BASE>
-LaguerreStep<BASE>::LaguerreStep(MandelMath::complex<BASE>::Scratchpad *spad):
-  step(spad), s1(spad), s2(spad), tmp1(spad), tmp2(spad->ntype),
+LaguerreStep<BASE>::LaguerreStep(MandelMath::number<BASE>::Scratchpad *spad):
+  step(spad), s1(spad), s2(spad), tmp1(spad), tmp2(spad),
   laguG(spad), laguG2(spad), laguH(spad), laguX(spad), fzzf(spad)
 {
 }
@@ -1028,10 +1032,10 @@ bool LaguerreStep<BASE>::eval(int lg2_degree, MandelMath::complex<BASE> const &f
 }
 
 template<typename BASE>
-MandelLoopEvaluator<BASE>::MandelLoopEvaluator(MandelMath::complex<BASE>::Scratchpad *spad):
+MandelLoopEvaluator<BASE>::MandelLoopEvaluator(MandelMath::number<BASE>::Scratchpad *spad):
   f(spad), f_z(spad), f_c(spad),
   f_zz(spad), f_zc(spad), f_cc(spad), f_zzc(spad),
-  multi(0), first_multi(spad), near0iter_1(0), sumA(spad), f_z_mag(spad->ntype), f_z_minmag(spad->ntype),
+  multi(0), first_multi(spad), near0iter_1(0), sumA(spad), f_z_mag(spad), f_z_minmag(spad),
   s1(spad), s2(spad)
 {
 }
@@ -3203,7 +3207,7 @@ solve [0=0+d*C+e*R*C+f*C^2/2+g*R^3/6+h*R^2*C/2, -1=e*C+g*R^2/2+h*R*C, -124.79612
 }
 
 template<typename BASE>
-MandelEvaluator<BASE>::Bulb::Bulb(MandelMath::complex<BASE>::Scratchpad *spad, MandelLoopEvaluator<BASE> *loope):
+MandelEvaluator<BASE>::Bulb::Bulb(MandelMath::number<BASE>::Scratchpad *spad, MandelLoopEvaluator<BASE> *loope):
   loope(loope),
   baseZC(spad), baseCC(spad),
   t1(spad), t2(spad), t3(spad), deltac(spad), deltar(spad),
@@ -6515,7 +6519,7 @@ void MandelEvaluator<BASE>::evaluateJulia()
 
 
 template<typename BASE>
-MandelEvaluator<BASE>::ComputeParams::ComputeParams(MandelMath::complex<BASE>::Scratchpad *spad):
+MandelEvaluator<BASE>::ComputeParams::ComputeParams(MandelMath::number<BASE>::Scratchpad *spad):
   mandel(spad), julia(spad),
   epoch(-1), pixelIndex(-1), maxiter(1), breakOnNewNearest(false), want_fc_r(false), want_extangle(false),
   nth_fz(0)
@@ -6523,7 +6527,7 @@ MandelEvaluator<BASE>::ComputeParams::ComputeParams(MandelMath::complex<BASE>::S
 }
 
 template<typename BASE>
-MandelEvaluator<BASE>::NewtRes::NewtRes(MandelMath::complex<BASE>::Scratchpad *spad):
+MandelEvaluator<BASE>::NewtRes::NewtRes(MandelMath::number<BASE>::Scratchpad *spad):
   cyclesNeeded(-1),
   fz_r(spad), nth_fz(spad),
   first_guess_lagu(spad), first_guess_newt(spad)
@@ -6532,41 +6536,41 @@ MandelEvaluator<BASE>::NewtRes::NewtRes(MandelMath::complex<BASE>::Scratchpad *s
 }
 
 template<typename BASE>
-MandelEvaluator<BASE>::Eval::Eval(MandelMath::complex<BASE>::Scratchpad *spad):
-  fz_r(spad), fz_mag(spad->ntype)
+MandelEvaluator<BASE>::Eval::Eval(MandelMath::number<BASE>::Scratchpad *spad):
+  fz_r(spad), fz_mag(spad)
 {
   //working_assert(self_allocator.checkFill());
 }
 
 template<typename BASE>
-MandelEvaluator<BASE>::Newt::Newt(MandelMath::complex<BASE>::Scratchpad *spad):
+MandelEvaluator<BASE>::Newt::Newt(MandelMath::number<BASE>::Scratchpad *spad):
   bestr(spad), f_r(spad), fzz_r(spad), tmp1(spad),
   laguH(spad), laguG(spad), laguG2(spad),
   laguX(spad), newtX(spad), prevR(spad), prevGz(spad),
-  fzzf(spad), tmp2(spad->ntype)
+  fzzf(spad), tmp2(spad)
 {
   //working_assert(self_allocator.checkFill());
 }
 
 template<typename BASE>
-MandelEvaluator<BASE>::InteriorInfo::InteriorInfo(MandelMath::complex<BASE>::Scratchpad *spad):
-  inte(spad), inte_abs(spad->ntype), fz(spad), fz_mag(spad->ntype), step_to_root(spad), alphak_other(spad), alphak(spad), zoom(spad)
+MandelEvaluator<BASE>::InteriorInfo::InteriorInfo(MandelMath::number<BASE>::Scratchpad *spad):
+  inte(spad), inte_abs(spad), fz(spad), fz_mag(spad), step_to_root(spad), alphak_other(spad), alphak(spad), zoom(spad)
 {
   //working_assert(self_allocator.checkFill());
 }
 
 template<class BASE>
-MandelEvaluator<BASE>::ExtAngle::ExtAngle(MandelMath::complex<BASE>::Scratchpad *spad, MandelLoopEvaluator<BASE> *loope, LaguerreStep<BASE> *lagus, MandelEvaluator<BASE> *owner):
+MandelEvaluator<BASE>::ExtAngle::ExtAngle(MandelMath::number<BASE>::Scratchpad *spad, MandelLoopEvaluator<BASE> *loope, LaguerreStep<BASE> *lagus, MandelEvaluator<BASE> *owner):
   owner(owner), ntype(spad->ntype), loope(loope), lagus(lagus),
-  z(spad), r(spad), angleC(ntype), angle(ntype), x(spad), target(spad),
+  z(spad), r(spad), angleC(spad), angle(spad), x(spad), target(spad),
   dldlz(spad), d2ldlz2(spad), dbg(spad)
 {
 }
 
 template<>
-MandelEvaluator<MandelMath::number_any>::ExtAngle::ExtAngle(MandelMath::complex<MandelMath::number_any>::Scratchpad *spad, MandelLoopEvaluator<MandelMath::number_any> *loope, LaguerreStep<MandelMath::number_any> *lagus, MandelEvaluator<MandelMath::number_any> *owner):
+MandelEvaluator<MandelMath::number_any>::ExtAngle::ExtAngle(MandelMath::number<MandelMath::number_any>::Scratchpad *spad, MandelLoopEvaluator<MandelMath::number_any> *loope, LaguerreStep<MandelMath::number_any> *lagus, MandelEvaluator<MandelMath::number_any> *owner):
   owner(owner), ntype(spad->ntype), loope(loope), lagus(lagus),
-  z(spad), r(spad), angleC(ntype), angle(ntype), x(spad), target(spad),
+  z(spad), r(spad), angleC(spad), angle(spad), x(spad), target(spad),
   dldlz(spad), d2ldlz2(spad), dbg(spad)
 {
   switch (ntype)

@@ -33,7 +33,7 @@ struct LaguerrePoint
   };
   static constexpr size_t LEN=iiw__END-iiw__BASE;
   LaguerrePointStore *store;
-  LaguerrePoint(LaguerrePointStore *store, MandelMath::complex<BASE>::Scratchpad *spad);
+  LaguerrePoint(LaguerrePointStore *store, MandelMath::number<BASE>::Scratchpad *spad);
   MandelMath::complex<BASE> r;
   MandelMath::complex<BASE> fz_r;
   MandelMath::complex<BASE> nth_fz;
@@ -50,7 +50,7 @@ struct ComputeMandelParams
   MandelMath::complex<BASE> c;
   MandelMath::number<BASE> bailout; //4 for mandel
   MandelMath::complex<BASE> first_z; //used
-  ComputeMandelParams(MandelMath::complex<BASE>::Scratchpad *spad);
+  ComputeMandelParams(MandelMath::number<BASE>::Scratchpad *spad);
   template<typename OTHER_BASE>
   void assign_across(const ComputeMandelParams<OTHER_BASE> &src);
 };
@@ -106,7 +106,7 @@ struct MandelPoint
   };
   static constexpr size_t LEN=iiw__END-iiw__BASE;
   MandelPointStore *store;
-  MandelPoint(MandelPointStore *store, MandelMath::complex<BASE>::Scratchpad *spad);
+  MandelPoint(MandelPointStore *store, MandelMath::number<BASE>::Scratchpad *spad);
   MandelMath::complex<BASE> f;
   MandelMath::complex<BASE> fc_c; //fc_c, or fz_r if stPeriod2 or stPeriod3
   MandelMath::complex<BASE> fz_r;
@@ -143,7 +143,7 @@ struct ComputeJuliaParams
   MandelMath::complex<BASE> alphaShort; // alpha but only from r to near0
   MandelMath::complex<BASE> alpha; // |alpha|<1
   MandelMath::complex<BASE> first_z;
-  ComputeJuliaParams(MandelMath::complex<BASE>::Scratchpad *spad);
+  ComputeJuliaParams(MandelMath::number<BASE>::Scratchpad *spad);
   template<typename OTHER_BASE>
   void assign_across(const ComputeJuliaParams<OTHER_BASE> &src);
 };
@@ -218,7 +218,7 @@ struct JuliaPoint
   };
   static constexpr size_t LEN=iiw__END-iiw__BASE;
   JuliaPointStore *store;
-  JuliaPoint(JuliaPointStore *store, MandelMath::complex<BASE>::Scratchpad *spad);
+  JuliaPoint(JuliaPointStore *store, MandelMath::number<BASE>::Scratchpad *spad);
   MandelMath::complex<BASE> f;
   MandelMath::complex<BASE> fz_z;
   MandelMath::complex<BASE> fzz_z;
@@ -258,15 +258,15 @@ class ShareableViewInfo: public QObject
   Q_OBJECT
 protected:
   int refcount_unused;
-  MandelMath::complex<MandelMath::number_any>::Scratchpad spad;
+  MandelMath::number<MandelMath::number_any>::Scratchpad *spad;
 public:
   //static constexpr int LEN=5;
-  ShareableViewInfo(): view(), c(), nth_fz_limit() { } //Qt uses this and operator= instead of copy constructor :-/
+    ShareableViewInfo(): spad(nullptr), view(), c(), nth_fz_limit() { } //Qt uses this and operator= instead of copy constructor :-/
   /*template <typename BASE>
   ShareableViewInfo(): c(new MandelMath::number<BASE>(), new MandelMath::number<BASE>()),
                        root(new MandelMath::number<BASE>(), new MandelMath::number<BASE>()),
                        nth_fz_limit(new MandelMath::number<BASE>()), scale(1), period(0), nth_fz(0) { }*/
-  ShareableViewInfo(MandelMath::NumberType ntype): spad(ntype), view(&spad), c(&spad), nth_fz_limit(ntype), scale(1), nth_fz(0), max_root_effort(3) { }
+  ShareableViewInfo(MandelMath::number<MandelMath::number_any>::Scratchpad *scratchpad): spad(scratchpad), view(scratchpad), c(scratchpad), nth_fz_limit(scratchpad), scale(1), nth_fz(0), max_root_effort(3) { }
   ShareableViewInfo(ShareableViewInfo &src);
   ShareableViewInfo(const ShareableViewInfo &src);
   ShareableViewInfo(ShareableViewInfo &&src); //important
@@ -304,7 +304,7 @@ protected:
 public:
   //static constexpr size_t LEN=19;
   //LaguerreStep(MandelMath::NumberType ntype);
-  LaguerreStep(MandelMath::complex<BASE>::Scratchpad *spad);
+  LaguerreStep(MandelMath::number<BASE>::Scratchpad *spad);
   //~LaguerreStep();
   //void switchType(MandelMath::number_worker *worker);
   //do one Laguerre step
@@ -358,7 +358,7 @@ public:
     iiw__END=iiw__BASE+26
   };*/
   //static constexpr size_t LEN=26;
-  MandelLoopEvaluator(MandelMath::complex<BASE>::Scratchpad *spad);
+  MandelLoopEvaluator(MandelMath::number<BASE>::Scratchpad *spad);
   //~MandelLoopEvaluator();
   /*union Place
   {
@@ -428,7 +428,7 @@ signals:
   void doneLaguerreThreaded(MandelEvaluatorThread *me);
 };
 
-template <class BASE>
+template <class _BASE>
 class MandelEvaluator //templates cannot be Q_OBJECT (or QThread) and cannot receive signals
 {
 protected:
@@ -437,6 +437,7 @@ public:
   constexpr static double LARGE_FLOAT2=1e60;
   constexpr static double MAGIC_MIN_SHRINK=1.5;
   constexpr static int MAX_PERIOD=8000;
+  using BASE=_BASE;
   /*enum IndexIntoWorker
   {
     iiw_currentData=2,
@@ -462,7 +463,7 @@ public:
   qint64 timeInvokePostTotal;
   qint64 timeInvokeSwitchTotal;
 
-  typename MandelMath::complex<BASE>::Scratchpad tmp;
+  typename MandelMath::number<BASE>::Scratchpad tmp;
   //from here on, layout is different with BASE -> ntype before tmp
   MandelEvaluator(MandelMath::NumberType ntype, bool dontRun);
   virtual ~MandelEvaluator(); //must be virtual, or would have to typecast in delete threads[i]
@@ -496,7 +497,7 @@ public:
     bool want_fc_r;
     bool want_extangle;
     int nth_fz;
-    ComputeParams(MandelMath::complex<BASE>::Scratchpad *spad);
+    ComputeParams(MandelMath::number<BASE>::Scratchpad *spad);
   } currentParams;
   LaguerrePointStore laguerreStore;
   LaguerrePoint<BASE> laguerreData;
@@ -528,7 +529,7 @@ public:
     double first_lagu1_re, first_lagu1_im, first_lagu1o_re, first_lagu1o_im;
     double firstMu_re, firstMu_im, firstMum_re, firstMum_im;
     double accy_tostop, accy_multiplier, accy_noise; //in units of eps2()
-    NewtRes(MandelMath::complex<BASE>::Scratchpad *spad);
+    NewtRes(MandelMath::number<BASE>::Scratchpad *spad);
   } newtres;
 protected:
   struct Eval
@@ -542,7 +543,7 @@ protected:
     MandelMath::complex<BASE> fz_r;
     MandelMath::number<BASE> fz_mag;
     //MandelMath::number<BASE> near0fmag;
-    Eval(MandelMath::complex<BASE>::Scratchpad *spad);
+    Eval(MandelMath::number<BASE>::Scratchpad *spad);
   } eval;
   struct Newt
   {
@@ -566,7 +567,7 @@ protected:
     MandelMath::complex<BASE> prevGz;
     MandelMath::complex<BASE> fzzf;
     MandelMath::number<BASE> tmp2;
-    Newt(MandelMath::complex<BASE>::Scratchpad *spad);
+    Newt(MandelMath::number<BASE>::Scratchpad *spad);
   } newt;
   struct InteriorInfo
   {
@@ -583,7 +584,7 @@ protected:
     MandelMath::complex<BASE> alphak_other;
     MandelMath::complex<BASE> alphak;
     MandelMath::complex<BASE> zoom;
-    InteriorInfo(MandelMath::complex<BASE>::Scratchpad *spad);
+    InteriorInfo(MandelMath::number<BASE>::Scratchpad *spad);
   } interior;
 public:
   struct Bulb
@@ -614,7 +615,7 @@ public:
     //MandelMath::number_store test_x0_re, test_x0_im;
     //MandelMath::number_store test_xn_re, test_xn_im;
     LaguerreStep<BASE> lagu;
-    Bulb(MandelMath::complex<BASE>::Scratchpad *spad, MandelLoopEvaluator<BASE> *loope);
+    Bulb(MandelMath::number<BASE>::Scratchpad *spad, MandelLoopEvaluator<BASE> *loope);
     ~Bulb() { }
   protected:
     //void fixRnearBase(MandelMath::complex_place<WORKER_MULTI> *r, const MandelMath::complex_place<WORKER_MULTI> *c, int period, int *mult);
@@ -647,10 +648,10 @@ public:
       complex first_guess_0, first_guess_1_, first_guess_2;
       int last_guess_valid;
       complex last_guess_0, last_guess_1_, last_guess_2;
-      Dbg(MandelMath::complex<BASE>::Scratchpad *spad): first_guess_valid(0), first_guess_0(spad), first_guess_1_(spad), first_guess_2(spad),
+      Dbg(MandelMath::number<BASE>::Scratchpad *spad): first_guess_valid(0), first_guess_0(spad), first_guess_1_(spad), first_guess_2(spad),
                                          last_guess_valid(0), last_guess_0(spad), last_guess_1_(spad), last_guess_2(spad) {}
     } dbg;
-    ExtAngle(MandelMath::complex<BASE>::Scratchpad *spad, MandelLoopEvaluator<BASE> *loope, LaguerreStep<BASE> *lagus, MandelEvaluator<BASE> *owner);
+    ExtAngle(MandelMath::number<BASE>::Scratchpad *spad, MandelLoopEvaluator<BASE> *loope, LaguerreStep<BASE> *lagus, MandelEvaluator<BASE> *owner);
     ~ExtAngle();
     void computeMJ(number *result, bool mandel, int iter, complex const &c, complex const &z);
   } extangle;

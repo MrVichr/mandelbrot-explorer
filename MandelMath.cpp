@@ -326,14 +326,14 @@ double number<double>::eps234() const
 }
 
 template<>
-number<double>::number(const number &x) noexcept: store(x.store)
+number<double>::number(const number &x) noexcept: store(x.store), tmp(x.tmp)
 {
 }
 
 template<>
-number<double>::number(NumberType ntype): store(0)
+number<double>::number(Scratchpad *spad): store(0), tmp(spad)
 {
-  working_assert(ntype==NumberType::typeDouble);
+  working_assert(tmp->ntype==NumberType::typeDouble);
 }
 
 template<>
@@ -441,7 +441,7 @@ number<double> &number<double>::zero(double val)
 template<>
 number<double> &number<double>::assign(const number<double> &src) noexcept
 {
-  //working_assert(tmp==src.tmp);
+  working_assert(tmp==src.tmp); //```
   store=src.store;
   return *this;
 }
@@ -777,6 +777,20 @@ double number<double>::toDouble() const
   return store;
 }
 
+template<>
+number<double>::Scratchpad::Scratchpad(NumberType ntype):
+    ntype(ntype), inner(nullptr),
+    tmp1(this), tmp2(this), tmp3(this), tmp4(this)
+{
+}
+
+template<>
+number<double>::Scratchpad::~Scratchpad()
+{
+}
+
+
+
 
 
 
@@ -806,14 +820,14 @@ double number<__float128>::eps234() const
 }
 
 template<>
-number<__float128>::number(const number &x) noexcept: store(x.store)
+number<__float128>::number(const number &x) noexcept: store(x.store), tmp(x.tmp)
 {
 }
 
 template<>
-number<__float128>::number(NumberType ntype): store(0)
+number<__float128>::number(Scratchpad *spad): store(0), tmp(spad)
 {
-  working_assert(ntype==NumberType::typeFloat128);
+  working_assert(spad->ntype==NumberType::typeFloat128);
 }
 
 template<>
@@ -1303,6 +1317,20 @@ double number<__float128>::toDouble() const
   return (double)store;
 }
 
+template<>
+number<__float128>::Scratchpad::Scratchpad(NumberType ntype):
+    ntype(ntype), inner(nullptr),
+    tmp1(this), tmp2(this), tmp3(this), tmp4(this)
+{
+}
+
+template<>
+number<__float128>::Scratchpad::~Scratchpad()
+{
+}
+
+
+
 
 
 
@@ -1321,14 +1349,14 @@ double number<dd_real>::eps234() const
 }
 
 template<>
-number<dd_real>::number(const number &x) noexcept: store(x.store)
+number<dd_real>::number(const number &x) noexcept: store(x.store), tmp(x.tmp)
 {
 }
 
 template<>
-number<dd_real>::number(NumberType ntype): store()
+number<dd_real>::number(Scratchpad *spad): store(), tmp(spad)
 {
-  working_assert(ntype==NumberType::typeDDouble || ntype==NumberType::typeQDouble);
+  working_assert(spad->ntype==NumberType::typeDDouble);
 }
 
 template<>
@@ -1767,6 +1795,20 @@ double number<dd_real>::toDouble() const
   return store.hi;
 }
 
+template<>
+number<dd_real>::Scratchpad::Scratchpad(NumberType ntype):
+    ntype(ntype), inner(nullptr),
+    tmp1(this), tmp2(this), tmp3(this), tmp4(this)
+{
+}
+
+template<>
+number<dd_real>::Scratchpad::~Scratchpad()
+{
+}
+
+
+
 
 
 
@@ -1788,14 +1830,14 @@ double number<dq_real>::eps234() const
 }
 
 template<>
-number<dq_real>::number(const number &x) noexcept: store(x.store)
+number<dq_real>::number(const number &x) noexcept: store(x.store), tmp(x.tmp)
 {
 }
 
 template<>
-number<dq_real>::number(NumberType ntype): store()
+number<dq_real>::number(Scratchpad *spad): store(), tmp(spad)
 {
-  working_assert(ntype==NumberType::typeQDouble);
+  working_assert(spad->ntype==NumberType::typeQDouble);
 }
 
 template<>
@@ -2236,6 +2278,20 @@ double number<dq_real>::toDouble() const
   return store.hi;
 }
 
+template<>
+number<dq_real>::Scratchpad::Scratchpad(NumberType ntype):
+    ntype(ntype), inner(nullptr),
+    tmp1(this), tmp2(this), tmp3(this), tmp4(this)
+{
+}
+
+template<>
+number<dq_real>::Scratchpad::~Scratchpad()
+{
+}
+
+
+
 
 
 
@@ -2254,14 +2310,14 @@ double number<real642>::eps234() const
 }
 
 template<>
-number<real642>::number(const number &x) noexcept: store(x.store)
+number<real642>::number(const number &x) noexcept: store(x.store), tmp(x.tmp)
 {
 }
 
 template<>
-number<real642>::number(NumberType ntype): store()
+number<real642>::number(Scratchpad *spad): store(), tmp(spad)
 {
-  working_assert(ntype==NumberType::typeReal642);
+  working_assert(spad->ntype==NumberType::typeReal642);
 }
 
 template<>
@@ -2760,10 +2816,23 @@ double number<real642>::toDouble() const
   return store.val1;
 }
 
+template<>
+number<real642>::Scratchpad::Scratchpad(NumberType ntype):
+    ntype(ntype), inner(nullptr),
+    tmp1(this), tmp2(this), tmp3(this), tmp4(this)
+{
+}
+
+template<>
+number<real642>::Scratchpad::~Scratchpad()
+{
+}
+
+
 #endif // !NUMBER_DOUBLE_ONLY
 
 template<>
-double number<number_a *>::eps2() const
+double number<number_any>::eps2() const
 {
   return store->eps2();
 }
@@ -2775,39 +2844,46 @@ double number<number_a *>::eps234() const
 }
 
 template<>
-number<number_any>::number(NumberType ntype)
+number<number_any>::number(Scratchpad *spad): store(nullptr), tmp(spad)
 {
-  switch (ntype)
+  working_assert(spad->inner);
+  working_assert(((number<real642>::Scratchpad *)(spad->inner))->ntype==spad->ntype);
+  switch (spad->ntype)
   {
     //case NumberType::typeEmpty: dbgPoint(); store=new number<double>(); break;
-    case NumberType::typeDouble: store=new number<double>(ntype); break;
+    case NumberType::typeDouble: store=new number<double>((number<double>::Scratchpad *)spad->inner); break;
 #if !NUMBER_DOUBLE_ONLY
-    case NumberType::typeFloat128: store=new number<__float128>(); break;
-    case NumberType::typeDDouble: store=new number<dd_real>(); break;
-    case NumberType::typeQDouble: store=new number<dq_real>(); break;
-    case NumberType::typeReal642: store=new number<real642>(); break;
+    case NumberType::typeFloat128: store=new number<__float128>((number<__float128>::Scratchpad *)spad->inner); break;
+    case NumberType::typeDDouble: store=new number<dd_real>((number<dd_real>::Scratchpad *)spad->inner); break;
+    case NumberType::typeQDouble: store=new number<dq_real>((number<dq_real>::Scratchpad *)spad->inner); break;
+    case NumberType::typeReal642: store=new number<real642>((number<real642>::Scratchpad *)spad->inner); break;
 #endif
     default:
-      dbgPoint(); store=new number<double>(); break;
+      dbgPoint(); store=new number<double>((number<double>::Scratchpad *)spad->inner); break;
   }
 }
 
 template<>
-void number<number_any>::constructLateBecauseQtIsAwesome(NumberType ntype)
+void number<number_any>::constructLateBecauseQtIsAwesome(const number &src)
 {
   working_assert(store==nullptr);
-  switch (ntype)
+  working_assert(tmp==nullptr);
+  tmp=src.tmp;
+  Scratchpad *spad=src.tmp;
+  working_assert(spad->inner);
+  //working_assert(((number<real642>::Scratchpad *)(spad->inner))->ntype==spad->ntype);
+  working_assert(((number<number_any>::Scratchpad *)(spad->inner))->ntype==spad->ntype);
+  switch (spad->ntype)
   {
-    //case NumberType::typeEmpty: dbgPoint(); store=new number<double>(); break;
-    case NumberType::typeDouble: store=new number<double>(ntype); break;
+    case NumberType::typeDouble:   store=new number<double>(*(number<double> *)src.store); break;
 #if !NUMBER_DOUBLE_ONLY
-    case NumberType::typeFloat128: store=new number<__float128>(); break;
-    case NumberType::typeDDouble: store=new number<dd_real>(); break;
-    case NumberType::typeQDouble: store=new number<dq_real>(); break;
-    case NumberType::typeReal642: store=new number<real642>(); break;
+    case NumberType::typeFloat128: store=new number<__float128>(*(number<__float128> *)src.store); break;
+    case NumberType::typeDDouble:  store=new number<dd_real>(*(number<dd_real> *)src.store); break;
+    case NumberType::typeQDouble:  store=new number<dq_real>(*(number<dq_real> *)src.store); break;
+    case NumberType::typeReal642:  store=new number<real642>(*(number<real642> *)src.store); break;
 #endif
     default:
-      dbgPoint(); store=new number<double>(); break;
+      dbgPoint(); store=new number<double>(*(number<double> *)&src.store); break;
   }
 }
 
@@ -2820,7 +2896,7 @@ number<number_any>::~number()
 }
 
 template<>
-number<number_any>::number(const number &x) noexcept: number(x.store->ntype())
+number<number_any>::number(const number &x) noexcept: number(x.tmp)
 {
   store->assign(*x.store);
 }
@@ -3166,8 +3242,61 @@ double number<number_any>::toDouble() const
   return store->toDouble();
 }
 
+void *makeScratchpad(NumberType ntype)
+{
+  switch (ntype)
+  {
+  case NumberType::typeDouble: return new number<double>::Scratchpad(ntype);
+  case NumberType::typeFloat128: return new number<__float128>::Scratchpad(ntype);
+  case NumberType::typeDDouble: return new number<dd_real>::Scratchpad(ntype);
+  case NumberType::typeQDouble: return new number<dq_real>::Scratchpad(ntype);
+  case NumberType::typeReal642: return new number<real642>::Scratchpad(ntype);
+  case NumberType::typeEmpty: return nullptr;
+  }
+  return nullptr;
+}
+
+template<>
+number<number_any>::Scratchpad::Scratchpad(NumberType ntype):
+    ntype(ntype), inner(makeScratchpad(ntype)),
+    tmp1(this), tmp2(this), tmp3(this), tmp4(this)
+{
+}
+
+template<>
+number<number_any>::Scratchpad::~Scratchpad()
+{
+  switch (ntype)
+  {
+  case NumberType::typeDouble: delete (number<double>::Scratchpad *)inner; break;
+  case NumberType::typeFloat128: delete (number<__float128>::Scratchpad *)inner; break;
+  case NumberType::typeDDouble: delete (number<dd_real>::Scratchpad *)inner; break;
+  case NumberType::typeQDouble: delete (number<dq_real>::Scratchpad *)inner; break;
+  case NumberType::typeReal642: delete (number<real642>::Scratchpad *)inner; break;
+  case NumberType::typeEmpty: break;
+  }
+  inner=nullptr;
+}
 
 
+
+template<typename BASE>
+void complex<BASE>::constructLateBecauseQtIsAwesome(const complex &src)
+{
+  if constexpr (std::is_same_v<BASE, number_any>)
+  {
+    working_assert(tmp==nullptr);
+    //working_assert(re.tmp==nullptr);
+    //working_assert(im.tmp==nullptr);
+    tmp=src.tmp;
+    re.constructLateBecauseQtIsAwesome(src.re);
+    im.constructLateBecauseQtIsAwesome(src.im);
+  }
+  else
+  {
+    working_assert(false);
+  }
+}
 
 template<typename BASE>
 void complex<BASE>::readFrom(void *storage, int index)
@@ -3929,11 +4058,12 @@ void complex_double_quadratic2(double *res1_re, double *res1_im,
 
 template class number<double>;
 //template void number<double>::assign_across<double>(const number<double> *src);
-template class complex<double>;
 template class complex<number_any>;
+template complex<number_any> &complex<number_any>::assign_across<number_any>(const complex<number_any> &src);
+//template void number<number_a *>::constructLateBecauseQtIsAwesome<number_a *>(const number<number_a *> &example);
+template class complex<double>;
 template complex<double> &complex<double>::assign_across<number_any>(const complex<number_any> &src);
 template complex<double> &complex<double>::assign_across<double>(const complex<double> &src);
-template complex<number_any> &complex<number_any>::assign_across<number_any>(const complex<number_any> &src);
 #if !NUMBER_DOUBLE_ONLY
 template class complex<__float128>;
 template complex<__float128> & complex<__float128>::assign_across<number_any>(const complex<number_any> &src);
