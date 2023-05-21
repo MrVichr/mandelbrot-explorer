@@ -191,7 +191,7 @@ protected:
     MandelEvaluator<MandelMath::number_a *> evaluator;
     JuliaPointStore pointDataStore; //but we need it for long-term storage of results
     double first_mu_re, first_mu_im, first_mum_re, first_mum_im;
-    Orbit(MandelMath::NumberType ntype);
+    Orbit(MandelMath::NumberType ntype, Orbit const *source);
     ~Orbit();
     constexpr static int LEN=JuliaPoint<MandelMath::number_a *>::LEN;
   };
@@ -202,7 +202,7 @@ protected:
     JuliaPoint<MandelMath::number_any> wtiPoint;
     Params params;
     Position position;
-    MandelMath::number<MandelMath::number_any> tmp_place;
+    //MandelMath::number<MandelMath::number_any> tmp_place;
     void *points; //array<double|float128|...>[width*height]
     int threadCount;
     std::variant<std::nullptr_t,

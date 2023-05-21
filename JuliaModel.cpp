@@ -2481,11 +2481,15 @@ void JuliaModel::Position::pixelYtoIM(int y, MandelMath::number<BASE> *result)
 
 
 
-JuliaModel::Orbit::Orbit(MandelMath::NumberType ntype):
+JuliaModel::Orbit::Orbit(MandelMath::NumberType ntype, Orbit const *source):
   evaluator(ntype, true),
   pointDataStore(),
   first_mu_re(0), first_mu_im(0), first_mum_re(0), first_mum_im(0)
 {
+  if (source)
+  {
+    evaluator.currentParams.julia.c.assign_across(source->evaluator.currentParams.julia.c);
+  };
 }
 
 JuliaModel::Orbit::~Orbit()
@@ -2497,10 +2501,11 @@ JuliaModel::Orbit::~Orbit()
 
 
 JuliaModel::PrecisionRecord::PrecisionRecord(MandelMath::NumberType ntype, PrecisionRecord *source, JuliaModel *doneReceiver):
-  ntype(ntype), orbit(ntype), wtiPoint(nullptr, &orbit.evaluator.tmp),
+  ntype(ntype), orbit(ntype, source?&source->orbit:nullptr),
+  wtiPoint(nullptr, &orbit.evaluator.tmp),
   params(&orbit.evaluator.tmp, source?&source->params:nullptr),
   position(&orbit.evaluator.tmp, source?&source->position:nullptr),
-  tmp_place(&orbit.evaluator.tmp),
+  //tmp_place(&orbit.evaluator.tmp),
   threadCount(source?source->threadCount:0), threads()
 {
   if (threadCount<=0)
@@ -2540,6 +2545,8 @@ JuliaModel::PrecisionRecord::PrecisionRecord(MandelMath::NumberType ntype, Preci
           using Evaluator=std::remove_pointer_t<std::remove_pointer_t<std::remove_reference_t<decltype(threads)>>>;
           Evaluator *thread=new Evaluator(self.ntype, source==nullptr);
           threads[t]=thread;
+          if (source)
+            thread->currentParams.julia.assign_across(source->orbit.evaluator.currentParams.julia);
           thread->threaded.give=[doneReceiver](Evaluator *me)
           {
             return doneReceiver->giveWorkThreaded(me);

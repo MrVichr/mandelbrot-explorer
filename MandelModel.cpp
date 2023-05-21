@@ -2081,11 +2081,13 @@ MandelModel::PrecisionRecord::PrecisionRecord(MandelMath::NumberType ntype, Prec
   //, source?&source->orbit:nullptr),
   position(&orbit.evaluator.tmp, source?&source->position:nullptr),
   lagu_c(&orbit.evaluator.tmp), lagu_r(&orbit.evaluator.tmp),
-  tmp_place(&orbit.evaluator.tmp),
+  //tmp_place(&orbit.evaluator.tmp),
   threadCount(source?source->threadCount:0), threads()
 {
   if (source)
   {
+    lagu_c.assign_across(source->lagu_c);
+    lagu_r.assign_across(source->lagu_r);
   }
   else
   {
@@ -2129,6 +2131,8 @@ MandelModel::PrecisionRecord::PrecisionRecord(MandelMath::NumberType ntype, Prec
           using Evaluator=std::remove_pointer_t<std::remove_pointer_t<std::remove_reference_t<decltype(threads)>>>;
           Evaluator *thread=new Evaluator(self.ntype, source==nullptr);
           threads[t]=thread;
+          if (source)
+            thread->currentParams.mandel.assign_across(source->orbit.evaluator.currentParams.mandel);
           thread->threaded.give=[doneReceiver](Evaluator *me)
           {
             return doneReceiver->giveWorkThreaded(me);

@@ -172,38 +172,51 @@ inline void dd_real::two_sqr(double a)
 //hack if you don't want to mess with FPU control word... but is a nightmare
 #define MAKE_DOUBLE( tmp, val ) ( tmp=(val), *(volatile double *)&tmp )
 
-void dd_real::lshift(int exp)
+double dd_real::eps2() const
+{
+  return 6.07717e-64; // 2^-(2*(53+52)) rounded up
+}
+
+double dd_real::eps234() const
+{
+  return 3.87e-48; // eps2^(3/4)
+}
+
+dd_real &dd_real::lshift(int exp)
 {
   //lolwut "On many implementations, std::ldexp is less efficient than multiplication or division
   //        by a power of two using arithmetic operators"
   //should I just adjust exponent in *(int *)&hi or what
   hi=ldexp(hi, exp);
   lo_=ldexp(lo_, exp);
+  return *this;
 }
 
-void dd_real::add_double(double h2)
+dd_real &dd_real::add_double(double h2)
 {
   dd_real se;
   se.two_sum(hi, h2);
   se.lo_ += lo_;
   quick_two_sum(se.hi, se.lo_);
+  return *this;
 }
 
-void dd_real::mul_double(double h2)
+dd_real &dd_real::mul_double(double h2)
 {
   dd_real p;
   p.two_prod(hi, h2);
   p.lo_ += lo_*h2;
   quick_two_sum(p.hi, p.lo_);
+  return *this;
 }
 
-void dd_real::add(double h2, double l2)
+dd_real &dd_real::add(dd_real const &other)
 {
 //dqfun.f90#dqadd is the same as dd_inline.h#dd_real::sloppy_add
   dd_real se;
 
-  se.two_sum(hi, h2);
-  se.lo_ += (lo_ + l2);
+  se.two_sum(hi, other.hi);
+  se.lo_ += (lo_ + other.lo_);
   quick_two_sum(se.hi, se.lo_);
 
 //1998 inline.h#operator +(const doubledouble& x is the same as dd_inline.h#dd_real::ieee_add
@@ -218,14 +231,26 @@ void dd_real::add(double h2, double l2)
   s.lo += t.lo;
   quick_two_sum(s.hi, s.lo);
 */
+  return *this;
 }
 
-void dd_real::mul(double h2, double l2)
+dd_real &dd_real::sub(dd_real const &other)
+{
+  //dqfun.f90#dqadd is the same as dd_inline.h#dd_real::sloppy_add
+  dd_real se;
+
+  se.two_sum(hi, -other.hi);
+  se.lo_ += (lo_ - other.lo_);
+  quick_two_sum(se.hi, se.lo_);
+  return *this;
+}
+
+dd_real &dd_real::mul(dd_real const &other)
 {
   dd_real p;
 
-  p.two_prod(hi, h2);
-  p.lo_ += (hi * l2 + lo_ * h2);
+  p.two_prod(hi, other.hi);
+  p.lo_ += (hi * other.lo_ + lo_ * other.hi);
   quick_two_sum(p.hi, p.lo_);
 /*
   double hx, tx, hy, ty, C, c;
@@ -245,9 +270,10 @@ void dd_real::mul(double h2, double l2)
   hx = MAKE_DOUBLE(th, C-hi);
   lo = MAKE_DOUBLE(tl, c+hx);
 */
+  return *this;
 }
 
-void dd_real::sqr()
+dd_real &dd_real::sqr()
 {
   dd_real p;
   dd_real s;
@@ -255,6 +281,7 @@ void dd_real::sqr()
   p.lo_ += 2.0 * hi * lo_;
   p.lo_ += lo_ * lo_;
   quick_two_sum(p.hi, p.lo_);
+  return *this;
 }
 
 double dd_real::radixfloor() const
@@ -263,7 +290,7 @@ double dd_real::radixfloor() const
   return ldexp(1, ilog1);
 }
 
-void dd_real::recip()
+dd_real &dd_real::recip()
 {
 #if 1 //sloppy_div
   double s1, s2;
@@ -275,7 +302,7 @@ void dd_real::recip()
   /* compute  this - q1 * dd */
   r.hi=hi;
   r.lo_=lo_;
-  r.mul(q1, 0);
+  r.mul_double(q1);
   s1 = two_diff(1, r.hi, s2);
   s2 -= r.lo_;
   s2 += 0;
@@ -308,9 +335,10 @@ void dd_real::recip()
   quick_two_sum(q1, q2);
   add(q3, 0);
 #endif
+  return *this;
 }
 
-void dd_real::sqrt()
+dd_real &dd_real::sqrt()
 {
   /* Strategy:  Use Karp's trick:  if x is an approximation
      to 1/sqrt(a), then
@@ -322,18 +350,18 @@ void dd_real::sqrt()
      only half the precision.
   */
 
-  if (hi<0) {
+  /*if (hi<0) {
     //dbgPoint();
     hi=0;
     lo_=0;
-    return;
-  };
+    return *this;
+  };*/
 
   if (hi<=0)
   {
     hi=0;
     lo_=0;
-    return;
+    return *this;
   };
 
 
@@ -343,14 +371,16 @@ void dd_real::sqrt()
   result.hi=ax;
   result.lo_=0;
   result.sqr();
-  add(-result.hi, -result.lo_);
+  result.chs();
+  add(result);
   hi*=(x*0.5);
   lo_=0;
-  add(ax, 0);
+  add_double(ax);
   //return dd_real::add(ax, (a - dd_real::sqr(ax)).x[0] * (x * 0.5));
+  return *this;
 }
 
-void dd_real::round()
+dd_real &dd_real::round()
 {
   //if lo==+-0.5 exactly, we should decide based on hi whether to round to +-1 or 0 but who cares
   //or could do this+=2^103-=2^103 or something like that
@@ -369,9 +399,10 @@ void dd_real::round()
     lo_=0;
     //shoud be good even at hi= +-2^52
   }
+  return *this;
 }
 
-void dd_real::frac()
+dd_real &dd_real::frac()
 {
   if ((lo_<=-0.5) || (lo_>=0.5))
   {
@@ -405,9 +436,10 @@ void dd_real::frac()
     else
       add_double(-std::floor(hi));
   }
+  return *this;
 }
 
-void dd_real::mod1()
+dd_real &dd_real::mod1()
 {
   if ((lo_<=-0.5) || (lo_>=0.5))
   {
@@ -422,23 +454,52 @@ void dd_real::mod1()
   {
     add_double(-std::floor(hi));
   }
+  return *this;
 }
 
-int dd_real::compare(const dd_real *other) const
+bool dd_real::reduce_angle()
 {
-  if (hi<other->hi)
-    return -1;
-  else if (hi>other->hi)
-    return +1;
-  else if (lo_<other->lo_)
-    return -1;
-  else if (lo_>other->lo_)
-    return +1;
+  static const dd_real M_PIdd(7074237752028440.0/2251799813685248.0, 2483878800010755.0/20282409603651670423947251286016.0);
+  static const dd_real M_PIdd_chs(-M_PIdd.hi, -M_PIdd.lo_);
+  static const dd_real M_PIdd_2(2*M_PIdd.hi, 2*M_PIdd.lo_);
+  //static const dd_real M_PIdd_2chs(-2*3.141, -2*0.0005926);
+  if (M_PIdd_chs.isle(*this))
+  {
+    add(M_PIdd_2);
+    return true;
+  }
+  else if (isle(M_PIdd))
+  {
+    sub(M_PIdd_2);
+    return true;
+  }
   else
-    return 0;
+    return false;
 }
 
-int dd_real::compare(double other_h, double other_l) const
+dd_real &dd_real::add_pi(double x)
+{
+  dd_real M_PIdd(7074237752028440.0/2251799813685248.0, 2483878800010755.0/20282409603651670423947251286016.0);
+  M_PIdd.mul_double(x);
+  add(M_PIdd);
+  return *this;
+}
+
+std::strong_ordering dd_real::compare(dd_real const &other) const
+{
+  if (hi<other.hi)
+    return std::strong_ordering::less;//-1;
+  else if (hi>other.hi)
+    return std::strong_ordering::greater;
+  else if (lo_<other.lo_)
+    return std::strong_ordering::less;
+  else if (lo_>other.lo_)
+    return std::strong_ordering::greater;
+  else
+    return std::strong_ordering::equal;
+}
+
+/*int dd_real::compare(double other_h, double other_l) const
 {
   if (hi<other_h)
     return -1;
@@ -450,11 +511,11 @@ int dd_real::compare(double other_h, double other_l) const
     return +1;
   else
     return 0;
-}
+}*/
 
-bool dd_real::isequal(const dd_real *other) const
+bool dd_real::isequal(dd_real const &other) const
 {
-  return (hi==other->hi) && (lo_==other->lo_);
+  return (hi==other.hi) && (lo_==other.lo_);
 }
 
 bool dd_real::is0() const
@@ -462,11 +523,11 @@ bool dd_real::is0() const
   return hi==0;
 }
 
-bool dd_real::isle(const dd_real *other) const
+bool dd_real::isle(dd_real const &other) const
 {
-  if (hi!=other->hi)
-    return hi<other->hi;
-  return lo_<=other->lo_;
+  if (hi!=other.hi)
+    return hi<other.hi;
+  return lo_<=other.lo_;
 }
 
 bool dd_real::isle0() const
@@ -483,6 +544,31 @@ bool dd_real::isl1() const
 {
   return hi<1;
 }
+
+dd_real &dd_real::min(dd_real const &other)
+{
+  if (!isle(other))
+  {
+    assign(other);
+  };
+  return *this;
+}
+
+QString dd_real::toString() const
+{
+  return QString("dd(%1,%2)").arg(hi, 0, 'f', 16).arg(lo_, 0, 'g', 16);
+}
+
+int dd_real::toRound() const
+{
+  return std::floor(hi+0.5)+std::floor(lo_+0.5);
+}
+
+double dd_real::toDouble() const
+{
+  return hi;
+}
+
 
 /*
 inline doubledouble recip(const doubledouble& y) {

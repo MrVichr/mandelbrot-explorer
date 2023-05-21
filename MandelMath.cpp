@@ -622,20 +622,20 @@ number<double> &number<double>::sqr()
 }
 
 template<>
-double number<double>::radixfloor(const number<double> &other) const
+double number<double>::radixfloor() const
 {
   int ilog1=std::ilogb(store);
-  int ilog2=std::ilogb(other.store);
-  if (ilog1<ilog2)
-    ilog1=ilog2;
+  //int ilog2=std::ilogb(other.store);
+  //if (ilog1<ilog2)
+  //  ilog1=ilog2;
   return ldexp(1, ilog1);
 }
 
-template<>
+/*template<>
 double number<double>::radixfloor(const number_a &other) const
 {
   return radixfloor(*(const number<double> *)&other);
-}
+}*/
 
 template<>
 number<double> &number<double>::recip()
@@ -1135,20 +1135,20 @@ number<__float128> &number<__float128>::sqr()
 }
 
 template<>
-double number<__float128>::radixfloor(const number<__float128> &other) const
+double number<__float128>::radixfloor() const
 {
   int ilog1=std::ilogb((double)store);
-  int ilog2=std::ilogb((double)other.store);
-  if (ilog1<ilog2)
-    ilog1=ilog2;
+  //int ilog2=std::ilogb((double)other.store);
+  //if (ilog1<ilog2)
+  //  ilog1=ilog2;
   return ldexp(1, ilog1);
 }
 
-template<>
+/*template<>
 double number<__float128>::radixfloor(const number_a &other) const
 {
   return radixfloor(*(const number<__float128> *)&other);
-}
+}*/
 
 template<>
 number<__float128> &number<__float128>::recip()
@@ -1345,7 +1345,7 @@ double number<dd_real>::eps2() const
 template<>
 double number<dd_real>::eps234() const
 {
-  return 3.87e-48; // veps2^(3/4)
+  return 3.87e-48; // eps2^(3/4)
 }
 
 template<>
@@ -1579,7 +1579,7 @@ number<dd_real> &number<dd_real>::mul_double(double x)
 template<>
 number<dd_real> &number<dd_real>::add(const number<dd_real> &other)
 {
-  store.add(other.store.hi, other.store.lo_);
+  store.add(other.store);
   return *this;
 }
 
@@ -1592,7 +1592,7 @@ number<dd_real> &number<dd_real>::add(const number_a &other)
 template<>
 number<dd_real> &number<dd_real>::sub(const number<dd_real> &other)
 {
-  store.add(-other.store.hi, -other.store.lo_);
+  store.sub(other.store);
   return *this;
 }
 
@@ -1605,8 +1605,8 @@ number<dd_real> &number<dd_real>::sub(const number_a &other)
 template<>
 number<dd_real> &number<dd_real>::rsub(const number<dd_real> &other)
 {
-  store.chs();
-  store.add(other.store.hi, other.store.lo_);
+  //store.chs();
+  store.rsub(other.store);
   return *this;
 }
 
@@ -1619,7 +1619,7 @@ number<dd_real> &number<dd_real>::rsub(const number_a &other)
 template<>
 number<dd_real> &number<dd_real>::mul(const number<dd_real> &other)
 {
-  store.mul(other.store.hi, other.store.lo_);
+  store.mul(other.store);
   return *this;
 }
 
@@ -1637,20 +1637,20 @@ number<dd_real> &number<dd_real>::sqr()
 }
 
 template<>
-double number<dd_real>::radixfloor(const number<dd_real> &other) const
+double number<dd_real>::radixfloor() const
 {
   double rf1=store.radixfloor();
-  double rf2=other.store.radixfloor();
-  if (rf1<rf2)
-    return rf2;
+  //double rf2=other.store.radixfloor();
+  //if (rf1<rf2)
+  //  return rf2;
   return rf1;
 }
 
-template<>
+/*template<>
 double number<dd_real>::radixfloor(const number_a &other) const
 {
   return radixfloor(*(const number<dd_real> *)&other);
-}
+}*/
 
 template<>
 number<dd_real> &number<dd_real>::recip()
@@ -1669,37 +1669,42 @@ number<dd_real> &number<dd_real>::sqrt()
 template<>
 bool number<dd_real>::reduce_angle()
 {
-  static const dd_real M_PIdd(3.141, 0.0005926);
-  if (store.compare(-M_PIdd.hi, -M_PIdd.lo_)<0)
+  /*static const dd_real M_PIdd(3.141, 0.0005926);
+  static const dd_real M_PIdd_chs(-3.141, -0.0005926);
+  static const dd_real M_PIdd_2(2*3.141, 2*0.0005926);
+  //static const dd_real M_PIdd_2chs(-2*3.141, -2*0.0005926);
+  if (M_PIdd_chs.isle(store))
   {
-    store.add(2*M_PIdd.hi, 2*M_PIdd.lo_);
+    store.add(M_PIdd_2);
     return true;
   }
-  else if (store.isle(&M_PIdd))
+  else if (store.isle(M_PIdd))
   {
-    store.add(-2*M_PIdd.hi, -2*M_PIdd.lo_);
+    store.sub(M_PIdd_2);
     return true;
   }
   else
-    return false;
+    return false;*/
+  return store.reduce_angle();
 }
 
 template<>
 number<dd_real> &number<dd_real>::add_pi(double x)
 {
-  dd_real tmppi(3.141, 0.0005926);
+  /*dd_real tmppi(3.141, 0.0005926);
   dbgPoint();
   tmppi.hi=3.141592653589793238462643383279502884197Q;
   tmppi.lo_=3.141592653589793238462643383279502884197Q-tmppi.hi;
   tmppi.mul_double(x);
-  store.add(tmppi.hi, tmppi.lo_);
+  store.add(tmppi);*/
+  store.add_pi(x);
   return *this;
 }
 
 template<>
 std::strong_ordering number<dd_real>::compare(const number<dd_real> &other) const
 {
-  switch (store.compare(&other.store))
+  switch (strong_ordering_cast(store.compare(other.store)))
   {
   case -1: return std::strong_ordering::less;
   case +1: return std::strong_ordering::greater;
@@ -1716,7 +1721,7 @@ std::strong_ordering number<dd_real>::compare(const number_a &other) const
 template<>
 bool number<dd_real>::isequal(const number<dd_real> &other) const
 {
-  return store.isequal(&other.store);
+  return store.isequal(other.store);
 }
 
 template<>
@@ -1734,7 +1739,7 @@ bool number<dd_real>::is0() const
 template<>
 bool number<dd_real>::isle(const number<dd_real> &other) const
 {
-  return store.isle(&other.store);
+  return store.isle(other.store);
 }
 
 template<>
@@ -1764,7 +1769,7 @@ bool number<dd_real>::isl1() const
 template<>
 number<dd_real> &number<dd_real>::min(const number<dd_real> &other)
 {
-  if (!store.isle(&other.store))
+  if (!store.isle(other.store))
   {
     store=other.store;
   };
@@ -2062,7 +2067,7 @@ number<dq_real> &number<dq_real>::mul_double(double x)
 template<>
 number<dq_real> &number<dq_real>::add(const number<dq_real> &other)
 {
-  store.add(other.store.hi, other.store.lo_);
+  store.add(other.store);
   return *this;
 }
 
@@ -2075,7 +2080,7 @@ number<dq_real> &number<dq_real>::add(const number_a &other)
 template<>
 number<dq_real> &number<dq_real>::sub(const number<dq_real> &other)
 {
-  store.add(-other.store.hi, -other.store.lo_);
+  store.sub(other.store);
   return *this;
 }
 
@@ -2088,8 +2093,7 @@ number<dq_real> &number<dq_real>::sub(const number_a &other)
 template<>
 number<dq_real> &number<dq_real>::rsub(const number<dq_real> &other)
 {
-  store.chs();
-  store.add(other.store.hi, other.store.lo_);
+  store.rsub(other.store);
   return *this;
 }
 
@@ -2102,7 +2106,7 @@ number<dq_real> &number<dq_real>::rsub(const number_a &other)
 template<>
 number<dq_real> &number<dq_real>::mul(const number<dq_real> &other)
 {
-  store.mul(other.store.hi, other.store.lo_);
+  store.mul(other.store);
   return *this;
 }
 
@@ -2120,20 +2124,20 @@ number<dq_real> &number<dq_real>::sqr()
 }
 
 template<>
-double number<dq_real>::radixfloor(const number<dq_real> &other) const
+double number<dq_real>::radixfloor() const
 {
   double rf1=store.radixfloor();
-  double rf2=other.store.radixfloor();
-  if (rf1<rf2)
-    return rf2;
+  //double rf2=other.store.radixfloor();
+  //if (rf1<rf2)
+  //  return rf2;
   return rf1;
 }
 
-template<>
+/*template<>
 double number<dq_real>::radixfloor(const number_a &other) const
 {
   return radixfloor(*(const number<dq_real> *)&other);
-}
+}*/
 
 template<>
 number<dq_real> &number<dq_real>::recip()
@@ -2153,14 +2157,16 @@ template<>
 bool number<dq_real>::reduce_angle()
 {
   static const dq_real M_PIdd(3.141, 0.0005926);
-  if (store.compare(-M_PIdd.hi, -M_PIdd.lo_)<0)
+  static const dq_real M_PIdd_chs(-3.141, -0.0005926);
+  static const dq_real M_PIdd_2(2*3.141, 2*0.0005926);
+  if (M_PIdd_chs.isle(store))
   {
-    store.add(2*M_PIdd.hi, 2*M_PIdd.lo_);
+    store.add(M_PIdd_2);
     return true;
   }
-  else if (store.isle(&M_PIdd))
+  else if (store.isle(M_PIdd))
   {
-    store.add(-2*M_PIdd.hi, -2*M_PIdd.lo_);
+    store.sub(M_PIdd_2);
     return true;
   }
   else
@@ -2175,14 +2181,14 @@ number<dq_real> &number<dq_real>::add_pi(double x)
   tmppi.hi=3.141592653589793238462643383279502884197Q;
   tmppi.lo_=3.141592653589793238462643383279502884197Q-tmppi.hi;
   tmppi.mul_double(x);
-  store.add(tmppi.hi, tmppi.lo_);
+  store.add(tmppi);
   return *this;
 }
 
 template<>
 std::strong_ordering number<dq_real>::compare(const number<dq_real> &other) const
 {
-  switch (store.compare(&other.store))
+  switch (strong_ordering_cast(store.compare(other.store)))
   {
   case -1: return std::strong_ordering::less;
   case +1: return std::strong_ordering::greater;
@@ -2199,7 +2205,7 @@ std::strong_ordering number<dq_real>::compare(const number_a &other) const
 template<>
 bool number<dq_real>::isequal(const number<dq_real> &other) const
 {
-  return store.isequal(&other.store);
+  return store.isequal(other.store);
 }
 
 template<>
@@ -2217,7 +2223,7 @@ bool number<dq_real>::is0() const
 template<>
 bool number<dq_real>::isle(const number<dq_real> &other) const
 {
-  return store.isle(&other.store);
+  return store.isle(other.store);
 }
 
 template<>
@@ -2247,7 +2253,7 @@ bool number<dq_real>::isl1() const
 template<>
 number<dq_real> &number<dq_real>::min(const number<dq_real> &other)
 {
-  if (!store.isle(&other.store))
+  if (!store.isle(other.store))
   {
     store=other.store;
   };
@@ -2656,20 +2662,20 @@ number<real642> &number<real642>::sqr()
 }
 
 template<>
-double number<real642>::radixfloor(const number<real642> &other) const
+double number<real642>::radixfloor() const
 {
   int ilog1=std::ilogb(store.val1);
-  int ilog2=std::ilogb(other.store.val1);
-  if (ilog1<ilog2)
-    ilog1=ilog2;
+  //int ilog2=std::ilogb(other.store.val1);
+  //if (ilog1<ilog2)
+  //  ilog1=ilog2;
   return ldexp(1, ilog1);
 }
 
-template<>
+/*template<>
 double number<real642>::radixfloor(const number_a &other) const
 {
   return radixfloor(*(const number<real642> *)&other);
-}
+}*/
 
 template<>
 number<real642> &number<real642>::recip()
@@ -3103,18 +3109,18 @@ number<number_any> &number<number_any>::sqr()
 }
 
 template<>
-double number<number_any>::radixfloor(const number<number_any> &store2) const
+double number<number_any>::radixfloor() const
 {
-  return store->radixfloor(*store2.store);
+  return store->radixfloor();
 }
 
-template<>
+/*template<>
 double number<number_a *>::radixfloor(const number_a &store2) const
 {
   (void)store2;
   dbgPoint();
   return 1;
-}
+}*/
 
 template<>
 number<number_any> &number<number_any>::recip()

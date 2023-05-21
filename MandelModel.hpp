@@ -180,7 +180,7 @@ protected:
     Position position;
     MandelMath::complex<MandelMath::number_any> lagu_c; //TODO: create struct Params and move there, like LaguerreModel
     MandelMath::complex<MandelMath::number_any> lagu_r; //same
-    MandelMath::number<MandelMath::number_any> tmp_place;
+    //MandelMath::number<MandelMath::number_any> tmp_place;
     void *points; //array<double|float128|...>[width*height]
     int threadCount;
     std::variant<std::nullptr_t,

@@ -511,7 +511,7 @@ ShareableViewInfo::ShareableViewInfo(ShareableViewInfo &src): ShareableViewInfo(
   //view.assign(src.view);
   //c.assign(src.c);
   //nth_fz_limit.assign(src.nth_fz_limit);
-  dbgPoint();
+  //dbgPoint();
 }
 
 ShareableViewInfo::ShareableViewInfo(ShareableViewInfo const &src): QObject(),
@@ -519,7 +519,7 @@ ShareableViewInfo::ShareableViewInfo(ShareableViewInfo const &src): QObject(),
   scale(src.scale), nth_fz(src.nth_fz), max_root_effort(src.max_root_effort)
 { //why do you need this?
   //doesn't "need" but calls it anyway dbgPoint();
-  dbgPoint();
+  //dbgPoint();
 }
 
 ShareableViewInfo::ShareableViewInfo(ShareableViewInfo &&src): QObject(),
@@ -2166,8 +2166,8 @@ void MandelEvaluator<BASE>::Bulb::findBulbBase(int period2, MandelMath::complex<
       loope->f_c.mul(loope->f_cc);
       res_xc.sub(loope->f_c);
     }
-    if (g_c_mag<g_cc_mag*c.re.eps2()*2*(res_xc.re.radixfloor(res_xc.re)+
-                                        res_xc.im.radixfloor(res_xc.im)))
+    if (g_c_mag<g_cc_mag*c.re.eps2()*2*(res_xc.re.radixfloor()+
+                                        res_xc.im.radixfloor()))
       break;
     if (cyc==9)
       nop();

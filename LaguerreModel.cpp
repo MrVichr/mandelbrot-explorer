@@ -1610,11 +1610,15 @@ void LaguerreModel::Position::pixelYtoIM(int y, MandelMath::number<BASE> *result
 
 
 
-LaguerreModel::Orbit::Orbit(MandelMath::NumberType ntype):
+LaguerreModel::Orbit::Orbit(MandelMath::NumberType ntype, Orbit const *source):
   evaluator(ntype, true),
   pointDataStore(), pointData(&pointDataStore, &evaluator.tmp),
   first_mu_re(0), first_mu_im(0), first_mum_re(0), first_mum_im(0)
 {
+  if (source)
+  {
+    evaluator.currentParams.mandel.c.assign_across(source->evaluator.currentParams.mandel.c);
+  };
 }
 
 LaguerreModel::Orbit::~Orbit()
@@ -1626,10 +1630,11 @@ LaguerreModel::Orbit::~Orbit()
 
 
 LaguerreModel::PrecisionRecord::PrecisionRecord(MandelMath::NumberType ntype, PrecisionRecord *source, LaguerreModel *doneReceiver):
-  ntype(ntype), orbit(ntype), wtiPoint(nullptr, &orbit.evaluator.tmp),
+  ntype(ntype), orbit(ntype, source?&source->orbit:nullptr),
+  wtiPoint(nullptr, &orbit.evaluator.tmp),
   params(&orbit.evaluator.tmp, source?&source->params:nullptr),
   position(&orbit.evaluator.tmp, source?&source->position:nullptr),
-  tmp_place(&orbit.evaluator.tmp),
+  //tmp_place(&orbit.evaluator.tmp),
   threadCount(source?source->threadCount:0), threads()
 {
   if (threadCount<=0)
@@ -1669,6 +1674,8 @@ LaguerreModel::PrecisionRecord::PrecisionRecord(MandelMath::NumberType ntype, Pr
           using Evaluator=std::remove_pointer_t<std::remove_pointer_t<std::remove_reference_t<decltype(threads)>>>;
           Evaluator *thread=new Evaluator(self.ntype, source==nullptr);
           threads[t]=thread;
+          if (source)
+            thread->currentParams.mandel.assign_across(source->orbit.evaluator.currentParams.mandel);
           thread->threaded.give=[doneReceiver](Evaluator *me)
           {
             return doneReceiver->giveWorkThreaded(me);
