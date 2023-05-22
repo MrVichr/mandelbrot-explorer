@@ -20,8 +20,8 @@ public:
   JuliaModel();
   ~JuliaModel();
   Q_INVOKABLE void startRunning();
-  void transformStore(void *old_points, JuliaPointStore *old_store, int old_width, int old_height, const MandelMath::complex<MandelMath::number_any> &old_c,
-                      void *new_points, JuliaPointStore *new_store, int new_width, int new_height, const MandelMath::complex<MandelMath::number_any> &new_c,
+  void transformStore(void *old_points, JuliaPointStore *old_store, int old_width, int old_height, MandelMath::complex<MandelMath::number_any> const &old_c,
+                      void *new_points, JuliaPointStore *new_store, int new_width, int new_height, MandelMath::complex<MandelMath::number_any> const &new_c,
                       int inlog, int new_step_log);
   void recomputeRoot(int max_effort);
   Q_INVOKABLE void setParams(ShareableViewInfo viewInfo);
@@ -169,7 +169,7 @@ protected:
   struct Position
   {
     static constexpr int LEN=2;
-    MandelMath::complex<MandelMath::number_a *> center;
+    MandelMath::complex<MandelMath::number_any> center;
     int step_log;
     double step_size; //TODO: should use special methods on number to add, mul and div by 2^-step_log
     int cached_center_re_mod; //(center/step) mod 32768
@@ -188,12 +188,12 @@ protected:
   };
   struct Orbit
   {
-    MandelEvaluator<MandelMath::number_a *> evaluator;
+    MandelEvaluator<MandelMath::number_any> evaluator;
     JuliaPointStore pointDataStore; //but we need it for long-term storage of results
     double first_mu_re, first_mu_im, first_mum_re, first_mum_im;
     Orbit(MandelMath::NumberType ntype, Orbit const *source);
     ~Orbit();
-    constexpr static int LEN=JuliaPoint<MandelMath::number_a *>::LEN;
+    constexpr static int LEN=JuliaPoint<MandelMath::number_any>::LEN;
   };
   struct PrecisionRecord
   {

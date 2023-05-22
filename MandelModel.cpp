@@ -394,7 +394,6 @@ void MandelModel::transformStore(void *old_points, MandelPointStore *old_store, 
   PixelPositionTransformer xtrans=PixelPositionTransformer(inlog, new_step_log);
   {
     MandelMath::number<MandelMath::number_any> tmp(old_c->im);
-    //tmp.assign(old_c->im);
     tmp.sub(new_c->im); //and reversing y at the last minute
     ytrans.setShift(&tmp, new_height);
 
@@ -2071,10 +2070,12 @@ MandelModel::Orbit::Bulb::~Bulb()
 {
 }
 
+/*
 template<typename B>
 struct BaseExtractor {};
 template<typename B>
 struct BaseExtractor<MandelEvaluator<B>> {using ttt=B;};
+*/
 
 MandelModel::PrecisionRecord::PrecisionRecord(MandelMath::NumberType ntype, PrecisionRecord *source, MandelModel *doneReceiver):
   ntype(ntype), orbit(ntype), wtiPoint(nullptr, &orbit.evaluator.tmp),

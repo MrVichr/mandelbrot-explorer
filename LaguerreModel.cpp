@@ -363,7 +363,6 @@ void LaguerreModel::transformStore(void *old_points, LaguerrePointStore *old_sto
   PixelPositionTransformer xtrans(inlog, new_step_log);
   {
     MandelMath::number<MandelMath::number_any> tmp(old_c.im);
-    //tmp.assign(old_c.im);
     tmp.sub(new_c.im); //and reversing y at the last minute
     ytrans.setShift(&tmp, new_height);
 

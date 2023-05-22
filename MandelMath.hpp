@@ -47,26 +47,26 @@ auto visit(auto callable, std::variant<Options...> &vari, auto &...params)
   //using cases=std::make_index_sequence<sizeof...(Options)>;
   auto index=vari.index(); //size_t
   if constexpr (sizeof...(Options)>0)
-      if (index==0) return callable(std::get<0>(vari), params...); //__detail::__variant::__get<_Np>(__v);
+    if (index==0) return callable((NthTypeOf<0, Options...> &)vari, params...); //__detail::__variant::__get<_Np>(__v);
   if constexpr (sizeof...(Options)>1)
-      //if (index==1) return callable(std::get<1>(vari), params...);
-      if (index==1) return callable((NthTypeOf<1, Options...> &)vari, params...);
+    //if (index==1) return callable(std::get<1>(vari), params...);
+    if (index==1) return callable((NthTypeOf<1, Options...> &)vari, params...);
   if constexpr (sizeof...(Options)>2)
-      if (index==2) return callable(std::get<2>(vari), params...);
+    if (index==2) return callable((NthTypeOf<2, Options...> &)vari, params...);
   if constexpr (sizeof...(Options)>3)
-      if (index==3) return callable(std::get<3>(vari), params...);
+    if (index==3) return callable((NthTypeOf<3, Options...> &)vari, params...);
   if constexpr (sizeof...(Options)>4)
-      if (index==4) return callable(std::get<4>(vari), params...);
+    if (index==4) return callable((NthTypeOf<4, Options...> &)vari, params...);
   if constexpr (sizeof...(Options)>5)
-      if (index==5) return callable(std::get<5>(vari), params...);
+    if (index==5) return callable((NthTypeOf<5, Options...> &)vari, params...);
   if constexpr (sizeof...(Options)>6)
-      if (index==6) return callable(std::get<6>(vari), params...);
+    if (index==6) return callable((NthTypeOf<6, Options...> &)vari, params...);
   using RT=decltype(callable((NthTypeOf<0, Options...> &)vari, params...));
   [[unlikely]]
   if constexpr (std::is_same_v<RT, std::strong_ordering>)
-      return std::strong_ordering::equal; //even more failure from C++ commitee
+    return std::strong_ordering::equal; //even more failure from C++ commitee
   else
-      return RT();
+    return RT();
 }
 
 template<typename ...Options>
@@ -75,26 +75,26 @@ auto visit(auto callable, std::variant<Options...> const &vari, auto &...params)
   //using cases=std::make_index_sequence<sizeof...(Options)>;
   auto index=vari.index(); //size_t
   if constexpr (sizeof...(Options)>0)
-      if (index==0) return callable(std::get<0>(vari), params...); //__detail::__variant::__get<_Np>(__v);
+    if (index==0) return callable((NthTypeOf<0, Options...> &)vari, params...); //__detail::__variant::__get<_Np>(__v);
   if constexpr (sizeof...(Options)>1)
-      //if (index==1) return callable(std::get<1>(vari), params...);
-      if (index==1) return callable((NthTypeOf<1, Options...> const &)vari, params...);
+    //if (index==1) return callable(std::get<1>(vari), params...);
+    if (index==1) return callable((NthTypeOf<1, Options...> const &)vari, params...);
   if constexpr (sizeof...(Options)>2)
-      if (index==2) return callable(std::get<2>(vari), params...);
+    if (index==2) return callable((NthTypeOf<2, Options...> &)vari, params...);
   if constexpr (sizeof...(Options)>3)
-      if (index==3) return callable(std::get<3>(vari), params...);
+    if (index==3) return callable((NthTypeOf<3, Options...> &)vari, params...);
   if constexpr (sizeof...(Options)>4)
-      if (index==4) return callable(std::get<4>(vari), params...);
+    if (index==4) return callable((NthTypeOf<4, Options...> &)vari, params...);
   if constexpr (sizeof...(Options)>5)
-      if (index==5) return callable(std::get<5>(vari), params...);
+    if (index==5) return callable((NthTypeOf<5, Options...> &)vari, params...);
   if constexpr (sizeof...(Options)>6)
-      if (index==6) return callable(std::get<6>(vari), params...);
+    if (index==6) return callable((NthTypeOf<6, Options...> &)vari, params...);
   using RT=decltype(callable((NthTypeOf<0, Options...> &)vari, params...));
   [[unlikely]]
   if constexpr (std::is_same_v<RT, std::strong_ordering>)
-      return std::strong_ordering::equal; //even more failure from C++ commitee
+    return std::strong_ordering::equal; //even more failure from C++ commitee
   else
-      return RT();
+    return RT();
 }
 
 //never seen before... yet another failure from the C++ commitee
