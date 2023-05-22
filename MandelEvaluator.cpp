@@ -7227,7 +7227,7 @@ z, fill ? by making each quadrant uniform
   };
   result->assign(angleC);
   result->add_pi(angle.toDouble());
-  //result->add(angle); //*2*pi
+  result->reduce_angle(); //can be angleC=0.01, angle=1 -> 3.15 but that's illegal, >pi
 }
 
 template struct LaguerrePoint<double>;
