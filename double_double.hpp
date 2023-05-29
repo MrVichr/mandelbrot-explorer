@@ -25,7 +25,7 @@ public:
   double eps2() const;
   double eps234() const;
   dd_real &assign(const dd_real &src) noexcept { hi=src.hi; lo_=src.lo_; return *this; }
-  dd_real &zero(double v) { hi=v; lo_=0; return *this; }
+  dd_real &zero(double v=0) { hi=v; lo_=0; return *this; }
   dd_real &chs() { hi=-hi; lo_=-lo_; return *this; }
   dd_real &lshift(int exp); //*=2^exp
   dd_real &add_double(double h2);

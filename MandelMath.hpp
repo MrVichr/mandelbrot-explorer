@@ -9,6 +9,7 @@
 
 #define NUMBER_DOUBLE_EXISTS 1
 #define NUMBER_DOUBLE_ONLY 0
+#define NUMBER_IS_VARIANT 1
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -144,6 +145,194 @@ template <> struct NumberTypeFromBase<real642> { static constexpr NumberType nty
 
 extern int CreatedInstancesOfNumber;
 
+template<typename BASE>
+class number;
+
+#if NUMBER_IS_VARIANT
+using number_any=std::variant<std::monostate, number<double>, number<__float128>, number<dd_real>, number<dq_real>, number<real642>>;
+#endif
+
+template<typename T>
+concept IMandelNumber = requires(T a, T b)
+{
+  //no worky using namespace std;
+  //simple way:
+  //{ a.add(b) } -> std::same_as<T>;
+  //strict way:
+  //requires std::same_as<decltype ( &T::add ), T &(T::*)(T const &)>;
+
+  { a.eps2() } -> std::same_as<double>;
+  requires std::same_as<decltype ( &T::eps234 ), double(T::*)() const>;
+
+  //requires std::same_as<decltype ( &T::zero ), T &(T::*)(double val)>;
+  requires std::same_as<decltype ( static_cast<T &(T::*)(double x)>(&T::zero) ), T &(T::*)(double)>;
+  requires std::same_as<decltype ( &T::assign ), T &(T::*)(T const &) noexcept>;
+  //will solve overloads later...maybe  requires std::same_as<decltype ( &T::assign_across ), T &(T::*)(number_a const &)>;
+  requires std::same_as<decltype ( &T::chs ), T &(T::*)()>;
+  requires std::same_as<decltype ( &T::lshift ), T &(T::*)(int shoft)>;
+  requires std::same_as<decltype ( &T::add_double ), T &(T::*)(double val)>;
+  requires std::same_as<decltype ( &T::mul_double ), T &(T::*)(double val)>;
+  requires std::same_as<decltype ( &T::add ), T &(T::*)(T const &)>;
+  requires std::same_as<decltype ( &T::sub ), T &(T::*)(T const &)>;
+  requires std::same_as<decltype ( &T::rsub ), T &(T::*)(T const &)>;
+  //requires std::same_as<decltype ( &T::mul ), T &(T::*)(T const &)>;
+  //select the right obverload
+  requires std::same_as<decltype ( static_cast<T &(T::*)(T const &)>(&T::mul) ), T &(T::*)(T const &)>;
+  requires std::same_as<decltype ( &T::sqr ), T &(T::*)()>;
+  requires std::same_as<decltype ( &T::recip ), T &(T::*)()>;
+  requires std::same_as<decltype ( &T::sqrt ), T &(T::*)()>;
+  requires std::same_as<decltype ( &T::compare ), std::strong_ordering (T::*)(T const &other) const>; //operator<=>
+  requires std::same_as<decltype ( &T::isequal ), bool (T::*)(T const &other) const>; //operator==
+  requires std::same_as<decltype ( &T::is0 ), bool (T::*)() const>; // ==0
+  requires std::same_as<decltype ( &T::isle ), bool(T::*)(T const &other) const>; //operator<=
+  requires std::same_as<decltype ( &T::isle0 ), bool (T::*)() const>; // <=0
+  requires std::same_as<decltype ( &T::isl0 ), bool (T::*)() const>; // <0
+
+  requires std::same_as<decltype ( &T::toString ), QString (T::*)() const>;
+
+  /* maybe later
+  virtual NumberType ntype() const=0;// { return this->_ntype; }
+  virtual NumberType raw_ntype() const=0;// { return this->_ntype; }
+  virtual void readFrom(void *storage, int index)=0; //BASE storage[index]
+  virtual void writeTo(void *storage, int index) const=0; //BASE storage[index]
+*/
+  requires std::is_nothrow_assignable_v<T, T>;
+  requires std::is_nothrow_copy_assignable_v<T>;
+  requires std::is_nothrow_move_constructible_v<T>;
+  requires std::is_nothrow_copy_constructible_v<T>;
+  requires std::is_move_assignable_v<T>;
+  //requires std::is_trivially_copyable_v<T>;
+};
+
+template<typename T>
+concept IMandelReal = requires(T a, T b)
+{
+  requires IMandelNumber<T>;
+  requires std::same_as<decltype ( &T::round ), T &(T::*)()>;
+  requires std::same_as<decltype ( &T::frac ), T &(T::*)()>;
+  requires std::same_as<decltype ( &T::mod1 ), T &(T::*)()>;
+  requires std::same_as<decltype ( &T::radixfloor ), double (T::*)() const>;
+  requires std::same_as<decltype ( &T::reduce_angle ), bool (T::*)()>;
+  requires std::same_as<decltype ( &T::add_pi ), T &(T::*)(double val)>;
+  requires std::same_as<decltype ( &T::isl1 ), bool (T::*)() const>; // <1
+  requires std::same_as<decltype ( &T::min ), T &(T::*)(T const &)>;
+
+  requires std::same_as<decltype ( &T::toRound ), int (T::*)() const>;
+  requires std::same_as<decltype ( &T::toDouble ), double (T::*)() const>;
+};
+
+template<typename T>
+concept IMandelComplex = requires(T a, T b)
+{
+  requires IMandelNumber<T>;
+};
+
+#if NUMBER_IS_VARIANT
+template<typename BASE>
+class number
+{
+  public:
+  struct Scratchpad
+  {
+    NumberType ntype;
+    void *inner;
+    number<BASE> tmp1;
+    number<BASE> tmp2;
+    number<BASE> tmp3;
+    number<BASE> tmp4;
+    //Scratchpad(): ntype(NumberType::typeEmpty), inner(nullptr), tmp1(), tmp2(), tmp3(), tmp4() { }
+    Scratchpad(NumberType ntype);//: ntype(ntype), tmp1(this), tmp2(this), tmp3(this), tmp4(this), inner(nullptr) { }
+    //Scratchpad(Scratchpad *inner): ntype(inner->ntype), tmp1(this), tmp2(this), tmp3(this), tmp4(this), inner(inner) { }
+    ~Scratchpad() { }
+  };
+  protected:
+  BASE store; //either "double" for special optimized template
+      //or "double *" for universal implementation
+      //going meta by using BASE="number<actual base> *"
+  Scratchpad *tmp;
+  //friend class ::ShareableViewInfo;
+  friend class number<double>;
+  friend class number<__float128>;
+  friend class number<dd_real>;
+  friend class number<dq_real>;
+  friend class number<real642>;
+  friend class number<number_any>;
+  public:
+  double eps2() const;
+  double eps234() const;
+  number(): store(), tmp(nullptr) { } //for ShareableViewInfo
+  number(const number &x) noexcept: store(x.store), tmp(x.tmp) { }
+  number(number &&x) noexcept: store(), tmp(x.tmp) { x.swap(*this); };
+  number(Scratchpad *spad);
+  ~number();
+  void constructLateBecauseQtIsAwesome(const number &arc); //starts to look like copy_construct
+  void swap(number &other) noexcept { std::swap(store, other.store); }
+  //number(BASE store): store(store) {}
+  NumberType ntype() const;// { return this->_ntype; }
+  NumberType raw_ntype() const;
+  void readFrom(void *storage, int index); //BASE storage[index]
+  void writeTo(void *storage, int index) const; //BASE storage[index]
+  static BASE *convert_block(NumberType old_type, const void *old_data, int count); //TODO: probably needs to introduce number<OTHER>::serialized, and accept variant<serialized1 *, serialized2 *,...>
+  //static worker_multi *create(Type ntype, int capacity);
+  //static worker_multi *create(Type ntype, Allocator<worker_multi> *allocator);
+  //Allocator<worker_multi> *getAllocator() { return &allocator; }
+  //virtual void assign_block(int dst, worker_multi *src_worker, int src, int len)=0; //for now, assert(this.ntype==src.ntype)
+  //or assign_block(int dst, allocator *src) + assign_block(allocator *dst, int src) + assign_block(int dst, int src, int len)
+  //virtual void assign_block(int dst, const Allocator<worker_multi> *src)
+  //{ int first, capac; src->_getFirstCapac(first, capac); assign_block(dst, src->worker, first, capac); }
+
+  number &zero(double val=0);
+  //number &assign(const number_any &src);
+  number &assign(const number<BASE> &src) noexcept;
+  number &operator=(number<BASE> src) noexcept { swap(src); return *this; }
+  template <typename OTHER_BASE>
+  number &assign_across(const number<OTHER_BASE> &src); //1. wrap number<BASE> into number<number_any>, 2. unwrap, 3. convert unrelated number<OTHER>
+  //template <typename OTHER_BASE>
+  //void assign_across(const number<OTHER_BASE> *src);
+  //number &assign_across(const number<BASE> &src);
+  //void assign_across(BASE src);
+  number &chs();
+  number &lshift(int shoft); // self <<= shoft; 1 lshift -10000 = 0 not error
+  number &round();
+  number &frac(); //-1<result<1
+  number &mod1(); //0<=result<1
+  number &add_double(double x);
+  number &mul_double(double x);
+  number &add(const number_any &other);
+  number &add(const number<BASE> &other);
+  number &sub(const number_any &other);
+  number &sub(const number<BASE> &other);
+  number &rsub(const number_any &other);
+  number &rsub(const number<BASE> &other);
+  number &mul(const number_any &other);
+  number &mul(const number<BASE> &other);
+  number &sqr();
+  double radixfloor() const;
+  //double radixfloor(const number<BASE> &other) const; //nearest smaller power of 2 (1.5->1->1)
+  number &recip();
+  number &sqrt();
+  bool reduce_angle();
+  number &add_pi(double x);
+  //std::strong_ordering compare(const number_any &other) const; //return -1 if <, 0 if =, +1 if >; std::strong_ordering not in my compiler yet
+  std::strong_ordering compare(const number<BASE> &other) const; //return -1 if <, 0 if =, +1 if >; std::strong_ordering not in my compiler yet
+  //std::strong_ordering operator<=>(number_any const &other) const { return compare(other); }
+  std::strong_ordering operator<=>(number<BASE> const &other) const { return compare(other); }
+  bool isequal(const number_any &other) const; //return store==other
+  bool isequal(const number<BASE> &other) const; //return store==other
+  bool is0() const;
+  bool isle(const number_any &other) const; //return store<=other
+  bool isle(const number<BASE> &other) const; //return store<=other
+  bool isle0() const; //return store<=0
+  bool isl0() const; //return store<0
+  bool isl1() const; //return store<1
+  number &min(const number_any &other);
+  number &min(const number<BASE> &other);
+
+  QString toString() const;
+  int toRound() const;
+  double toDouble() const;
+};
+#else
 class number_a
 {
 protected:
@@ -202,75 +391,6 @@ public:
 
 using number_any=number_a *;
 
-template<typename T>
-concept IMandelNumber = requires(T a, T b)
-{
-  //no worky using namespace std;
-  //simple way:
-  //{ a.add(b) } -> std::same_as<T>;
-  //strict way:
-  //requires std::same_as<decltype ( &T::add ), T &(T::*)(T const &)>;
-
-  { a.eps2() } -> std::same_as<double>;
-  requires std::same_as<decltype ( &T::eps234 ), double(T::*)() const>;
-
-  //requires std::same_as<decltype ( &T::zero ), T &(T::*)(double val)>;
-  requires std::same_as<decltype ( static_cast<T &(T::*)(double x)>(&T::zero) ), T &(T::*)(double)>;
-  requires std::same_as<decltype ( &T::assign ), T &(T::*)(T const &) noexcept>;
-  //will solve overloads later...maybe  requires std::same_as<decltype ( &T::assign_across ), T &(T::*)(number_a const &)>;
-  requires std::same_as<decltype ( &T::chs ), T &(T::*)()>;
-  requires std::same_as<decltype ( &T::lshift ), T &(T::*)(int shoft)>;
-  requires std::same_as<decltype ( &T::add_double ), T &(T::*)(double val)>;
-  requires std::same_as<decltype ( &T::mul_double ), T &(T::*)(double val)>;
-  requires std::same_as<decltype ( &T::add ), T &(T::*)(T const &)>;
-  requires std::same_as<decltype ( &T::sub ), T &(T::*)(T const &)>;
-  requires std::same_as<decltype ( &T::rsub ), T &(T::*)(T const &)>;
-  //requires std::same_as<decltype ( &T::mul ), T &(T::*)(T const &)>;
-  //select the right obverload
-  requires std::same_as<decltype ( static_cast<T &(T::*)(T const &)>(&T::mul) ), T &(T::*)(T const &)>;
-  requires std::same_as<decltype ( &T::sqr ), T &(T::*)()>;
-  requires std::same_as<decltype ( &T::recip ), T &(T::*)()>;
-  requires std::same_as<decltype ( &T::sqrt ), T &(T::*)()>;
-  requires std::same_as<decltype ( &T::compare ), std::strong_ordering (T::*)(T const &other) const>; //operator<=>
-  requires std::same_as<decltype ( &T::isequal ), bool (T::*)(T const &other) const>; //operator==
-  requires std::same_as<decltype ( &T::is0 ), bool (T::*)() const>; // ==0
-  requires std::same_as<decltype ( &T::isle ), bool(T::*)(T const &other) const>; //operator<=
-  requires std::same_as<decltype ( &T::isle0 ), bool (T::*)() const>; // <=0
-  requires std::same_as<decltype ( &T::isl0 ), bool (T::*)() const>; // <0
-
-  requires std::same_as<decltype ( &T::toString ), QString (T::*)() const>;
-
-/* maybe later
-  virtual NumberType ntype() const=0;// { return this->_ntype; }
-  virtual NumberType raw_ntype() const=0;// { return this->_ntype; }
-  virtual void readFrom(void *storage, int index)=0; //BASE storage[index]
-  virtual void writeTo(void *storage, int index) const=0; //BASE storage[index]
-*/
-  requires std::is_nothrow_assignable_v<T, T>;
-  requires std::is_nothrow_copy_assignable_v<T>;
-  requires std::is_nothrow_move_constructible_v<T>;
-  requires std::is_nothrow_copy_constructible_v<T>;
-  requires std::is_move_assignable_v<T>;
-  //requires std::is_trivially_copyable_v<T>;
-};
-
-template<typename T>
-concept IMandelReal = requires(T a, T b)
-{
-  requires IMandelNumber<T>;
-  requires std::same_as<decltype ( &T::round ), T &(T::*)()>;
-  requires std::same_as<decltype ( &T::frac ), T &(T::*)()>;
-  requires std::same_as<decltype ( &T::mod1 ), T &(T::*)()>;
-  requires std::same_as<decltype ( &T::radixfloor ), double (T::*)() const>;
-  requires std::same_as<decltype ( &T::reduce_angle ), bool (T::*)()>;
-  requires std::same_as<decltype ( &T::add_pi ), T &(T::*)(double val)>;
-  requires std::same_as<decltype ( &T::isl1 ), bool (T::*)() const>; // <1
-  requires std::same_as<decltype ( &T::min ), T &(T::*)(T const &)>;
-
-  requires std::same_as<decltype ( &T::toRound ), int (T::*)() const>;
-  requires std::same_as<decltype ( &T::toDouble ), double (T::*)() const>;
-};
-
 template<typename BASE>
 class number: public number_a
 {
@@ -299,7 +419,7 @@ protected:
   friend class number<dd_real>;
   friend class number<dq_real>;
   friend class number<real642>;
-  friend class number<number_a *>;
+  friend class number<number_any>;
 public:
   virtual double eps2() const override;
   virtual double eps234() const override;
@@ -373,6 +493,7 @@ public:
   virtual int toRound() const override;
   virtual double toDouble() const override;
 };
+#endif
 
 template <typename BASE>
 class complex
@@ -398,6 +519,8 @@ public:
   complex &assign(const complex &other) noexcept;
   template <typename OTHER_BASE>
   complex &assign_across(const complex<OTHER_BASE> &src);
+  //complex &assign_across_from(const complex<number_any> &src);
+  //complex &assign_across_to(complex<number_any> &src) const;
   //void assign_across(const BASE re, const BASE im);
   complex &lshift(int shoft);
   //add_double(r), add_double(r, i)

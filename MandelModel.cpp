@@ -289,23 +289,23 @@ ShareableViewInfo MandelModel::getViewInfo()
   result.nth_fz=precisionRecord->orbit.evaluator.mandelData.store->near0iter_1;/*precisionRecord->orbit.evaluator.currentData.store->period;
   if (result.nth_fz<1)
     result.nth_fz=result.period;*/
-  result.view.assign_across(precisionRecord->orbit.evaluator.currentParams.mandel.c);
+  result.view.assign(precisionRecord->orbit.evaluator.currentParams.mandel.c);
   result.scale=precisionRecord->position.step_size;
   result.max_root_effort=MAX_EFFORT;
   /*orbit.worker->init_(&result.re_, &result.re_p);
   orbit.worker->init_(&result.im, &result.im_p);
   orbit.worker->init_(&result.root_re, &result.rre_p);
   orbit.worker->init_(&result.root_im, &result.rim_p);*/
-  result.c.assign_across(precisionRecord->orbit.evaluator.currentParams.mandel.c);
+  result.c.assign(precisionRecord->orbit.evaluator.currentParams.mandel.c);
   precisionRecord->orbit.evaluator.loope.eval_zz(result.nth_fz,
       precisionRecord->orbit.evaluator.currentParams.mandel.c,//result.c,
       precisionRecord->orbit.evaluator.mandelData.root,//result.root,
       false);
-  result.nth_fz_limit.assign_across(*precisionRecord->orbit.evaluator.loope.f_z.getMag_tmp());
+  result.nth_fz_limit.assign(*precisionRecord->orbit.evaluator.loope.f_z.getMag_tmp());
 
   //TODO: why here? should be somewhere else
-  precisionRecord->lagu_c.assign_across(precisionRecord->orbit.evaluator.currentParams.mandel.c);
-  precisionRecord->lagu_r.assign_across(precisionRecord->orbit.evaluator.mandelData.root);
+  precisionRecord->lagu_c.assign(precisionRecord->orbit.evaluator.currentParams.mandel.c);
+  precisionRecord->lagu_r.assign(precisionRecord->orbit.evaluator.mandelData.root);
 
   return result;
 }
@@ -670,7 +670,7 @@ void MandelModel::startNewEpoch()
 void MandelModel::reimToPixel(int *circ_x, int *circ_y, MandelMath::complex<MandelMath::number_any> const &z, MandelMath::number<MandelMath::number_any> *tmp)
 {
   double scaled;
-  tmp->assign_across(z.re);
+  tmp->assign(z.re);
   tmp->sub(precisionRecord->position.center.re);
   scaled=tmp->toDouble()/precisionRecord->position.step_size;
   if (scaled<-10003 || scaled>10003)
@@ -678,7 +678,7 @@ void MandelModel::reimToPixel(int *circ_x, int *circ_y, MandelMath::complex<Mand
   else
     *circ_x=qRound(scaled)+imageWidth/2;
 
-  tmp->assign_across(z.im);
+  tmp->assign(z.im);
   tmp->sub(precisionRecord->position.center.im);
   scaled=tmp->toDouble()/precisionRecord->position.step_size;
   if (scaled<-10003 || scaled>10003)
@@ -890,7 +890,7 @@ void MandelModel::paintOrbit(ShareableImageWrapper image, int x, int y)
     precisionRecord->orbit.evaluator.bulb.findBulbBase(
         precisionRecord->orbit.evaluator.mandelData.store->period,
         precisionRecord->orbit.evaluator.currentParams.mandel.c);
-    precisionRecord->orbit.bulb.baseFz.assign_across(precisionRecord->orbit.evaluator.bulb.res_baseFz);
+    precisionRecord->orbit.bulb.baseFz.assign(precisionRecord->orbit.evaluator.bulb.res_baseFz);
     precisionRecord->orbit.bulb.foundMult_=precisionRecord->orbit.evaluator.bulb.res_foundMult;
     if (precisionRecord->orbit.evaluator.bulb.res_valid)
     {

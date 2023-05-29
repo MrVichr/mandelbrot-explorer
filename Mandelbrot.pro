@@ -22,7 +22,7 @@ SOURCES += \
         LaguerreModel.cpp \
         MandelEvaluator.cpp \
         MandelImageCombiner.cpp \
-        MandelMath.cpp \
+        MandelMath_var.cpp \
         MandelModel.cpp \
         ShareableImageWrapper.cpp \
         double_double.cpp \
