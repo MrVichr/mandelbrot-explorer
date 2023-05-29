@@ -663,6 +663,9 @@ void MandelModel::startNewEpoch()
       };
   }, precisionRecord->threads, precisionRecord->threadCount, epoch);
   _threadsWorking+=precisionRecord->threadCount;
+
+  invalidateMainImage();
+
   emit triggerComputeThreaded(epoch); //::invokeMethod cannot pass parameters, but ::connect can
 #endif
 }
@@ -1065,11 +1068,37 @@ int MandelModel::writeToImage(ShareableImageWrapper image)
     //indexOfWtiPoint=totalNewtons; //zoom0: 47167, zoom1: 188490, zoom2: 754210  with breaker
     (void)totalNewtons;           //       47238         188929         756264  without breaker
   }
+
+  //need some std::atomic expert here...
+  int dirty_left=imageWidth;
+  int dirty_right=-1;
+  int dirty_top=imageHeight;
+  int dirty_bottom=-1;
+  do
+  {
+    int left=image_dirty.left.exchange(imageWidth);
+    int right=image_dirty.right.exchange(-1);
+    int top=image_dirty.top.exchange(imageHeight);
+    int bottom=image_dirty.bottom.exchange(-1);
+    if (left==imageWidth && right==-1 && top==imageHeight && bottom==-1)
+      break;
+    if (dirty_left>left)
+      dirty_left=left;
+    if (dirty_right<right)
+      dirty_right=right;
+    if (dirty_top>top)
+      dirty_top=top;
+    if (dirty_bottom<bottom)
+      dirty_bottom=bottom;
+  }
+  while (true);
+
   //precisionRecord->wtiPoint.self_allocator._getFirstCapac(indexOfWtiPoint, _discard_);
   double extAngleZoom=1<<this->_extAngleZoom;
   MandelPointStore *wtiStore;
-  for (int y=0; y<imageHeight; y++)
-    for (int x=0; x<imageWidth; x++)
+  if (dirty_left<=dirty_right && dirty_top<=dirty_bottom)
+  for (int y=dirty_top; y<=dirty_bottom; y++)
+    for (int x=dirty_left; x<=dirty_right; x++)
     {
       //MandelMath::worker_multi::Allocator allo(storeWorker->getAllocator(), (y*imageWidth+x)*MandelPoint::LEN, MandelPoint::LEN, nullptr);
       //MandelPoint data_(&pointStore_[y*imageWidth+x], &allo);
@@ -1818,15 +1847,22 @@ int MandelModel::doneWorkThreaded(MandelEvaluator<BASE> *me, bool giveWork)
       dbgPoint();
     if (dstStore->wstate.load(std::memory_order_relaxed)==MandelPointStore::WorkState::stWorking)
     {
-       if (dstStore->iter>=(1<<MAX_EFFORT))
-       {
-         dstStore->rstate=MandelPointStore::ResultState::stMaxIter;
-         dstStore->wstate.store(MandelPointStore::WorkState::stDone, std::memory_order_release);
-       }
-       else if (dstStore->rstate!=MandelPointStore::ResultState::stUnknown)
-         dstStore->wstate.store(MandelPointStore::WorkState::stDone, std::memory_order_release);
-       else
-         dstStore->wstate.store(MandelPointStore::WorkState::stIdle, std::memory_order_release);
+      if (dstStore->iter>=(1<<MAX_EFFORT))
+      {
+        dstStore->rstate=MandelPointStore::ResultState::stMaxIter;
+        dstStore->wstate.store(MandelPointStore::WorkState::stDone, std::memory_order_release);
+      }
+      else if (dstStore->rstate!=MandelPointStore::ResultState::stUnknown)
+        dstStore->wstate.store(MandelPointStore::WorkState::stDone, std::memory_order_release);
+      else
+        dstStore->wstate.store(MandelPointStore::WorkState::stIdle, std::memory_order_release);
+
+      int x=me->currentParams.pixelIndex%imageWidth;
+      int y=me->currentParams.pixelIndex/imageWidth;
+      MandelMath::atomic_min(image_dirty.left, x);
+      MandelMath::atomic_max(image_dirty.right, x);
+      MandelMath::atomic_min(image_dirty.top, y);
+      MandelMath::atomic_max(image_dirty.bottom, y);
     }
     else
       dbgPoint();

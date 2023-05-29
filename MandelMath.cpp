@@ -261,6 +261,23 @@ int ReverseBits<7, 1>(int val) //reverse bottom 7 bits in blocks of 1
   return ((rh&0x07)<<4) | (val&0x08) | (rl&0x07);
 }
 
+void atomic_min(std::atomic<int> &a, int val) noexcept
+{
+  int prev_value = a;
+  while(prev_value > val &&
+         !a.compare_exchange_weak(prev_value, val))
+  {}
+}
+
+void atomic_max(std::atomic<int> &a, int val) noexcept
+{
+  int prev_value = a;
+  while(prev_value < val &&
+         !a.compare_exchange_weak(prev_value, val))
+  {}
+}
+
+
 /*template <int total, int block>
 int ReverseBits(int val)
 {

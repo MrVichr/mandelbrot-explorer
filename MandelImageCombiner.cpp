@@ -55,8 +55,8 @@ ShareableImageWrapper MandelImageCombiner::getOverlayImage()
 
 void MandelImageCombiner::paint(QPainter *painter)
 {
-  painter->setPen(QColor("red"));
-  painter->drawEllipse(50, 50, 100, 50);
+  /*painter->setPen(QColor("red"));
+  painter->drawEllipse(50, 50, 100, 50);*/
   painter->drawImage(0, 0, m_bgImage);
   //painter->setPen(QColor(0x0000ff));
   //painter->drawEllipse(50, 100, 100, 50);

@@ -40,6 +40,9 @@ bool enum_is_one_of(E value)
   return ((value==vals) || ...);
 }
 
+void atomic_min(std::atomic<int> &a, int val) noexcept;
+void atomic_max(std::atomic<int> &a, int val) noexcept;
+
 template<int N, typename... Ts> using NthTypeOf =
     typename std::tuple_element<N, std::tuple<Ts...>>::type;
 template<typename ...Options>

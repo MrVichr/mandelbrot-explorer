@@ -312,6 +312,22 @@ int ReverseBits<7, 1>(int val) //reverse bottom 7 bits in blocks of 1
   return ((rh&0x07)<<4) | (val&0x08) | (rl&0x07);
 }
 
+void atomic_min(std::atomic<int> &a, int val) noexcept
+{
+  int prev_value = a;
+  while(prev_value > val &&
+         !a.compare_exchange_weak(prev_value, val))
+  {}
+}
+
+void atomic_max(std::atomic<int> &a, int val) noexcept
+{
+  int prev_value = a;
+  while(prev_value < val &&
+         !a.compare_exchange_weak(prev_value, val))
+  {}
+}
+
 /*template <int total, int block>
 int ReverseBits(int val)
 {
@@ -880,6 +896,10 @@ template<>
 number<__float128>::number(Scratchpad *spad): store(0), tmp(spad)
 {
   working_assert(tmp->ntype==NumberType::typeFloat128);
+  static_assert(sizeof(number<__float128>)==16+8+8, "wassup");
+  static_assert(offsetof(number<__float128>, store)==0, "wassup");
+  static_assert(sizeof(number<__float128>::tmp)==8, "wassup");
+  static_assert(offsetof(number<__float128>, tmp)==16, "wassup");
 }
 
 template<>
@@ -3790,6 +3810,16 @@ number<number_any>::Scratchpad::Scratchpad(NumberType ntype): ntype(ntype), inne
 template<typename BASE>
 void complex<BASE>::readFrom(void *storage, int index)
 {
+  static_assert(sizeof(double)==8, "wassup");
+  static_assert(sizeof(number<double>)==8+8, "wassup");
+  static_assert(sizeof(__float128)==16, "wassup");
+  static_assert(sizeof(number<__float128>)==16+8+8, "wassup");
+  //static_assert(offsetof(number<__float128>, store)==0, "wassup");
+  //static_assert(offsetof(number<__float128>, tmp)==16, "wassup");
+  static_assert(sizeof(number<dd_real>)==16+8, "wassup");
+  static_assert(sizeof(number<dq_real>)==8*2+8, "wassup");
+  static_assert(sizeof(number<real642>)==8+8+16+8+8, "wassup");
+  static_assert(sizeof(number_any)==16*3+8+8, "wassup");
   re.readFrom(storage, index);
   im.readFrom(storage, index+1);
 }
