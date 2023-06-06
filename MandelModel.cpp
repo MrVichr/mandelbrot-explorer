@@ -564,29 +564,30 @@ void MandelModel::setImageSize(int width, int height)
       qDebug()<<"pointStore uses"<<size_as_text.toLocal8Bit().constData()<<"B"; //lots of work to skip those quotes... can't skip spaces at all
     }
     void *new_points=nullptr;
+    //precisionRecord->position.center.re.convert_block(MandelMath::NumberType::typeEmpty, nullptr, newLength*MandelPoint<MandelMath::number_any>::LEN);
     switch (precisionRecord->ntype)
     {
       case MandelMath::NumberType::typeEmpty: goto lolwut;
       case MandelMath::NumberType::typeDouble: lolwut:
-        new_points=new double[newLength*MandelPoint<MandelMath::number_any>::LEN];
+        new_points=MandelMath::number<double>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, newLength*MandelPoint<MandelMath::number_any>::LEN);
         break;
 #if !NUMBER_DOUBLE_ONLY
       case MandelMath::NumberType::typeFloat128:
-        new_points=new __float128[newLength*MandelPoint<MandelMath::number_any>::LEN];
+        new_points=MandelMath::number<__float128>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, newLength*MandelPoint<MandelMath::number_any>::LEN);
         break;
       case MandelMath::NumberType::typeDDouble:
-        new_points=new MandelMath::dd_real[newLength*MandelPoint<MandelMath::number_any>::LEN];
+        new_points=MandelMath::number<MandelMath::dd_real>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, newLength*MandelPoint<MandelMath::number_any>::LEN);
         break;
       case MandelMath::NumberType::typeQDouble:
-        new_points=new MandelMath::dq_real[newLength*MandelPoint<MandelMath::number_any>::LEN];
+        new_points=MandelMath::number<MandelMath::dq_real>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, newLength*MandelPoint<MandelMath::number_any>::LEN);
         break;
       case MandelMath::NumberType::typeReal642:
-        new_points=new MandelMath::real642[newLength*MandelPoint<MandelMath::number_any>::LEN];
+        new_points=MandelMath::number<MandelMath::real642>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, newLength*MandelPoint<MandelMath::number_any>::LEN);
         break;
 #endif
     }
-    MandelMath::complex<MandelMath::number_any> old_c(&precisionRecord->orbit.evaluator.tmp);
-    old_c.assign(precisionRecord->position.center);
+    MandelMath::complex<MandelMath::number_any> old_c(precisionRecord->position.center);//&precisionRecord->orbit.evaluator.tmp);
+    //old_c.assign(precisionRecord->position.center);
 
     transformStore(precisionRecord->points, pointStore, imageWidth, imageHeight, &old_c,
                    new_points, newStore, width, height, &precisionRecord->position.center,
@@ -1890,6 +1891,11 @@ int MandelModel::doneWorkThreaded(MandelEvaluator<BASE> *me, bool giveWork)
   return 1;
 }
 
+/*template<typename B>
+struct BaseExtractor {};
+template<typename B>
+struct BaseExtractor<MandelEvaluator<B>> {using ttt=B;};*/
+
 void MandelModel::selectedPrecisionChanged()
 {
   int pointCount;
@@ -1899,6 +1905,7 @@ void MandelModel::selectedPrecisionChanged()
     pointCount=imageWidth*imageHeight;
   void *new_points;
   MandelMath::NumberType newPrecision;
+
   switch (_selectedPrecision)
   {
     using Type=MandelMath::NumberType;
@@ -2215,4 +2222,26 @@ MandelModel::PrecisionRecord::~PrecisionRecord()
   }, threads, threadCount);
   threadCount=0;
   threads=nullptr;
+
+  switch (ntype)
+  {
+  case MandelMath::NumberType::typeEmpty: goto ughwut;
+  case MandelMath::NumberType::typeDouble: ughwut:
+    delete[] (double *)points;
+    break;
+#if !NUMBER_DOUBLE_ONLY
+  case MandelMath::NumberType::typeFloat128:
+    delete[] (__float128 *)points;
+    break;
+  case MandelMath::NumberType::typeDDouble:
+    delete[] (MandelMath::dd_real *)points;
+    break;
+  case MandelMath::NumberType::typeQDouble:
+    delete[] (MandelMath::dq_real *)points;
+    break;
+  case MandelMath::NumberType::typeReal642:
+    delete[] (MandelMath::real642 *)points;
+    break;
+#endif
+  }
 }

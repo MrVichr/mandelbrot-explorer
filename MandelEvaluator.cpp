@@ -14,6 +14,21 @@
 
 void nop(); //defined in MandelMath
 
+template <typename BASE>
+ComputeLaguerreParams<BASE>::ComputeLaguerreParams(MandelMath::number<BASE>::Scratchpad *spad):
+  period(1), fastHoming(true), c(spad), first_z(spad)
+{
+}
+
+template<typename BASE> template<typename OTHER_BASE>
+void ComputeLaguerreParams<BASE>::assign_across(const ComputeLaguerreParams<OTHER_BASE> &src)
+{
+  period=src.period;
+  fastHoming=src.fastHoming;
+  c.assign_across(src.c);
+  first_z.assign_across(src.first_z);
+}
+
 LaguerrePointStore::LaguerrePointStore(): state(State::stUnknown),
   firstM(0), firstStep_re(0), firstStep_im(0), iter(0)
 {
@@ -1590,6 +1605,36 @@ bool MandelLoopEvaluator<BASE>::eval_ext_mandMJ(double mandel, MandelMath::compl
 
 
 
+MandelEvaluatorThread::MandelEvaluatorThread(MandelEvaluator<double> *owner):
+  QThread(nullptr), owner(owner)
+{
+
+}
+
+MandelEvaluatorThread::MandelEvaluatorThread(MandelEvaluator<__float128> *owner):
+  QThread(nullptr), owner(owner)
+{
+
+}
+
+MandelEvaluatorThread::MandelEvaluatorThread(MandelEvaluator<MandelMath::dd_real> *owner):
+  QThread(nullptr), owner(owner)
+{
+
+}
+
+MandelEvaluatorThread::MandelEvaluatorThread(MandelEvaluator<MandelMath::dq_real> *owner):
+  QThread(nullptr), owner(owner)
+{
+
+}
+
+MandelEvaluatorThread::MandelEvaluatorThread(MandelEvaluator<MandelMath::real642> *owner):
+  QThread(nullptr), owner(owner)
+{
+
+}
+
 MandelEvaluatorThread::MandelEvaluatorThread(MandelEvaluator<MandelMath::number_any> *owner):
   QThread(nullptr), owner(owner)
 {
@@ -1598,220 +1643,67 @@ MandelEvaluatorThread::MandelEvaluatorThread(MandelEvaluator<MandelMath::number_
 
 void MandelEvaluatorThread::syncMandel()
 {
-  switch (owner->ntype)
-  {
-    case MandelMath::NumberType::typeEmpty:
-      //(specific_cast<MandelEvaluator<MandelMath::number<MandelMath::number_a *>> *, MandelEvaluator<MandelMath::worker_multi> *>(owner))->syncComputeSplit();
-      owner->syncMandelSplit();
-      return;
-    case MandelMath::NumberType::typeDouble:
-      (specific_cast<MandelEvaluator<double> *, MandelEvaluator<MandelMath::number_any> *>(owner))->syncMandelSplit();
-      return;
-#if !NUMBER_DOUBLE_ONLY
-    case MandelMath::NumberType::typeFloat128:
-      (specific_cast<MandelEvaluator<__float128> *, MandelEvaluator<MandelMath::number_any> *>(owner))->syncMandelSplit();
-      return;
-    case MandelMath::NumberType::typeDDouble:
-      (specific_cast<MandelEvaluator<MandelMath::dd_real> *, MandelEvaluator<MandelMath::number_any> *>(owner))->syncMandelSplit();
-      return;
-    case MandelMath::NumberType::typeQDouble:
-      (specific_cast<MandelEvaluator<MandelMath::dq_real> *, MandelEvaluator<MandelMath::number_any> *>(owner))->syncMandelSplit();
-      return;
-    case MandelMath::NumberType::typeReal642:
-      (specific_cast<MandelEvaluator<MandelMath::real642> *, MandelEvaluator<MandelMath::number_any> *>(owner))->syncMandelSplit();
-      return;
-#endif
-  }
+  MandelMath::visit([](auto &owner) {
+    if constexpr (!std::is_same_v<std::decay_t<decltype(owner)>, std::nullptr_t>)
+    {
+      return owner->syncMandelSplit();
+    };
+  }, owner);
 }
 
 void MandelEvaluatorThread::syncJulia()
 {
-  switch (owner->ntype)
-  {
-    case MandelMath::NumberType::typeEmpty:
-      //(specific_cast<MandelEvaluator<MandelMath::number<MandelMath::number_a *>> *, MandelEvaluator<MandelMath::worker_multi> *>(owner))->syncComputeSplit();
-      owner->syncJuliaSplit();
-      return;
-    case MandelMath::NumberType::typeDouble:
-      (specific_cast<MandelEvaluator<double> *, MandelEvaluator<MandelMath::number_any> *>(owner))->syncJuliaSplit();
-      return;
-#if !NUMBER_DOUBLE_ONLY
-    case MandelMath::NumberType::typeFloat128:
-      (specific_cast<MandelEvaluator<__float128> *, MandelEvaluator<MandelMath::number_any> *>(owner))->syncJuliaSplit();
-      return;
-    case MandelMath::NumberType::typeDDouble:
-      (specific_cast<MandelEvaluator<MandelMath::dd_real> *, MandelEvaluator<MandelMath::number_any> *>(owner))->syncJuliaSplit();
-      return;
-    case MandelMath::NumberType::typeQDouble:
-      (specific_cast<MandelEvaluator<MandelMath::dq_real> *, MandelEvaluator<MandelMath::number_any> *>(owner))->syncJuliaSplit();
-      return;
-    case MandelMath::NumberType::typeReal642:
-      (specific_cast<MandelEvaluator<MandelMath::real642> *, MandelEvaluator<MandelMath::number_any> *>(owner))->syncJuliaSplit();
-      return;
-#endif
-  }
+  MandelMath::visit([](auto &owner) {
+    if constexpr (!std::is_same_v<std::decay_t<decltype(owner)>, std::nullptr_t>)
+    {
+      return owner->syncJuliaSplit();
+    };
+  }, owner);
 }
 
-int MandelEvaluatorThread::syncLaguerre(int period, MandelMath::complex<MandelMath::number_any> *r, const bool fastHoming)
+int MandelEvaluatorThread::syncLaguerre()
 {
-  switch (owner->ntype)
-  {
-    case MandelMath::NumberType::typeEmpty:
-      return owner->laguerre(period, owner->currentParams.mandel.c, r, fastHoming);
-    case MandelMath::NumberType::typeDouble:
+  return MandelMath::visit([](auto &owner) {
+    if constexpr (!std::is_same_v<std::decay_t<decltype(owner)>, std::nullptr_t>)
     {
-      MandelEvaluator<double> *owner_access=specific_cast<MandelEvaluator<double> *, MandelEvaluator<MandelMath::number_any> *>(owner);
-      owner_access->laguerreData.r.assign_across(*r);
-      return owner_access->laguerre(period, owner_access->currentParams.mandel.c, &owner_access->laguerreData.r, fastHoming);
-    } break;
-#if !NUMBER_DOUBLE_ONLY
-    case MandelMath::NumberType::typeFloat128:
+      return owner->laguerre(owner->currentParams.laguerre.period, owner->currentParams.laguerre.c, &owner->laguerreData.r, owner->currentParams.laguerre.fastHoming);
+    }
+    else
     {
-      MandelEvaluator<__float128> *owner_access=specific_cast<MandelEvaluator<__float128> *, MandelEvaluator<MandelMath::number_any> *>(owner);
-      owner_access->laguerreData.r.assign_across(*r);
-      return owner_access->laguerre(period, owner_access->currentParams.mandel.c, &owner_access->laguerreData.r, fastHoming);
-    } break;
-    case MandelMath::NumberType::typeDDouble:
-    {
-      MandelEvaluator<MandelMath::dd_real> *owner_access=specific_cast<MandelEvaluator<MandelMath::dd_real> *, MandelEvaluator<MandelMath::number_any> *>(owner);
-      owner_access->laguerreData.r.assign_across(*r);
-      return owner_access->laguerre(period, owner_access->currentParams.mandel.c, &owner_access->laguerreData.r, fastHoming);
-    } break;
-    case MandelMath::NumberType::typeQDouble:
-    {
-      MandelEvaluator<MandelMath::dq_real> *owner_access=specific_cast<MandelEvaluator<MandelMath::dq_real> *, MandelEvaluator<MandelMath::number_any> *>(owner);
-      owner_access->laguerreData.r.assign_across(*r);
-      return owner_access->laguerre(period, owner_access->currentParams.mandel.c, &owner_access->laguerreData.r, fastHoming);
-    } break;
-    case MandelMath::NumberType::typeReal642:
-    {
-      MandelEvaluator<MandelMath::dq_real> *owner_access=specific_cast<MandelEvaluator<MandelMath::dq_real> *, MandelEvaluator<MandelMath::number_any> *>(owner);
-      owner_access->laguerreData.r.assign_across(*r);
-      return owner_access->laguerre(period, owner_access->currentParams.mandel.c, &owner_access->laguerreData.r, fastHoming);
-    } break;
-#endif
-  }
-  return 0;
+      working_assert(false);
+      return 0;
+    }
+  }, owner);
 }
 
 void MandelEvaluatorThread::doMandelThreaded(int epoch)
 {
-  //switch (((MandelEvaluator<worker_multi> *)(this))->currentWorker->ntype())
-  switch (owner->ntype)
-  {
-    case MandelMath::NumberType::typeEmpty:
+  MandelMath::visit([](auto &owner, int epoch) {
+    if constexpr (!std::is_same_v<std::decay_t<decltype(owner)>, std::nullptr_t>)
       owner->doMandelThreadedSplit(epoch);
-      return;
-    case MandelMath::NumberType::typeDouble:
-    {
-      MandelEvaluator<double> *owner_access=specific_cast<MandelEvaluator<double> *, MandelEvaluator<MandelMath::number_any> *>(owner);
-      owner_access->doMandelThreadedSplit(epoch);
-    } return;
-#if !NUMBER_DOUBLE_ONLY
-    case MandelMath::NumberType::typeFloat128:
-    {
-      MandelEvaluator<__float128> *owner_access=specific_cast<MandelEvaluator<__float128> *, MandelEvaluator<MandelMath::number_any> *>(owner);
-      owner_access->doMandelThreadedSplit(epoch);
-    } return;
-    case MandelMath::NumberType::typeDDouble:
-    {
-      MandelEvaluator<MandelMath::dd_real> *owner_access=specific_cast<MandelEvaluator<MandelMath::dd_real> *, MandelEvaluator<MandelMath::number_any> *>(owner);
-      owner_access->doMandelThreadedSplit(epoch);
-    } return;
-    case MandelMath::NumberType::typeQDouble:
-    {
-      MandelEvaluator<MandelMath::dq_real> *owner_access=specific_cast<MandelEvaluator<MandelMath::dq_real> *, MandelEvaluator<MandelMath::number_any> *>(owner);
-      owner_access->doMandelThreadedSplit(epoch);
-    } return;
-    case MandelMath::NumberType::typeReal642:
-    {
-      MandelEvaluator<MandelMath::real642> *owner_access=specific_cast<MandelEvaluator<MandelMath::real642> *, MandelEvaluator<MandelMath::number_any> *>(owner);
-      owner_access->doMandelThreadedSplit(epoch);
-    } return;
-#endif
-  }
+  }, owner, epoch);
 }
 
 void MandelEvaluatorThread::doJuliaThreaded(int epoch)
 {
-  //switch (((MandelEvaluator<worker_multi> *)(this))->currentWorker->ntype())
-  switch (owner->ntype)
-  {
-    case MandelMath::NumberType::typeEmpty:
+  MandelMath::visit([](auto &owner, int epoch) {
+    if constexpr (!std::is_same_v<std::decay_t<decltype(owner)>, std::nullptr_t>)
       owner->doJuliaThreadedSplit(epoch);
-      return;
-    case MandelMath::NumberType::typeDouble:
-    {
-      MandelEvaluator<double> *owner_access=specific_cast<MandelEvaluator<double> *, MandelEvaluator<MandelMath::number_any> *>(owner);
-      owner_access->doJuliaThreadedSplit(epoch);
-    } return;
-#if !NUMBER_DOUBLE_ONLY
-    case MandelMath::NumberType::typeFloat128:
-    {
-      MandelEvaluator<__float128> *owner_access=specific_cast<MandelEvaluator<__float128> *, MandelEvaluator<MandelMath::number_any> *>(owner);
-      owner_access->doJuliaThreadedSplit(epoch);
-    } return;
-    case MandelMath::NumberType::typeDDouble:
-    {
-      MandelEvaluator<MandelMath::dd_real> *owner_access=specific_cast<MandelEvaluator<MandelMath::dd_real> *, MandelEvaluator<MandelMath::number_any> *>(owner);
-      owner_access->doJuliaThreadedSplit(epoch);
-    } return;
-    case MandelMath::NumberType::typeQDouble:
-    {
-      MandelEvaluator<MandelMath::dq_real> *owner_access=specific_cast<MandelEvaluator<MandelMath::dq_real> *, MandelEvaluator<MandelMath::number_any> *>(owner);
-      owner_access->doJuliaThreadedSplit(epoch);
-    } return;
-    case MandelMath::NumberType::typeReal642:
-    {
-      MandelEvaluator<MandelMath::real642> *owner_access=specific_cast<MandelEvaluator<MandelMath::real642> *, MandelEvaluator<MandelMath::number_any> *>(owner);
-      owner_access->doJuliaThreadedSplit(epoch);
-    } return;
-#endif
-  }
+  }, owner, epoch);
 }
 
-void MandelEvaluatorThread::doLaguerreThreaded(int epoch, int laguerrePeriod)
+void MandelEvaluatorThread::doLaguerreThreaded(int epoch)
 {
-  //switch (((MandelEvaluator<worker_multi> *)(this))->currentWorker->ntype())
-  switch (owner->ntype)
-  {
-    case MandelMath::NumberType::typeEmpty:
-      owner->doLaguerreThreadedSplit(epoch, laguerrePeriod);
-      return;
-    case MandelMath::NumberType::typeDouble:
-    {
-      MandelEvaluator<double> *owner_access=specific_cast<MandelEvaluator<double> *, MandelEvaluator<MandelMath::number_any> *>(owner);
-      owner_access->doLaguerreThreadedSplit(epoch, laguerrePeriod);
-    } return;
-#if !NUMBER_DOUBLE_ONLY
-    case MandelMath::NumberType::typeFloat128:
-    {
-      MandelEvaluator<__float128> *owner_access=specific_cast<MandelEvaluator<__float128> *, MandelEvaluator<MandelMath::number_any> *>(owner);
-      owner_access->doLaguerreThreadedSplit(epoch, laguerrePeriod);
-    } return;
-    case MandelMath::NumberType::typeDDouble:
-    {
-      MandelEvaluator<MandelMath::dd_real> *owner_access=specific_cast<MandelEvaluator<MandelMath::dd_real> *, MandelEvaluator<MandelMath::number_any> *>(owner);
-      owner_access->doLaguerreThreadedSplit(epoch, laguerrePeriod);
-    } return;
-    case MandelMath::NumberType::typeQDouble:
-    {
-      MandelEvaluator<MandelMath::dq_real> *owner_access=specific_cast<MandelEvaluator<MandelMath::dq_real> *, MandelEvaluator<MandelMath::number_any> *>(owner);
-      owner_access->doLaguerreThreadedSplit(epoch, laguerrePeriod);
-    } return;
-    case MandelMath::NumberType::typeReal642:
-    {
-      MandelEvaluator<MandelMath::real642> *owner_access=specific_cast<MandelEvaluator<MandelMath::real642> *, MandelEvaluator<MandelMath::number_any> *>(owner);
-      owner_access->doLaguerreThreadedSplit(epoch, laguerrePeriod);
-    } return;
-#endif
-  }
+  MandelMath::visit([](auto &owner, int epoch) {
+    if constexpr (!std::is_same_v<std::decay_t<decltype(owner)>, std::nullptr_t>)
+      owner->doLaguerreThreadedSplit(epoch);
+  }, owner, epoch);
 }
 
 
 template <typename BASE>
 MandelEvaluator<BASE>::MandelEvaluator(MandelMath::NumberType ntype, bool dontRun):
-  busyEpoch(0), thread((MandelEvaluator<MandelMath::number_any> *)this),
+  busyEpoch(0), thread(this),
   ntype(MandelMath::NumberTypeFromBase<BASE>::ntype),
   totalNewtonIterations(0),
   tmp(ntype),
@@ -2031,12 +1923,12 @@ void MandelEvaluator<BASE>::doJuliaThreadedSplit(int epoch)
 }
 
 template <typename BASE>
-void MandelEvaluator<BASE>::doLaguerreThreadedSplit(int epoch, int laguerrePeriod)
+void MandelEvaluator<BASE>::doLaguerreThreadedSplit(int epoch)
 {
   busyEpoch=epoch;
   timeThreaded.start();
   threaded_errorcode=0;
-  MandelMath::complex<BASE> &c=currentParams.mandel.c;
+  MandelMath::complex<BASE> &c=currentParams.laguerre.c;
   MandelMath::complex<BASE> &root=laguerreData.r;
 #if THREADED_DONE_GIVE_WORK
   if (threaded.give(this)) //debug && !wantStop)
@@ -2053,7 +1945,7 @@ void MandelEvaluator<BASE>::doLaguerreThreadedSplit(int epoch, int laguerrePerio
 #endif
       timeInvokePostTotal+=timeInvoke.nsecsElapsed();
       timeInner.start();
-      int result=laguerre(laguerrePeriod, c, &root, true);
+      int result=laguerre(currentParams.laguerre.period, c, &root, true);
       timeInnerTotal+=timeInner.nsecsElapsed();
       timeOuter.start();
       threaded_errorcode=threaded.doneLaguerre(this, result, THREADED_DONE_GIVE_WORK);
@@ -6520,7 +6412,7 @@ void MandelEvaluator<BASE>::evaluateJulia()
 
 template<typename BASE>
 MandelEvaluator<BASE>::ComputeParams::ComputeParams(MandelMath::number<BASE>::Scratchpad *spad):
-  mandel(spad), julia(spad),
+  mandel(spad), laguerre(spad), julia(spad),
   epoch(-1), pixelIndex(-1), maxiter(1), breakOnNewNearest(false), want_fc_r(false), want_extangle(false),
   nth_fz(0)
 {
@@ -7242,6 +7134,7 @@ template class MandelLoopEvaluator<MandelMath::number_any>;
 template class MandelEvaluator<double>;
 template class MandelEvaluator<MandelMath::number_any>;
 template void ComputeMandelParams<double>::assign_across<MandelMath::number_any>(const ComputeMandelParams<MandelMath::number_any> &src);
+template void ComputeLaguerreParams<double>::assign_across<MandelMath::number_any>(const ComputeLaguerreParams<MandelMath::number_any> &src);
 template void ComputeJuliaParams<double>::assign_across<MandelMath::number_any>(const ComputeJuliaParams<MandelMath::number_any> &src);
 #if !NUMBER_DOUBLE_ONLY
 template struct LaguerrePoint<__float128>;
@@ -7249,26 +7142,31 @@ template struct MandelPoint<__float128>;
 template struct JuliaPoint<__float128>;
 template class MandelEvaluator<__float128>;
 template void ComputeMandelParams<__float128>::assign_across<MandelMath::number_any>(const ComputeMandelParams<MandelMath::number_any> &src);
+template void ComputeLaguerreParams<__float128>::assign_across<MandelMath::number_any>(const ComputeLaguerreParams<MandelMath::number_any> &src);
 template void ComputeJuliaParams<__float128>::assign_across<MandelMath::number_any>(const ComputeJuliaParams<MandelMath::number_any> &src);
 template struct LaguerrePoint<MandelMath::dd_real>;
 template struct MandelPoint<MandelMath::dd_real>;
 template struct JuliaPoint<MandelMath::dd_real>;
 template class MandelEvaluator<MandelMath::dd_real>;
 template void ComputeMandelParams<MandelMath::dd_real>::assign_across<MandelMath::number_any>(const ComputeMandelParams<MandelMath::number_any> &src);
+template void ComputeLaguerreParams<MandelMath::dd_real>::assign_across<MandelMath::number_any>(const ComputeLaguerreParams<MandelMath::number_any> &src);
 template void ComputeJuliaParams<MandelMath::dd_real>::assign_across<MandelMath::number_any>(const ComputeJuliaParams<MandelMath::number_any> &src);
 template struct LaguerrePoint<MandelMath::dq_real>;
 template struct MandelPoint<MandelMath::dq_real>;
 template struct JuliaPoint<MandelMath::dq_real>;
 template class MandelEvaluator<MandelMath::dq_real>;
 template void ComputeMandelParams<MandelMath::dq_real>::assign_across<MandelMath::number_any>(const ComputeMandelParams<MandelMath::number_any> &src);
+template void ComputeLaguerreParams<MandelMath::dq_real>::assign_across<MandelMath::number_any>(const ComputeLaguerreParams<MandelMath::number_any> &src);
 template void ComputeJuliaParams<MandelMath::dq_real>::assign_across<MandelMath::number_any>(const ComputeJuliaParams<MandelMath::number_any> &src);
 template struct LaguerrePoint<MandelMath::real642>;
 template struct MandelPoint<MandelMath::real642>;
 template struct JuliaPoint<MandelMath::real642>;
 template class MandelEvaluator<MandelMath::real642>;
 template void ComputeMandelParams<MandelMath::real642>::assign_across<MandelMath::number_any>(const ComputeMandelParams<MandelMath::number_any> &src);
+template void ComputeLaguerreParams<MandelMath::real642>::assign_across<MandelMath::number_any>(const ComputeLaguerreParams<MandelMath::number_any> &src);
 template void ComputeJuliaParams<MandelMath::real642>::assign_across<MandelMath::number_any>(const ComputeJuliaParams<MandelMath::number_any> &src);
 #endif
 template void ComputeMandelParams<MandelMath::number_any>::assign_across<MandelMath::number_any>(const ComputeMandelParams<MandelMath::number_any> &src);
+template void ComputeLaguerreParams<MandelMath::number_any>::assign_across<MandelMath::number_any>(const ComputeLaguerreParams<MandelMath::number_any> &src);
 template void ComputeJuliaParams<MandelMath::number_any>::assign_across<MandelMath::number_any>(const ComputeJuliaParams<MandelMath::number_any> &src);
 //template class MandelEvaluator<MandelMath::worker_multi_double>;

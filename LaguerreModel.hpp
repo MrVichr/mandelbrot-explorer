@@ -68,7 +68,7 @@ public:
   paintStyle _selectedPaintStyle;
   Q_PROPERTY(paintStyle selectedPaintStyle READ getselectedPaintStyle WRITE setselectedPaintStyle NOTIFY selectedPaintStyleChanged)
   paintStyle getselectedPaintStyle() { return _selectedPaintStyle; }
-  void setselectedPaintStyle(paintStyle ps) { _selectedPaintStyle=ps; }
+  void setselectedPaintStyle(paintStyle ps) { _selectedPaintStyle=ps; invalidateMainImage(); }
   int _threadsWorking;
   Q_PROPERTY(int threadsWorking READ getThreadsWorking CONSTANT)
   int getThreadsWorking() { return _threadsWorking; }
@@ -97,13 +97,25 @@ protected:
   int giveWorkThreaded(MandelEvaluator<BASE> *me);
   template <typename BASE>
   int doneWorkThreaded(MandelEvaluator<BASE> *me, int result, bool giveWork);
+
+  struct
+  {
+    std::atomic<int> left, right, top, bottom; //left<=right top<=bottom
+  } image_dirty;
+  void invalidateMainImage()
+  {
+    image_dirty.left=0;
+    image_dirty.right=imageWidth-1;
+    image_dirty.top=0;
+    image_dirty.bottom=imageHeight-1;
+  }
 public slots:
   void doneWorkInThread(MandelEvaluatorThread *me);
   void selectedPrecisionChanged();
 signals:
   void selectedPaintStyleChanged();
   void selectedPrecisionChange();
-  void triggerLaguerreThreaded(int epoch, int laguerrePeriod);
+  void triggerLaguerreThreaded(int epoch);
 protected:
   //MandelMath::worker_multi::Allocator<MandelMath::worker_multi> *storeAllocator;
   //MandelMath::worker_multi *storeWorker; //pointStore

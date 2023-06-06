@@ -106,9 +106,9 @@ static_assert(sizeof(std::strong_ordering::less)==1, "change the following cast"
 constexpr int strong_ordering_cast(std::strong_ordering val) { return std::bit_cast<int8_t>(val); }
 typedef enum
 {
-    less=strong_ordering_cast(std::strong_ordering::less),
-    equal=strong_ordering_cast(std::strong_ordering::equal),
-    greater=strong_ordering_cast(std::strong_ordering::greater),
+  less=strong_ordering_cast(std::strong_ordering::less),
+  equal=strong_ordering_cast(std::strong_ordering::equal),
+  greater=strong_ordering_cast(std::strong_ordering::greater),
 } strong_ordering;
 
 enum NumberType { typeEmpty
@@ -246,7 +246,7 @@ class number
     //Scratchpad(): ntype(NumberType::typeEmpty), inner(nullptr), tmp1(), tmp2(), tmp3(), tmp4() { }
     Scratchpad(NumberType ntype);//: ntype(ntype), tmp1(this), tmp2(this), tmp3(this), tmp4(this), inner(nullptr) { }
     //Scratchpad(Scratchpad *inner): ntype(inner->ntype), tmp1(this), tmp2(this), tmp3(this), tmp4(this), inner(inner) { }
-    ~Scratchpad() { }
+    ~Scratchpad();
   };
   protected:
   BASE store; //either "double" for special optimized template

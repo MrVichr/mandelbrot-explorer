@@ -3048,8 +3048,8 @@ number<number_any>::number(number<number_any> const &src) noexcept: store(src.st
 template<>
 number<number_any>::number(Scratchpad *spad): store(), tmp(spad)
 {
-  number_any woot;
-  woot=number<double>();
+  //number_any woot;
+  //woot=number<double>();
   static_assert(std::is_copy_assignable_v<std::monostate>, "woot");
   /*static_assert(std::is_copy_assignable_v<double>, "woot");
   static_assert(std::is_copy_assignable_v<__float128>, "woot");
@@ -3065,13 +3065,13 @@ number<number_any>::number(Scratchpad *spad): store(), tmp(spad)
   switch (tmp->ntype)
   {
     //case NumberType::typeEmpty: dbgPoint(); store=new number<double>(); break;
-    case NumberType::typeDouble: store=number<double>(); break;
+    case NumberType::typeDouble: store.emplace<number<double>>(); break;
   //case NumberType::typeDouble: store.emplace<1>(wtf); break;
 #if !NUMBER_DOUBLE_ONLY
-    case NumberType::typeFloat128: store=number<__float128>(); break;
-    case NumberType::typeDDouble: store=number<dd_real>(); break;
-    case NumberType::typeQDouble: store=number<dq_real>(); break;
-    case NumberType::typeReal642: store=number<real642>(); break;
+    case NumberType::typeFloat128: store.emplace<number<__float128>>(); break;
+    case NumberType::typeDDouble: store.emplace<number<dd_real>>(); break;
+    case NumberType::typeQDouble: store.emplace<number<dq_real>>(); break;
+    case NumberType::typeReal642: store.emplace<number<real642>>(); break;
 #endif
     default:
       dbgPoint(); store=number<double>(); break;
@@ -3793,8 +3793,58 @@ number<real642>::Scratchpad::Scratchpad(NumberType ntype): ntype(ntype), inner(n
 template<>
 number<number_any>::Scratchpad::Scratchpad(NumberType ntype): ntype(ntype), inner(nullptr), tmp1(this), tmp2(this), tmp3(this), tmp4(this)
 {
-  working_assert(false); //what's up with inner?
+  //working_assert(false); //what's up with inner?
+  switch (ntype)
+  {
+    case NumberType::typeDouble: inner=new number<double>::Scratchpad(ntype); break;
+    case NumberType::typeFloat128: inner=new number<__float128>::Scratchpad(ntype); break;
+    case NumberType::typeDDouble: inner=new number<dd_real>::Scratchpad(ntype); break;
+    case NumberType::typeQDouble: inner=new number<dq_real>::Scratchpad(ntype); break;
+    case NumberType::typeReal642: inner=new number<real642>::Scratchpad(ntype); break;
+    case NumberType::typeEmpty: working_assert(false);
+  }
 }
+
+template<>
+number<double>::Scratchpad::~Scratchpad()
+{
+}
+
+template<>
+number<__float128>::Scratchpad::~Scratchpad()
+{
+}
+
+template<>
+number<dd_real>::Scratchpad::~Scratchpad()
+{
+}
+
+template<>
+number<dq_real>::Scratchpad::~Scratchpad()
+{
+}
+
+template<>
+number<real642>::Scratchpad::~Scratchpad()
+{
+}
+
+template<>
+number<number_any>::Scratchpad::~Scratchpad()
+{
+  switch (ntype)
+  {
+    case NumberType::typeDouble: delete (number<double>::Scratchpad *)inner; break;
+    case NumberType::typeFloat128: delete (number<__float128>::Scratchpad *)inner; break;
+    case NumberType::typeDDouble: delete (number<dd_real>::Scratchpad *)inner; break;
+    case NumberType::typeQDouble: delete (number<dq_real>::Scratchpad *)inner; break;
+    case NumberType::typeReal642: delete (number<real642>::Scratchpad *)inner; break;
+    case NumberType::typeEmpty: working_assert(false);
+  }
+}
+
+
 
 
 

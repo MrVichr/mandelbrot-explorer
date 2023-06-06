@@ -8,6 +8,18 @@
 
 enum NewtonNaiveChoice { nc03, nc05, nc08, ncWide, nc100, nc90, nc80, nc60, ncClose };
 
+template <typename BASE>
+struct ComputeLaguerreParams
+{
+    int period;
+    bool fastHoming;
+    MandelMath::complex<BASE> c;
+    MandelMath::complex<BASE> first_z; //used
+    ComputeLaguerreParams(MandelMath::number<BASE>::Scratchpad *spad);
+    template<typename OTHER_BASE>
+    void assign_across(const ComputeLaguerreParams<OTHER_BASE> &src);
+};
+
 struct LaguerrePointStore
 {
   enum State { stUnknown, stWorking, stResolved, stFail };
@@ -412,16 +424,28 @@ class MandelEvaluatorThread: public QThread
 {
   Q_OBJECT
 protected:
-  MandelEvaluator<MandelMath::number_any> *owner;
+  std::variant<std::nullptr_t,
+               MandelEvaluator<double> *,
+               MandelEvaluator<__float128> *,
+               MandelEvaluator<MandelMath::dd_real> *,
+               MandelEvaluator<MandelMath::dq_real> *,
+               MandelEvaluator<MandelMath::real642> *,
+               MandelEvaluator<MandelMath::number_any> *> owner;
+  //MandelEvaluator<MandelMath::number_any> *owner_;
 public:
+  MandelEvaluatorThread(MandelEvaluator<double> *owner);
+  MandelEvaluatorThread(MandelEvaluator<__float128> *owner);
+  MandelEvaluatorThread(MandelEvaluator<MandelMath::dd_real> *owner);
+  MandelEvaluatorThread(MandelEvaluator<MandelMath::dq_real> *owner);
+  MandelEvaluatorThread(MandelEvaluator<MandelMath::real642> *owner);
   MandelEvaluatorThread(MandelEvaluator<MandelMath::number_any> *owner);
   void syncMandel();
   void syncJulia();
-  int syncLaguerre(int period, MandelMath::complex<MandelMath::number_any> *r, const bool fastHoming);
+  int syncLaguerre();
 public slots:
   void doMandelThreaded(int epoch);
   void doJuliaThreaded(int epoch);
-  void doLaguerreThreaded(int epoch, int laguerrePeriod);
+  void doLaguerreThreaded(int epoch);
 signals:
   void doneMandelThreaded(MandelEvaluatorThread *me);
   void doneJuliaThreaded(MandelEvaluatorThread *me);
@@ -489,6 +513,7 @@ public:
     };
     static constexpr size_t LEN=iiw__END-iiw__BASE;*/
     ComputeMandelParams<BASE> mandel;
+    ComputeLaguerreParams<BASE> laguerre;
     ComputeJuliaParams<BASE> julia;
     int epoch;
     int pixelIndex;
@@ -675,7 +700,7 @@ protected:
   void doMandelThreadedSplit(int epoch);
   void evaluateJulia();
   void doJuliaThreadedSplit(int epoch);
-  void doLaguerreThreadedSplit(int epoch, int laguerrePeriod);
+  void doLaguerreThreadedSplit(int epoch);
   friend MandelEvaluatorThread;
 /*protected slots:
   void doCompute();

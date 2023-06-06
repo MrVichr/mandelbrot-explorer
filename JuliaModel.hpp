@@ -71,7 +71,7 @@ public:
   paintStyle _selectedPaintStyle;
   Q_PROPERTY(paintStyle selectedPaintStyle READ getselectedPaintStyle WRITE setselectedPaintStyle NOTIFY selectedPaintStyleChanged)
   paintStyle getselectedPaintStyle() { return _selectedPaintStyle; }
-  void setselectedPaintStyle(paintStyle ps) { _selectedPaintStyle=ps; }
+  void setselectedPaintStyle(paintStyle ps) { _selectedPaintStyle=ps; invalidateMainImage(); }
   int _threadsWorking;
   Q_PROPERTY(int threadsWorking READ getThreadsWorking CONSTANT)
   int getThreadsWorking() { return _threadsWorking; }
@@ -97,7 +97,7 @@ public:
   int _extAngleZoom;
   Q_PROPERTY(int extAngleZoom READ getextAngleZoom WRITE setextAngleZoom NOTIFY extAngleZoomChange)
   int getextAngleZoom() { return _extAngleZoom; }
-  void setextAngleZoom(int zoom) { _extAngleZoom=zoom; }
+  void setextAngleZoom(int zoom) { _extAngleZoom=zoom; invalidateMainImage(); }
 
   enum ext_de_patch_algo
   { //the Internet says that enum names need to start with a capital letter to be accessible from QML :-?
@@ -112,7 +112,7 @@ public:
   ext_de_patch_algo _selectedEdePatchAlgo;
   Q_PROPERTY(ext_de_patch_algo selectedEdePatchAlgo READ getselectedEdePatchAlgo WRITE setselectedEdePatchAlgo NOTIFY selectedEdePatchAlgoChange)
   ext_de_patch_algo getselectedEdePatchAlgo() { return _selectedEdePatchAlgo; }
-  void setselectedEdePatchAlgo(ext_de_patch_algo ps) { _selectedEdePatchAlgo=ps; emit selectedEdePatchAlgoChange(); }
+  void setselectedEdePatchAlgo(ext_de_patch_algo ps) { _selectedEdePatchAlgo=ps; invalidateMainImage(); emit selectedEdePatchAlgoChange(); }
 
   enum exterior_coloring
   {
@@ -123,7 +123,7 @@ public:
   exterior_coloring _selectedExteriorColoring;
   Q_PROPERTY(exterior_coloring selectedExteriorColoring READ getselectedExteriorColoring WRITE setselectedExteriorColoring NOTIFY selectedExteriorColoringChange)
   exterior_coloring getselectedExteriorColoring() { return _selectedExteriorColoring; }
-  void setselectedExteriorColoring(exterior_coloring ps) { _selectedExteriorColoring=ps; emit selectedExteriorColoringChange(); }
+  void setselectedExteriorColoring(exterior_coloring ps) { _selectedExteriorColoring=ps; invalidateMainImage(); emit selectedExteriorColoringChange(); }
 
   bool _orbit_frozen;
   Q_PROPERTY(bool orbit_frozen READ getorbit_frozen WRITE setorbit_frozen NOTIFY orbit_frozenChange)
@@ -138,6 +138,18 @@ protected:
   int giveWorkThreaded(MandelEvaluator<BASE> *me);
   template <typename BASE>
   int doneWorkThreaded(MandelEvaluator<BASE> *me, bool giveWork);
+
+  struct
+  {
+    std::atomic<int> left, right, top, bottom; //left<=right top<=bottom
+  } image_dirty;
+  void invalidateMainImage()
+  {
+    image_dirty.left=0;
+    image_dirty.right=imageWidth-1;
+    image_dirty.top=0;
+    image_dirty.bottom=imageHeight-1;
+  }
 public slots:
   void doneWorkInThread(MandelEvaluatorThread *me);
   void selectedPrecisionChanged();

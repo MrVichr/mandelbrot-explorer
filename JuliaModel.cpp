@@ -657,25 +657,25 @@ void JuliaModel::setImageSize(int width, int height)
     {
       case MandelMath::NumberType::typeEmpty: goto lolwut;
       case MandelMath::NumberType::typeDouble: lolwut:
-        new_points=new double[newLength*JuliaPoint<MandelMath::number_any>::LEN];
+        new_points=MandelMath::number<double>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, newLength*JuliaPoint<MandelMath::number_any>::LEN);
         break;
 #if !NUMBER_DOUBLE_ONLY
       case MandelMath::NumberType::typeFloat128:
-        new_points=new __float128[newLength*JuliaPoint<MandelMath::number_any>::LEN];
+        new_points=MandelMath::number<__float128>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, newLength*JuliaPoint<MandelMath::number_any>::LEN);
         break;
       case MandelMath::NumberType::typeDDouble:
-        new_points=new MandelMath::dd_real[newLength*JuliaPoint<MandelMath::number_any>::LEN];
+        new_points=MandelMath::number<MandelMath::dd_real>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, newLength*JuliaPoint<MandelMath::number_any>::LEN);
         break;
       case MandelMath::NumberType::typeQDouble:
-        new_points=new MandelMath::dq_real[newLength*JuliaPoint<MandelMath::number_any>::LEN];
+        new_points=MandelMath::number<MandelMath::dq_real>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, newLength*JuliaPoint<MandelMath::number_any>::LEN);
         break;
       case MandelMath::NumberType::typeReal642:
-        new_points=new MandelMath::real642[newLength*JuliaPoint<MandelMath::number_any>::LEN];
+        new_points=MandelMath::number<MandelMath::real642>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, newLength*JuliaPoint<MandelMath::number_any>::LEN);
         break;
 #endif
     }
-    MandelMath::complex<MandelMath::number_any> old_c(&precisionRecord->orbit.evaluator.tmp);
-    old_c.assign(precisionRecord->position.center);
+    MandelMath::complex<MandelMath::number_any> old_c(precisionRecord->position.center);
+    //old_c.assign(precisionRecord->position.center);
 
     transformStore(precisionRecord->points, pointStore, imageWidth, imageHeight, old_c,
                    new_points, newStore, width, height, precisionRecord->position.center,
@@ -747,6 +747,9 @@ void JuliaModel::startNewEpoch()
       };
   }, precisionRecord->threads, precisionRecord->threadCount, epoch);
   _threadsWorking+=precisionRecord->threadCount;
+
+  invalidateMainImage();
+
   emit triggerJuliaThreaded(epoch, precisionRecord->params.period); //::invokeMethod cannot pass parameters, but ::connect can
 #endif
 }
@@ -1204,8 +1207,35 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
   double extAngleZoom=1<<this->_extAngleZoom;
   JuliaPointStore *wtiStore;
   //static constexpr unsigned int FAIL_COLOR=0xff404040;
-  for (int y=0; y<imageHeight; y++)
-    for (int x=0; x<imageWidth; x++)
+
+  //need some std::atomic expert here...
+  int dirty_left=imageWidth;
+  int dirty_right=-1;
+  int dirty_top=imageHeight;
+  int dirty_bottom=-1;
+  do
+  {
+    int left=image_dirty.left.exchange(imageWidth);
+    int right=image_dirty.right.exchange(-1);
+    int top=image_dirty.top.exchange(imageHeight);
+    int bottom=image_dirty.bottom.exchange(-1);
+    if (left==imageWidth && right==-1 && top==imageHeight && bottom==-1)
+      break;
+    if (dirty_left>left)
+      dirty_left=left;
+    if (dirty_right<right)
+      dirty_right=right;
+    if (dirty_top>top)
+      dirty_top=top;
+    if (dirty_bottom<bottom)
+      dirty_bottom=bottom;
+  }
+  while (true);
+
+  //precisionRecord->wtiPoint.self_allocator._getFirstCapac(indexOfWtiPoint, _discard_);
+  if (dirty_left<=dirty_right && dirty_top<=dirty_bottom)
+    for (int y=dirty_top; y<=dirty_bottom; y++)
+      for (int x=dirty_left; x<=dirty_right; x++)
     {
       //MandelMath::worker_multi::Allocator allo(storeWorker->getAllocator(), (y*imageWidth+x)*JuliaPoint::LEN, JuliaPoint::LEN, nullptr);
       //JuliaPoint data_(&pointStore_[y*imageWidth+x], &allo);
@@ -2242,6 +2272,13 @@ int JuliaModel::doneWorkThreaded(MandelEvaluator<BASE> *me, bool giveWork)
          dstStore->wstate.store(JuliaPointStore::WorkState::stDone, std::memory_order_release);
        else
          dstStore->wstate.store(JuliaPointStore::WorkState::stIdle, std::memory_order_release);
+
+       int x=me->currentParams.pixelIndex%imageWidth;
+       int y=me->currentParams.pixelIndex/imageWidth;
+       MandelMath::atomic_min(image_dirty.left, x);
+       MandelMath::atomic_max(image_dirty.right, x);
+       MandelMath::atomic_min(image_dirty.top, y);
+       MandelMath::atomic_max(image_dirty.bottom, y);
     }
     else
       dbgPoint();
@@ -2590,4 +2627,26 @@ JuliaModel::PrecisionRecord::~PrecisionRecord()
     }, threads, threadCount);
   threadCount=0;
   threads=nullptr;
+
+  switch (ntype)
+  {
+  case MandelMath::NumberType::typeEmpty: goto ughwut;
+  case MandelMath::NumberType::typeDouble: ughwut:
+      delete[] (double *)points;
+      break;
+#if !NUMBER_DOUBLE_ONLY
+  case MandelMath::NumberType::typeFloat128:
+      delete[] (__float128 *)points;
+      break;
+  case MandelMath::NumberType::typeDDouble:
+      delete[] (MandelMath::dd_real *)points;
+      break;
+  case MandelMath::NumberType::typeQDouble:
+      delete[] (MandelMath::dq_real *)points;
+      break;
+  case MandelMath::NumberType::typeReal642:
+      delete[] (MandelMath::real642 *)points;
+      break;
+#endif
+  }
 }
