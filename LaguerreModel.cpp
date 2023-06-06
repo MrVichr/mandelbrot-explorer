@@ -577,6 +577,7 @@ void LaguerreModel::setImageSize(int width, int height)
     imageWidth=width;
     imageHeight=height;
 
+    image_dirty.setBase(0, imageWidth, 0, imageHeight);
     startNewEpoch();
   }
 }
@@ -1010,34 +1011,12 @@ int LaguerreModel::writeToImage(ShareableImageWrapper image)
   LaguerrePointStore *wtiStore;
   static constexpr unsigned int FAIL_COLOR=0xff404040;
 
-  //need some std::atomic expert here...
-  int dirty_left=imageWidth;
-  int dirty_right=-1;
-  int dirty_top=imageHeight;
-  int dirty_bottom=-1;
-  do
-  {
-    int left=image_dirty.left.exchange(imageWidth);
-    int right=image_dirty.right.exchange(-1);
-    int top=image_dirty.top.exchange(imageHeight);
-    int bottom=image_dirty.bottom.exchange(-1);
-    if (left==imageWidth && right==-1 && top==imageHeight && bottom==-1)
-      break;
-    if (dirty_left>left)
-      dirty_left=left;
-    if (dirty_right<right)
-      dirty_right=right;
-    if (dirty_top>top)
-      dirty_top=top;
-    if (dirty_bottom<bottom)
-      dirty_bottom=bottom;
-  }
-  while (true);
+  image_dirty.fetch();
 
   //precisionRecord->wtiPoint.self_allocator._getFirstCapac(indexOfWtiPoint, _discard_);
-  if (dirty_left<=dirty_right && dirty_top<=dirty_bottom)
-    for (int y=dirty_top; y<=dirty_bottom; y++)
-      for (int x=dirty_left; x<=dirty_right; x++)
+  if (image_dirty.fleft<=image_dirty.fright && image_dirty.ftop<=image_dirty.fbottom)
+  for (int y=image_dirty.ftop; y<=image_dirty.fbottom; y++)
+    for (int x=image_dirty.fleft; x<=image_dirty.fright; x++)
     {
       //MandelMath::worker_multi::Allocator allo(storeWorker->getAllocator(), (y*imageWidth+x)*LaguerrePoint::LEN, LaguerrePoint::LEN, nullptr);
       //LaguerrePoint data_(&pointStore_[y*imageWidth+x], &allo);
@@ -1417,10 +1396,7 @@ int LaguerreModel::doneWorkThreaded(MandelEvaluator<BASE> *me, int result, bool 
 
           int x=me->currentParams.pixelIndex%imageWidth;
           int y=me->currentParams.pixelIndex/imageWidth;
-          MandelMath::atomic_min(image_dirty.left, x);
-          MandelMath::atomic_max(image_dirty.right, x);
-          MandelMath::atomic_min(image_dirty.top, y);
-          MandelMath::atomic_max(image_dirty.bottom, y);
+          image_dirty.addPoint(x, y);
         }
         else
           dbgPoint();

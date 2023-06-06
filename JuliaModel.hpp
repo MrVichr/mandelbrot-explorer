@@ -5,6 +5,7 @@
 #include <QImage>
 #include <QReadWriteLock>
 
+#include "atomic_update_rect.hpp"
 #include "ShareableImageWrapper.hpp"
 #include "MandelEvaluator.hpp"
 
@@ -139,16 +140,10 @@ protected:
   template <typename BASE>
   int doneWorkThreaded(MandelEvaluator<BASE> *me, bool giveWork);
 
-  struct
-  {
-    std::atomic<int> left, right, top, bottom; //left<=right top<=bottom
-  } image_dirty;
+  AtomicUpdateRect image_dirty;
   void invalidateMainImage()
   {
-    image_dirty.left=0;
-    image_dirty.right=imageWidth-1;
-    image_dirty.top=0;
-    image_dirty.bottom=imageHeight-1;
+    image_dirty.invalidate();
   }
 public slots:
   void doneWorkInThread(MandelEvaluatorThread *me);

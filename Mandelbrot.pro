@@ -25,6 +25,7 @@ SOURCES += \
         MandelMath_var.cpp \
         MandelModel.cpp \
         ShareableImageWrapper.cpp \
+        atomic_update_rect.cpp \
         double_double.cpp \
         main.cpp \
         multiprec.cpp
@@ -50,5 +51,6 @@ HEADERS += \
   MandelMath.hpp \
   MandelModel.hpp \
   ShareableImageWrapper.hpp \
+  atomic_update_rect.hpp \
   double_double.hpp \
   multiprec.hpp
