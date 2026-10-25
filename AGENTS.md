@@ -1,143 +1,69 @@
-# AGENTS.md — Mandelbrot Explorer (headless C++)
+# AGENTS.md - Mandelbrot Explorer
 
-This file is the primary orientation document for any AI agent or developer
-picking up work across sessions.
+Primary orientation document for any AI agent or developer picking up work
+across sessions.
 
 ---
 
 ## What this project is
 
-A Mandelbrot / Julia / Laguerre fractal explorer, originally a Qt/QML desktop
-app (`Mandelbrot.pro`).  The goal is to **run its computation core headlessly**,
-without Qt installed, so we can exercise and test the math directly from a
-plain C++ binary.
+A Mandelbrot / Julia / Laguerre fractal explorer: a Qt 6 / QML desktop app
+(`Mandelbrot.pro`, `main.cpp`, `main.qml`) whose computation core can also be
+built **headlessly** against `fake_qt/` stub headers, so the math can be
+exercised and regression-tested from a plain C++ binary (`mandel_runner`).
 
 ---
 
-## Current state (as of 2026-03)
+## Building
 
-### What is DONE — everything needed to run headlessly
+### GUI (real Qt)
 
-| Area | Status |
+`Mandelbrot.pro` with `QT += quick`; application type is `QGuiApplication`.
+Build out-of-tree (e.g. `build-gui/`) to keep qmake output out of the source
+directory.
+
+`main.qml` uses **QtQuick.Controls 2** menus (not `Qt.labs.platform`): native
+platform menus on Wayland caused `setGrabPopup ... does not match the current
+topmost grabbing popup` errors and erratic popups.
+
+```bash
+cd build-gui
+qmake6 ../Mandelbrot.pro
+make -j$(nproc)
+./Mandelbrot
+```
+
+### Headless (`mandel_runner`)
+
+The hand-written headless build lives in **`Makefile-headless`** (not
+`Makefile`, so an in-tree qmake run cannot overwrite it).
+
+```bash
+make -f Makefile-headless                   # build ./mandel_runner
+make -f Makefile-headless check-text-man    # also -jul / -lag
+make -f Makefile-headless check-images-man  # bless-* targets record references
+```
+
+`CXX` defaults to `g++-11`; override with `CXX=g++` where that is not
+installed.  `check-*` targets exit 0 with `PASS` or `SKIP` (no blessed copy
+yet) and non-zero on `FAIL`.
+
+Pieces of the headless build:
+
+| File | Role |
 |---|---|
-| `fake_qt/` headers | All Qt types compile cleanly (`make` builds without errors). |
-| `QThread` | Backed by `std::thread` + mutex/condition-var task queue. `start()` spawns OS thread. `exec()` drains task queue. `postTask(fn)` enqueues work. `wait()` joins. `currentThread()` works. `setCurrentThread(t)` lets main thread register itself without spawning an OS thread. |
-| `QReadWriteLock` | `std::shared_mutex`-backed. |
-| `QImage` | Real `std::vector<QRgb>` pixel buffer. `isNull()`, `width()`, `height()`, `pixel()`, `setPixel()`, `bits()`, `scanLine()` all functional. |
-| `QElapsedTimer` | `std::chrono`-backed. |
-| Signal/slot dispatch | `QObject::connect` registers `FakeConnEntry`. `emitSignal` dispatches: same thread → direct call; cross-thread → `targetThread->postTask(lambda)`. `fakeSubtuple<SArgs...>` handles slots with fewer params than signal. |
-| `runner/moc_signals.cpp` | Signal body definitions for 4 classes: `MandelEvaluatorThread` (3 signals), `MandelModel` (4), `JuliaModel` (7), `LaguerreModel` (3). |
-| `Makefile` | `make` → `./mandel_runner`. All 11 project files + runner files. Regression targets: `bless-text-{man,jul,lag}` / `check-text-{man,jul,lag}` write/compare per-pixel JSON; `bless-images-{man,jul,lag}` / `check-images-{man,jul,lag}` write/compare per-style PPMs.  `check-*` targets exit 0 with `SKIP` summary when no blessed artefacts exist yet. |
-| `runner/main_runner.cpp` | Headless test driver. Creates fake main thread, `MandelModelInspector` (exposes protected members), calls `setImageSize` then `setView_double`, pumps event loop, prints per-pixel iter counts + rstate + ARGB colours. Snapshot regression: `--bless` writes `runner/mandel_runner.snap`; normal run compares and exits 1 on mismatch. |
-| End-to-end computation | **Working.** Snapshot test passes (`./mandel_runner` exits 0). Symmetric Mandelbrot at 40×20 with correct iteration counts, rstate categories, and ARGB colours. |
+| `fake_qt/` | Stub Qt headers. `QThread` is real (`std::thread` + task queue, `postTask`, `setCurrentThread` for the main thread) — **do not revert to stubs**. `QObject` has real signal/slot dispatch with thread affinity (same thread → direct call, cross-thread → `postTask`). `QReadWriteLock` = `std::shared_mutex`, `QImage` = `std::vector<QRgb>`, `QElapsedTimer` = `std::chrono`. |
+| `runner/moc_signals.cpp` | Signal bodies for `MandelEvaluatorThread`, `MandelModel`, `JuliaModel`, `LaguerreModel`. |
+| `runner/main_runner.cpp` | Headless driver. Options: `--fractal man\|jul\|lag`, `--mode text\|images`, `--cx`, `--cy`, `--scale`, `--width`, `--height`, `--title`, `--bless`. Text mode writes per-pixel JSON; images mode writes one PPM per paint style. |
+| `runner/check_images.py` | Regression wrapper: runs `mandel_runner`, compares `current/` against `blessed/`, reports `PASS` / `FAIL` / `SKIP` (no blessed copy yet). See its docstring for usage. |
+
+`blessed/` and `current/` are git-ignored, local only.
 
 ### Critical usage note
 
 **`setImageSize(W, H)` must be called BEFORE `setView_double(...)`.**
-
-`MandelModel::transformStore` has:
-```cpp
-for (int newy=(new_height-1)&0xfffffff; newy>=0; newy--)  // ~268M iters if new_height==0!
-```
-Calling `setView_double` with `imageHeight==0` causes ~268 million no-op iterations (runtime: ~1 second). Always size the image first.
-
----
-
-## Scratchpad refactoring — current state and remaining work
-
-The original design passed a `Scratchpad *spad` through every constructor so
-that `number<BASE>` objects could find their scratch temporaries.  This caused
-widespread constructor-parameter boilerplate and left `number_any` variant
-members monostate (uninitialised) whenever a `Scratchpad *` was not available.
-
-### What has been done
-
-| Change | Where |
-|---|---|
-| `tl_spad` is `static thread_local Scratchpad*` per concrete type | `MandelMath_var.cpp` (one definition per type, lines ~4659) |
-| `set_spad` for concrete types is **out-of-line** in `MandelMath_var.cpp` | Explicit specialisation declarations in `MandelMath.hpp` lines ~354 suppress inline copies in other TUs; this fixes a GCC TLS-wrapper SIGSEGV on first worker-thread access |
-| `set_spad(&tmp)` called at the top of all three `do*ThreadedSplit` functions | `MandelEvaluator.cpp` — ensures each worker OS thread registers its scratchpad before any `number_any` construction |
-| `complex(Scratchpad *spad)` initialises `re(spad), im(spad)` | `MandelMath.hpp` line ~535 — ensures `number<number_any>(spad)` runs for both components, emplacing the variant |
-| `MandelPoint`, `JuliaPoint`, `LaguerrePoint` each have a `(Store*, Scratchpad*)` constructor overload | `MandelEvaluator.hpp/.cpp` — all `complex`/`number` member fields initialised with `spad`, so they are never monostate |
-| `wtiPoint` in all three `PrecisionRecord` constructors uses the spad overload | `MandelModel.cpp`, `JuliaModel.cpp`, `LaguerreModel.cpp` — passes `&orbit.evaluator.tmp` which is already constructed at that point |
-| `NUMBER_IS_VARIANT=0` virtual-dispatch `#else` branch deleted; all `#if`/`#endif` guards removed; `#define NUMBER_IS_VARIANT 1` removed | `MandelMath.hpp` — ~160 dead lines gone |
-| `number(Scratchpad*)` → `number(NumberType)` and `complex(Scratchpad*)` → `complex(NumberType)` throughout | `MandelMath.hpp`, `MandelMath_var.cpp`, `MandelEvaluator.cpp/hpp`, `MandelModel.cpp`, `JuliaModel.cpp`, `LaguerreModel.cpp`, `runner/main_runner.cpp` |
-| Concrete-type `Scratchpad` constructors call `set_spad(this)` in their bodies instead of threading `this` through `tmp1(this)…tmp4(this)` | `MandelMath_var.cpp` |
-| Explicit specialisation declaration `template<> void number<number_any>::set_spad(Scratchpad *)` added to header | `MandelMath.hpp` — prevents GCC from emitting an inline TLS-wrapper with a null init-function pointer in other TUs (SIGSEGV fix) |
-| `number<BASE>::get_spad()` made non-static; `number<number_any>::get_spad()` is a per-instance out-of-line override | `MandelMath.hpp`, `MandelMath_var.cpp` — for concrete types `get_spad()` inlines to `return tl_spad`; for `number_any` it dispatches on `store.index()`, follows the `concrete_tl_spad->inner` back-pointer if valid, falls back to `number<number_any>::tl_spad` otherwise |
-| `number<number_any>::Scratchpad` constructor sets back-pointers and initialises `tl_spad` | `MandelMath_var.cpp` — inner concrete spad gets `s->inner = this` (back-pointer to wrapper); `number<number_any>::tl_spad = this` ensures main-thread fallback works even after worker `MandelEvaluator<T>` constructors overwrite the concrete `tl_spad` with standalone (inner=nullptr) spads |
-| All per-operation `number<number_any>::set_spad()` calls removed from model code | `MandelModel.cpp` (10), `JuliaModel.cpp` (11), `LaguerreModel.cpp` (11), `runner/main_runner.cpp` (2), `MandelEvaluator.hpp` `ShareableViewInfo` ctor — 35 call sites deleted; `set_spad` now only called at worker-thread startup in `doMandelThreadedSplit`, `doJuliaThreadedSplit`, `doLaguerreThreadedSplit` |
-| All 153 `number<BASE>::tl_spad->` accesses in `complex<BASE>` arithmetic replaced with `re.get_spad()->` | `MandelMath_var.cpp` — for concrete types the call inlines to the same code; for `number_any` it dispatches correctly per instance |
-
-### Testing improvements — done
-
-1. **CLI parameters for position/zoom/size** — `runner/main_runner.cpp` accepts
-   `--cx`, `--cy`, `--scale`, `--width`, `--height`, `--title`, `--fractal`,
-   `--mode`, and `--bless`.
-
-2. **One PPM per paintStyle** — `--mode images` cycles through all paint-style
-   values, calls `writeToImage`, and writes PPMs (+ PNGs via Pillow) into
-   `current/` or `blessed/`.
-
-3. **Python regression wrapper** — `runner/check_images.py` drives
-   `mandel_runner`, compares output against `blessed/`, and reports
-   `PASS` / `FAIL` / `SKIP` (SKIP when no blessed artefact exists yet).
-
-4. **Makefile regression targets** — `bless-text-*` / `check-text-*` for JSON
-   output; `bless-images-*` / `check-images-*` for PPM image output.  All
-   `check-*` targets exit 0 with a `SKIP` summary when no blessed copy exists.
-
-### What still needs work (scratchpad refactoring)
-
-1. ~~**`number<BASE>` still carries `Scratchpad *tmp`**~~ — **DONE**: the `#else`
-   (virtual-dispatch) branch was deleted; the variant branch never had
-   `Scratchpad *tmp`, so all `number<BASE>` instances now contain only
-   `BASE store`.
-
-2. **`Scratchpad` should be static** — `set_spad` is now called **only** in
-   the three worker-thread split functions (`doMandelThreadedSplit`,
-   `doJuliaThreadedSplit`, `doLaguerreThreadedSplit`) in `MandelEvaluator.cpp`,
-   plus implicitly during `Scratchpad` construction.  Main-thread code relies on
-   `get_spad()` dispatching via the variant type.
-
-   > **Known limitation**: if two models with the **same** concrete precision
-   > type coexist on the main thread (e.g. both `typeDouble`), the second model's
-   > `Scratchpad` construction overwrites `number<number_any>::tl_spad`, so
-   > arithmetic on the first model uses the second model's temporaries.  In
-   > practice `MandelModel`, `JuliaModel`, and `LaguerreModel` each use
-   > `number_any` with potentially different underlying types, and the
-   > `get_spad()` instance-dispatch (back-pointer path) resolves correctly
-   > for **different** types.  Fixing the same-type case requires per-instance
-   > scratchpad pointers and is deferred.
-
-3. **`Scratchpad *` parameter still threads through higher-level call sites**
-   — `number<BASE>::number(Scratchpad*)` and `complex<BASE>::complex(Scratchpad*)`
-   have been replaced with `number(NumberType)` / `complex(NumberType)`.
-   Higher-level structs (`Position`, `Params`, `Bulb`, `ComputeMandelParams`,
-   `LaguerreStep`, etc.) still accept `Scratchpad *spad` and use `spad->ntype`
-   internally when initialising their `number`/`complex` members.  Once
-   `tl_spad` is fully trusted, callers could drop the `Scratchpad*` parameter
-   entirely and rely on the already-registered `tl_spad`.
-
-4. **`Scratchpad::ntype` is redundant** — with the variant design the
-   variant's `.index()` already encodes the type.  The field can be removed
-   once callers that read `spad->ntype` are updated to use
-   the variant index instead.
-
-5. ~~**Delete the `NUMBER_IS_VARIANT=0` branch**~~ — **DONE**: the `#else`
-   block (virtual-dispatch implementation) has been deleted from
-   `MandelMath.hpp`, and all `#if NUMBER_IS_VARIANT` / `#endif` guards have
-   been removed.  `NUMBER_IS_VARIANT` macro definition also removed.
-
-   > **Important**: `number<number_any>::set_spad` requires an explicit
-   > specialisation declaration in `MandelMath.hpp` (added:
-   > `template<> void number<number_any>::set_spad(Scratchpad *s);`).
-   > Without it, GCC instantiates an inline copy in every TU whose TLS-wrapper
-   > function pointer is null, causing a SIGSEGV on first access.
-
-6. **Return by value from `_tmp()` methods** — `getMag_tmp()` etc. return
-   `const number<BASE>*` into a scratch pool.  NRVO makes returning by value
-   safe and eliminates pointer-lifetime questions at every call site.
+`MandelModel::transformStore` loops `for (int newy=(new_height-1)&0xfffffff; ...)`,
+i.e. ~268M no-op iterations when the height is still 0.
 
 ---
 
@@ -145,59 +71,74 @@ members monostate (uninitialised) whenever a `Scratchpad *` was not available.
 
 | File | Role |
 |---|---|
-| `MandelModel.cpp/hpp` | Top-level model: owns image store, worker threads, view position, epoch counter |
-| `MandelEvaluator.cpp/hpp` | Per-thread worker; `MandelEvaluatorThread` (QThread subclass) + `MandelEvaluator<BASE>` template |
-| `MandelMath.hpp` / `MandelMath_var.cpp` | Number types: `number<double>`, `number<dd_real>`, `number_any` (variant wrapper) |
-| `double_double.cpp/hpp` | `dd_real` / `dq_real` extended-precision arithmetic |
-| `fake_qt/QThread` | Real `std::thread`-backed QThread — **DO NOT revert to stubs** |
-| `fake_qt/QObject` | Real signal/slot implementation with thread-affinity dispatch |
-| `fake_qt/QReadWriteLock` | `std::shared_mutex`-backed |
-| `fake_qt/QImage` | Real pixel-buffer backing (`std::vector<QRgb>`) |
-| `runner/moc_signals.cpp` | Signal body definitions (compile as part of `mandel_runner`) |
-| `runner/main_runner.cpp` | Headless test driver — **primary way to exercise the engine** |
-| `runner/check_images.py` | Python regression wrapper: drives `mandel_runner`, compares against `blessed/`, reports PASS/FAIL/SKIP |
-| `Makefile` | `make` builds `./mandel_runner`; `check-*` / `bless-*` targets run regression checks |
+| `MandelModel.cpp/hpp`, `JuliaModel.cpp/hpp`, `LaguerreModel.cpp/hpp` | Top-level models: image store, worker threads, view position, epoch counter, paint styles |
+| `MandelEvaluator.cpp/hpp` | Per-thread worker: `MandelEvaluatorThread` (QThread subclass) + `MandelEvaluator<BASE>` (`evaluateMandel`, `evaluateJulia`, `mandel_until_bailout`, `julia_until_bailout`, `MandelLoopEvaluator`, `Bulb`, `LaguerreStep`) |
+| `MandelMath.hpp` / `MandelMath_var.cpp` | Number types: `number<BASE>` for `double`, `__float128`, `dd_real`, `dq_real`, `real642`, and `number_any` (variant wrapper); `complex<BASE>`; `Scratchpad` |
+| `double_double.cpp/hpp`, `multiprec.cpp/hpp` | Extended-precision arithmetic |
+| `MandelImageCombiner.cpp/hpp`, `ShareableImageWrapper.cpp/hpp`, `atomic_update_rect.cpp/hpp` | GUI-side image composition |
 
 ---
 
-## Threading architecture (important context)
+## Threading architecture
 
 ```
 MandelModel (main thread)
-  │
-  ├─ MandelModel::startNewEpoch()
-  │    └─ emit triggerComputeThreaded(epoch)          [QueuedConnection →]
-  │                                                      MandelEvaluatorThread::doMandelThreaded(epoch)
-  │                                                         runs on worker thread OS thread
-  │                                                         MandelEvaluator<T>::doMandel_threaded()
-  │                                                         emit thread.doneMandelThreaded(&thread) [QueuedConnection →]
-  │                                                                                MandelModel::doneWorkInThread()
-  │                                                                                (runs on main thread)
-  └─ MandelModel::doneWorkInThread()
-       giveWorkThreaded() / triggers next epoch
+  ├─ startNewEpoch()
+  │    └─ emit triggerComputeThreaded(epoch)      [Queued →]
+  │         MandelEvaluatorThread::doMandelThreaded(epoch)   (worker OS thread)
+  │           MandelEvaluator<T>::doMandel_threaded()
+  │           emit thread.doneMandelThreaded(&thread)        [Queued →]
+  └─ doneWorkInThread()   (main thread) → giveWorkThreaded() / next epoch
 ```
 
-`MandelEvaluatorThread` has `moveToThread(&thread)` called on it, so it is
-"owned" by its own OS thread.  Signals into it are `QueuedConnection` →
-posted to its task queue.  `MandelModel` lives on the main thread; signals
-back to it are also `QueuedConnection` → posted to the main thread's queue.
-
-The main thread must therefore have its own `QThread` wrapper (or equivalent
-`processEvents()` capability) to drain those posted slots.
+`MandelEvaluatorThread` is `moveToThread`'d onto its own thread; the main
+thread needs its own event loop (or a `QThread` wrapper in the headless build)
+to drain the queued replies.
 
 ---
 
-## How to run the regression checks
+## Number / Scratchpad design (current)
 
-```bash
-cd /workspaces/LNX/MAND/mandelbrot-explorer
-make check-text-man     # compare Mandelbrot JSON against blessed/
-make check-images-man   # compare Mandelbrot PPMs against blessed/
-make check-text-jul     # Julia text check
-make check-images-jul   # Julia image check
-make check-text-lag     # Laguerre text check
-make check-images-lag   # Laguerre image check
-```
+- `number<BASE>` holds only `BASE store`; `number<number_any>` is a
+  `std::variant`.  Constructors take `NumberType` (`number(NumberType)`,
+  `complex(NumberType)`, and likewise `MandelPoint`, `JuliaPoint`,
+  `LaguerrePoint`, `ComputeMandelParams`, `ComputeJuliaParams`,
+  `ComputeLaguerreParams`).
+- Temporaries come from a per-type `static thread_local Scratchpad *tl_spad`,
+  registered with `number<BASE>::set_spad(ntype, &tmp)` at worker-thread
+  startup (`MandelEvaluator.cpp`) and in `Scratchpad` constructors.
+- `get_spad()` is per-instance: inlined `tl_spad` for concrete types; for
+  `number_any` it dispatches on the variant index and follows the concrete
+  spad's `inner` back-pointer.
+- **GCC TLS pitfall**: `set_spad`/`get_spad` specialisations must stay
+  declared in `MandelMath.hpp` and defined out-of-line in `MandelMath_var.cpp`;
+  inline copies produce a TLS wrapper with a null init pointer → SIGSEGV.
+- **Known limitation**: two models with the same concrete precision on the
+  main thread share `number<number_any>::tl_spad` (the last constructed wins).
 
-Targets exit 0 (`PASS` or `SKIP`) and non-zero on `FAIL`.
-Run the corresponding `bless-*` target first to record reference output.
+---
+
+## To do
+
+1. **Refactor how math is written.**  Arithmetic currently goes through
+   explicit method calls and `*_tmp()` scratch pointers (e.g. `getMag_tmp()`
+   returns a pointer into the scratchpad).  Consider operator overloading
+   (`+ - * /`, compound assignment) and returning by value (NRVO) to make
+   formulas readable and remove pointer-lifetime questions.  Leftovers from
+   the scratchpad cleanup that fit into this work:
+   - `Scratchpad::ntype` is redundant with the variant index (still read via
+     `->ntype` in the models, `MandelMath_var.cpp` and `MandelEvaluator.cpp`).
+   - `MandelEvaluator.hpp` still keeps a `number<number_any>::Scratchpad *spad`.
+2. **Speed up initial iterations with a bilinear approximation.**  Determine
+   how many initial iterations can be skipped by approximating the orbit with
+   a bilinear map (series-approximation style), with an error bound that
+   decides when to switch to exact iteration.
+3. **Float + GPU.**  If (2) works, move the bulk of the per-pixel iteration
+   to `float` (perturbation around a high-precision reference) and run it on
+   the GPU.
+4. **Julia interior distance estimate is wrong.**  The Wikipedia formulas
+   do not give correct results; local patches did not fix it.  Code:
+   `MandelEvaluator<BASE>::evaluateJulia()` (`interior.inte`, `phi`, around
+   `juliaData.store->interior.*` in `MandelEvaluator.cpp`), and the hover
+   readout / paint styles `Phi`, `Phi1`, `Phi2`, `F1`, `FirstUnder1` in
+   `JuliaModel.cpp`.

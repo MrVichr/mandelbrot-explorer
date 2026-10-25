@@ -59,3 +59,7 @@ personaltypes.pyc
 /mandel_runner
 /wiki_images
 .devcontainer/
+
+# Hand-written headless build files (exceptions to Makefile* and moc_*.cpp above)
+!/Makefile-headless
+!/runner/moc_signals.cpp

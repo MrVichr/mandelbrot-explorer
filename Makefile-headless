@@ -1,0 +1,148 @@
+# Makefile-headless — builds mandel_runner: a headless test driver for MandelModel.
+# (Not named "Makefile" so that an in-tree qmake run cannot overwrite it.)
+#
+# Usage (always pass -f Makefile-headless, abbreviated as "make" below):
+#   make -f Makefile-headless — build mandel_runner
+#   make clean               — remove build artefacts
+#   make run                 — build then run (text mode, stdout only)
+#
+#   make bless-text-man      — Mandelbrot: run in text mode and save JSON to ./blessed/
+#   make check-text-man      — Mandelbrot: run in text mode and compare JSON against ./blessed/
+#   make bless-images-man    — Mandelbrot: run in images mode and save PPMs to ./blessed/
+#   make check-images-man    — Mandelbrot: run in images mode and compare PPMs against ./blessed/
+#
+#   make bless-text-jul      — Julia:    text mode bless
+#   make check-text-jul      — Julia:    text mode check
+#   make bless-images-jul    — Julia:    images mode bless
+#   make check-images-jul    — Julia:    images mode check
+#
+#   make bless-text-lag      — Laguerre: text mode bless
+#   make check-text-lag      — Laguerre: text mode check
+#   make bless-images-lag    — Laguerre: images mode bless
+#   make check-images-lag    — Laguerre: images mode check
+#
+# The python script also converts PPMs → PNG for human inspection (requires Pillow).
+#
+# Generated filenames are prefixed: Man_..., Jul_..., Lag_...
+#
+# Default view parameters used by the convenience targets below:
+# VIEW_ARGS := --cx -0.5 --cy 0.0 --scale 0.125 --width 40 --height 20 --title "Wide view"
+VIEW_ARGS     := --cx 0.286015601694831 --cy 0.011537485994235 --scale 1.818989403545856475830078125e-12 --width 40 --height 30 --title "Dense 4-spiral"
+JUL_VIEW_ARGS := --cx 0 --cy 0 --scale 0.125 --width 40 --height 20 --title "Main view"
+LAG_VIEW_ARGS := --cx 0 --cy 0 --scale 0.125 --width 40 --height 20 --title "Main view"
+
+CXX      := g++
+CXXFLAGS := -std=c++20 -fext-numeric-literals \
+            -I. -Ifake_qt \
+            -Wall -Wextra \
+            -Wno-unused-parameter \
+            -Wno-unused-variable \
+            -Wno-unused-but-set-variable \
+            -g \
+            -O3 \
+            -MMD -MP
+
+LDFLAGS  := -lpthread
+
+# Source files (excludes Qt-specific main.cpp and MandelImageCombiner which
+# isn't needed for headless computation).
+SRCS := MandelMath_var.cpp \
+        double_double.cpp \
+        multiprec.cpp \
+        MandelEvaluator.cpp \
+        MandelModel.cpp \
+        JuliaModel.cpp \
+        LaguerreModel.cpp \
+        ShareableImageWrapper.cpp \
+        atomic_update_rect.cpp \
+        runner/moc_signals.cpp \
+        runner/main_runner.cpp
+
+OBJS    := $(SRCS:.cpp=.o)
+TARGET  := mandel_runner
+OBJDIR  := runner/obj
+
+# Place object files in runner/obj to keep tree clean
+OBJS_IN_DIR := $(patsubst %.cpp,$(OBJDIR)/%.o,$(notdir $(SRCS)))
+
+DEPS := $(OBJS_IN_DIR:.o=.d)
+# .DEFAULT_GOAL must be set before -include so that the first target in the
+# included .d files does not become the default build goal.
+.DEFAULT_GOAL := all
+-include $(DEPS)
+
+.PHONY: all clean run \
+        bless-text-man check-text-man bless-images-man check-images-man \
+        bless-text-jul check-text-jul bless-images-jul check-images-jul \
+        bless-text-lag check-text-lag bless-images-lag check-images-lag
+
+all: $(TARGET)
+
+$(TARGET): $(OBJS_IN_DIR)
+	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
+
+# Pattern rules — each .cpp regardless of sub-directory goes to runner/obj/<base>.o
+$(OBJDIR)/%.o: %.cpp | $(OBJDIR)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(OBJDIR)/%.o: runner/%.cpp | $(OBJDIR)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(OBJDIR):
+	mkdir -p $@
+
+clean:
+	rm -rf $(OBJDIR) $(TARGET)
+
+run: all
+	./$(TARGET) --mode text $(VIEW_ARGS)
+
+# ── Text mode ────────────────────────────────────────────────────────────────
+# current/<fractal-prefix><title>_text.json  — produced by each run
+# blessed/<fractal-prefix><title>_text.json  — reference for regression comparison
+
+# ── Images mode ──────────────────────────────────────────────────────────────
+# current/<fractal-prefix><title>_<Style>.ppm  — produced by each run
+# blessed/<fractal-prefix><title>_<Style>.ppm  — reference for regression comparison
+# Fractal prefixes: Man_  Jul_  Lag_
+
+# ── Mandelbrot ──────────────────────────────────────────────────────────────
+
+# ── Mandelbrot ────────────────────────────────────────────────────────────────
+bless-text-man: all
+	python3 runner/check_images.py --fractal man --mode text --bless $(VIEW_ARGS)
+
+check-text-man: all
+	python3 runner/check_images.py --fractal man --mode text $(VIEW_ARGS)
+
+bless-images-man: all
+	python3 runner/check_images.py --fractal man --mode images --bless $(VIEW_ARGS)
+
+check-images-man: all
+	python3 runner/check_images.py --fractal man --mode images $(VIEW_ARGS)
+
+# ── Julia ─────────────────────────────────────────────────────────────────────
+bless-text-jul: all
+	python3 runner/check_images.py --fractal jul --mode text --bless $(JUL_VIEW_ARGS)
+
+check-text-jul: all
+	python3 runner/check_images.py --fractal jul --mode text $(JUL_VIEW_ARGS)
+
+bless-images-jul: all
+	python3 runner/check_images.py --fractal jul --mode images --bless $(JUL_VIEW_ARGS)
+
+check-images-jul: all
+	python3 runner/check_images.py --fractal jul --mode images $(JUL_VIEW_ARGS)
+
+# ── Laguerre ──────────────────────────────────────────────────────────────────
+bless-text-lag: all
+	python3 runner/check_images.py --fractal lag --mode text --bless $(LAG_VIEW_ARGS)
+
+check-text-lag: all
+	python3 runner/check_images.py --fractal lag --mode text $(LAG_VIEW_ARGS)
+
+bless-images-lag: all
+	python3 runner/check_images.py --fractal lag --mode images --bless $(LAG_VIEW_ARGS)
+
+check-images-lag: all
+	python3 runner/check_images.py --fractal lag --mode images $(LAG_VIEW_ARGS)
