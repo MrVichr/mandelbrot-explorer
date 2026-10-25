@@ -654,7 +654,7 @@ void JuliaModel::setImageSize(int width, int height)
       QString size_as_text=QString::number(newLength*sizeof(JuliaPointStore));
       for (int pos=size_as_text.length()-3; pos>0; pos-=3)
         size_as_text.insert(pos, '\'');
-      qDebug()<<"laguerreStore uses"<<size_as_text.toLocal8Bit().constData()<<"B";
+      qDebug()<<"JuliaPointStore uses"<<size_as_text.toLocal8Bit().constData()<<"B";
     }
     void *new_points=nullptr;
     switch (precisionRecord->ntype)

@@ -578,7 +578,7 @@ void MandelModel::setImageSize(int width, int height)
       QString size_as_text=QString::number(newLength*sizeof(MandelPointStore));
       for (int pos=size_as_text.length()-3; pos>0; pos-=3)
         size_as_text.insert(pos, '\'');
-      qDebug()<<"pointStore uses"<<size_as_text.toLocal8Bit().constData()<<"B"; //lots of work to skip those quotes... can't skip spaces at all
+      qDebug()<<"MandelPointStore uses"<<size_as_text.toLocal8Bit().constData()<<"B"; //lots of work to skip those quotes... can't skip spaces at all
     }
     void *new_points=nullptr;
     //precisionRecord->position.center.re.convert_block(MandelMath::NumberType::typeEmpty, nullptr, newLength*MandelPoint<MandelMath::number_any>::LEN);
@@ -2135,6 +2135,7 @@ MandelModel::PrecisionRecord::PrecisionRecord(MandelMath::NumberType ntype, Prec
   if (threadCount<=0)
   { //first init
     threadCount=QThread::idealThreadCount()-1;
+    qDebug()<<"Using threadCount="<<threadCount;
     //threadCount=1;
     if (threadCount<1)
       threadCount=1;

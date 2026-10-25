@@ -1,7 +1,6 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Window 2.12
-import Qt.labs.platform 1.1
 
 import com.example.MandelImageCombiner 1.0;
 import com.example.MandelModel 1.0;
@@ -18,6 +17,31 @@ Window {
                              {m: juliaModel, c: juliaImageCombiner, r: rbuttonViewJulia},
                              {m: laguerreModel, c: laguerreImageCombiner, r: rbuttonViewLagu},]
     Component.onCompleted: { for (let {m} of listOfMCR) { m.startRunning(); } }
+
+    // Menus are drawn inside the window (Qt < 6.8 can't overflow it), so give them a visible
+    // scrollbar when the window is too short. Also collapses submenus whose menuShown is false,
+    // since Controls 2 keeps an empty slot for invisible items.
+    component ScrollMenu: Menu {
+        id: scrollMenu
+        delegate: Component {
+            MenuItem {
+                property bool shown: !subMenu || subMenu.menuShown===undefined || subMenu.menuShown
+                visible: shown
+                height: shown ? implicitHeight : 0
+            }
+        }
+        contentItem: ListView {
+            id: menuList
+            implicitHeight: contentHeight
+            model: scrollMenu.contentModel
+            interactive: contentHeight > height
+            clip: true
+            currentIndex: scrollMenu.currentIndex
+            ScrollBar.vertical: ScrollBar {
+                policy: menuList.contentHeight > menuList.height ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff
+            }
+        }
+    }
 
     Column {
         anchors.left: parent.left;
@@ -200,15 +224,15 @@ Window {
         Button {
             id: btnOptions
             text: "Options"
-            onClicked: menuOptionsJulia.open(btnOptions.width, 100)
-            Menu {
+            onClicked: menuOptionsJulia.popup(btnOptions.width, 0)
+            ScrollMenu {
                 title: "Options2"
                 id: menuOptionsJulia
-                Menu {
+                ScrollMenu {
                     title: "Ext D.E. patch"
                     id: menuOptionsJuliaEDEpatchAlgo
-                    visible: rbuttonViewJulia.checked
-                    MenuItemGroup {
+                    property bool menuShown: rbuttonViewJulia.checked
+                    ButtonGroup {
                         id: migJuliaEDEPatching
                     }
                     Instantiator
@@ -220,24 +244,24 @@ Window {
                             {text: "Always", algo: JuliaModel.EedepaAlways},
                             {text: "Conditional", algo: JuliaModel.EedepaConditional},
                             {text: "Blend", algo: JuliaModel.EedepaBlend},
-                            {text: "Verify Hits", algo: JuliaModel.EedepaVerifyH},
+                            {text: "Verify Hits", algo: JuliaModel.EedepaVerifyH}, // check against legacy computation
                             {text: "Verify Avoids", algo: JuliaModel.EedepaVerifyA},
                         ]
                         MenuItem {
                             checkable: true
                             checked: modelData.algo===JuliaModel.EedepaBlend
                             text: modelData.text
-                            group: migJuliaEDEPatching
+                            ButtonGroup.group: migJuliaEDEPatching
                             onTriggered: { checked=true; juliaModel.selectedEdePatchAlgo=modelData.algo; }
                         }
                     }
                 }
 
-                Menu {
+                ScrollMenu {
                     title: "Ext D.E. coloring"
                     id: menuOptionsJuliaExtColoring
-                    visible: rbuttonViewJulia.checked
-                    MenuItemGroup {
+                    property bool menuShown: rbuttonViewJulia.checked
+                    ButtonGroup {
                         id: migJuliaExtColoring
                     }
                     Instantiator
@@ -252,17 +276,17 @@ Window {
                             checkable: true
                             checked: modelData.algo===JuliaModel.EextcolRainbow
                             text: modelData.text
-                            group: migJuliaExtColoring
+                            ButtonGroup.group: migJuliaExtColoring
                             onTriggered: { checked=true; juliaModel.selectedExteriorColoring=modelData.algo; }
                         }
                     }
                 }
 
-                Menu {
+                ScrollMenu {
                     title: "Precision"
                     //text: "Precision"
                     id: menuOptionsPrecision
-                    MenuItemGroup {
+                    ButtonGroup {
                         id: migJuliaPrecision
                     }
                     Instantiator {
@@ -279,7 +303,7 @@ Window {
                             checkable: true
                             text: modelData.text
                             checked: modelData.prec===JuliaModel.EprecisionDouble
-                            group: migJuliaPrecision
+                            ButtonGroup.group: migJuliaPrecision
                             onTriggered: {
                                 checked=true;
                                 console.log(listOfMCR);
@@ -374,12 +398,7 @@ Window {
             }
             if (mouse.button===Qt.RightButton)
             {
-                //console.log(mainPopupMenu);
-                //console.log(mainPopupMenu.popup);
-                //cannot set the position to open at, but some magic opens it at mouse coords anyway
-                //mainPopupMenu.x=mouse.x;
-                //mainPopupMenu.y=mouse.y;
-                mainPopupMenu.open();//mouse.x, mouse.y, null);
+                mainPopupMenu.popup();
             }
         }
 
@@ -448,7 +467,7 @@ Window {
             anchors.fill: parent;
         }
 
-        Menu {
+        ScrollMenu {
             id: mainPopupMenu
             //x: 222
             //y: 111
@@ -466,7 +485,9 @@ Window {
             }
             MenuItem {
                 text: "Freeze orbit (J)"
-                visible: rbuttonViewJulia.checked
+                property bool shown: rbuttonViewJulia.checked
+                visible: shown
+                height: shown ? implicitHeight : 0
                 checkable: true
                 //checked: false
                 onTriggered: {
@@ -475,12 +496,18 @@ Window {
                     juliaModel.orbit_frozen=checked;
                 }
             }
-            Menu {
+            ScrollMenu {
                 id: menuMandelPresets
                 title: "Presets (M)..."
-                visible: rbuttonViewMand.checked
+                property bool menuShown: rbuttonViewMand.checked
+                // Controls 2 menus default to a fixed width; widen to fit the longest caption
+                property real widestItem: 0
+                width: Math.max(implicitWidth, widestItem+leftPadding+rightPadding)
                 Instantiator {
-                    onObjectAdded: function(index, object) {menuMandelPresets.insertItem(index, object);}
+                    onObjectAdded: function(index, object) {
+                        menuMandelPresets.insertItem(index, object);
+                        menuMandelPresets.widestItem=Math.max(menuMandelPresets.widestItem, object.implicitWidth);
+                    }
                     onObjectRemoved: function(index, object) {menuMandelPresets.removeItem(object);}
                     model: [
                         {viewRe: -0.5, viewIm: 0, viewZoom: 1/128, caption: 'Main view'},
@@ -511,12 +538,18 @@ Window {
                     }
                 }
             }
-            Menu {
+            ScrollMenu {
                 id: menuJuliaPresets
                 title: "Presets (J)..."
-                visible: rbuttonViewJulia.checked
+                property bool menuShown: rbuttonViewJulia.checked
+                // Controls 2 menus default to a fixed width; widen to fit the longest caption
+                property real widestItem: 0
+                width: Math.max(implicitWidth, widestItem+leftPadding+rightPadding)
                 Instantiator {
-                    onObjectAdded: function(index, object) {menuJuliaPresets.insertItem(index, object);}
+                    onObjectAdded: function(index, object) {
+                        menuJuliaPresets.insertItem(index, object);
+                        menuJuliaPresets.widestItem=Math.max(menuJuliaPresets.widestItem, object.implicitWidth);
+                    }
                     onObjectRemoved: function(index, object) {menuJuliaPresets.removeItem(object);}
                     model: [
                         {viewRe:  0,                  viewIm: 0,                  viewZoom: 1/128, cRe: 0, cIm: 0, period: 1, caption: 'Main view'},
