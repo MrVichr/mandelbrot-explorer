@@ -1,4 +1,4 @@
-#include <QGuiApplication>
+#include <QApplication>
 #include <QQmlApplicationEngine>
 
 #include "MandelImageCombiner.hpp"
@@ -129,7 +129,8 @@ int main(int argc, char *argv[])
   for (int i=0; i<=argc; i++) //ends with nullptr after end, copy that too justin case
     original_argv[i]=argv[i];
 #endif
-  QGuiApplication app(argc, argv);
+  // QApplication (not QGuiApplication): Qt.labs.platform menus need the widgets fallback on Linux
+  QApplication app(argc, argv);
 
   qmlRegisterType<MandelImageCombiner>("com.example.MandelImageCombiner", 1, 0, "MandelImageCombiner");
   qmlRegisterType<MandelModel>("com.example.MandelModel", 1, 0, "MandelModel");

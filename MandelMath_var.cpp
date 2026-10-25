@@ -367,12 +367,9 @@ double number<double>::eps234() const
 }
 
 template<>
-number<double>::number(Scratchpad *spad): store(0)
+number<double>::number(NumberType /*ntype*/): store(0)
 {
-  working_assert(spad != nullptr);
-  if (tl_spad!=spad)
-    printf("double tl_spad=%p, spad=%p\n", tl_spad, spad);
-  set_spad(spad);
+  // concrete type — tl_spad is set via explicit set_spad() calls
 }
 
 template<>
@@ -880,9 +877,9 @@ double number<__float128>::eps234() const
 }
 
 template<>
-number<__float128>::number(Scratchpad *spad): store(0)
+number<__float128>::number(NumberType /*ntype*/): store(0)
 {
-  set_spad(spad);
+  // concrete type — tl_spad is set via explicit set_spad() calls
   static_assert(sizeof(number<__float128>)==16, "wassup - only store remains");
   static_assert(offsetof(number<__float128>, store)==0, "wassup");
 }
@@ -1443,9 +1440,9 @@ double number<dd_real>::eps234() const
 }
 
 template<>
-number<dd_real>::number(Scratchpad *spad): store()
+number<dd_real>::number(NumberType /*ntype*/): store()
 {
-  set_spad(spad);
+  // concrete type — tl_spad is set via explicit set_spad() calls
 }
 
 template<>
@@ -1943,9 +1940,9 @@ double number<dq_real>::eps234() const
 }
 
 template<>
-number<dq_real>::number(Scratchpad *spad): store()
+number<dq_real>::number(NumberType /*ntype*/): store()
 {
-  set_spad(spad);
+  // concrete type — tl_spad is set via explicit set_spad() calls
 }
 
 template<>
@@ -2445,9 +2442,9 @@ double number<real642>::eps234() const
 }
 
 template<>
-number<real642>::number(Scratchpad *spad): store()
+number<real642>::number(NumberType /*ntype*/): store()
 {
-  set_spad(spad);
+  // concrete type — tl_spad is set via explicit set_spad() calls
 }
 
 template<>
@@ -2975,24 +2972,6 @@ double number<real642>::toDouble() const
 
 #endif // !NUMBER_DOUBLE_ONLY
 
-// ── number<number_any>::set_spad also wires the inner concrete-type tl_spad ──
-// Must be declared before any other number<number_any> member specialization.
-template<>
-void number<number_any>::set_spad(Scratchpad *s)
-{
-  tl_spad = s;
-  if (!s) return;
-  switch (s->ntype)
-  {
-    case NumberType::typeDouble:   number<double>::set_spad  ((number<double>::Scratchpad   *)s->inner); break;
-    case NumberType::typeFloat128: number<__float128>::set_spad((number<__float128>::Scratchpad*)s->inner); break;
-    case NumberType::typeDDouble:  number<dd_real>::set_spad ((number<dd_real>::Scratchpad  *)s->inner); break;
-    case NumberType::typeQDouble:  number<dq_real>::set_spad ((number<dq_real>::Scratchpad  *)s->inner); break;
-    case NumberType::typeReal642:  number<real642>::set_spad ((number<real642>::Scratchpad  *)s->inner); break;
-    case NumberType::typeEmpty:    working_assert(false);
-  }
-}
-
 template<>
 double number<number_any>::eps2() const
 {
@@ -3045,24 +3024,16 @@ number<number_any>::number(number<number_any> const &src) noexcept: store(src.st
 }*/
 
 template<>
-number<number_any>::number(Scratchpad *spad): store()
+number<number_any>::number(NumberType ntype): store()
 {
-  //number_any woot;
-  //woot=number<double>();
   static_assert(std::is_copy_assignable_v<std::monostate>, "woot");
-  /*static_assert(std::is_copy_assignable_v<double>, "woot");
-  static_assert(std::is_copy_assignable_v<__float128>, "woot");
-  static_assert(std::is_copy_assignable_v<dd_real>, "woot");
-  static_assert(std::is_copy_assignable_v<dq_real>, "woot");
-  static_assert(std::is_copy_assignable_v<real642>, "woot");*/
   static_assert(std::is_copy_assignable_v<number<double>>, "woot");
   static_assert(std::is_copy_assignable_v<number<__float128>>, "woot");
   static_assert(std::is_copy_assignable_v<number<dd_real>>, "woot");
   static_assert(std::is_copy_assignable_v<number<dq_real>>, "woot");
   static_assert(std::is_copy_assignable_v<number<real642>>, "woot");
   static_assert(std::is_copy_assignable_v<number_any>, "woot");
-  set_spad(spad);
-  switch (tl_spad->ntype)
+  switch (ntype)
   {
     //case NumberType::typeEmpty: dbgPoint(); store=new number<double>(); break;
     case NumberType::typeDouble: store.emplace<number<double>>(); break;
@@ -3075,8 +3046,8 @@ number<number_any>::number(Scratchpad *spad): store()
 #endif
     default:
       dbgPoint();
-      working_assert(false); // tl_spad->ntype is typeEmpty — spad not properly initialised
-      store=number<double>();
+      working_assert(false); // ntype is typeEmpty — not properly initialised
+      store.emplace<number<double>>();
       break;
   }
 }
@@ -3085,9 +3056,15 @@ template<>
 void number<number_any>::constructLateBecauseQtIsAwesome(const number<number_any> &src)
 {
   working_assert(store.index()==0);
-  working_assert(tl_spad!=nullptr);
-  working_assert(tl_spad->inner);
-  working_assert(((number<number_any>::Scratchpad *)(tl_spad->inner))->ntype==tl_spad->ntype); //not sure about the purpose of this one
+  // With get_spad() now dispatching via the variant type, number<number_any>::tl_spad
+  // is no longer kept current.  Use the source's get_spad() for the validity check.
+  working_assert(src.get_spad() != nullptr);
+  working_assert(src.store.index() == store.index());
+  /*MandelMath::visit([&](auto &self_store) {
+      if constexpr (!std::is_same_v<std::decay_t<decltype(self_store)>, std::monostate>)
+        working_assert(src.get_spad() == self_store.get_spad());
+  }, store);*/
+  //working_assert(src.get_spad() == store.get_spad());
   store=src.store;
   /*switch (spad->ntype)
   {
@@ -3765,43 +3742,74 @@ double number<number_any>::toDouble() const
 }
 
 template<>
-number<double>::Scratchpad::Scratchpad(NumberType ntype): ntype(ntype), inner(nullptr), tmp1(this), tmp2(this), tmp3(this), tmp4(this)
+number<double>::Scratchpad::Scratchpad(NumberType ntype): tmp1(), tmp2(), tmp3(), tmp4()
 {
+  //set_spad(this);
 }
 
 template<>
-number<__float128>::Scratchpad::Scratchpad(NumberType ntype): ntype(ntype), inner(nullptr), tmp1(this), tmp2(this), tmp3(this), tmp4(this)
+number<__float128>::Scratchpad::Scratchpad(NumberType ntype): tmp1(), tmp2(), tmp3(), tmp4()
 {
+  //set_spad(this);
 }
 
 template<>
-number<dd_real>::Scratchpad::Scratchpad(NumberType ntype): ntype(ntype), inner(nullptr), tmp1(this), tmp2(this), tmp3(this), tmp4(this)
+number<dd_real>::Scratchpad::Scratchpad(NumberType ntype): tmp1(), tmp2(), tmp3(), tmp4()
 {
+  //set_spad(this);
 }
 
 template<>
-number<dq_real>::Scratchpad::Scratchpad(NumberType ntype): ntype(ntype), inner(nullptr), tmp1(this), tmp2(this), tmp3(this), tmp4(this)
+number<dq_real>::Scratchpad::Scratchpad(NumberType ntype): tmp1(), tmp2(), tmp3(), tmp4()
 {
+  //set_spad(this);
 }
 
 template<>
-number<real642>::Scratchpad::Scratchpad(NumberType ntype): ntype(ntype), inner(nullptr), tmp1(this), tmp2(this), tmp3(this), tmp4(this)
+number<real642>::Scratchpad::Scratchpad(NumberType ntype): tmp1(), tmp2(), tmp3(), tmp4()
 {
+  //set_spad(this);
 }
 
 template<>
-number<number_any>::Scratchpad::Scratchpad(NumberType ntype): ntype(ntype), inner(nullptr), tmp1(this), tmp2(this), tmp3(this), tmp4(this)
+number<number_any>::Scratchpad::Scratchpad(NumberType ntype): tmp1(ntype), tmp2(ntype), tmp3(ntype), tmp4(ntype)
 {
-  //working_assert(false); //what's up with inner?
-  switch (ntype)
-  {
-    case NumberType::typeDouble: inner=new number<double>::Scratchpad(ntype); break;
-    case NumberType::typeFloat128: inner=new number<__float128>::Scratchpad(ntype); break;
-    case NumberType::typeDDouble: inner=new number<dd_real>::Scratchpad(ntype); break;
-    case NumberType::typeQDouble: inner=new number<dq_real>::Scratchpad(ntype); break;
-    case NumberType::typeReal642: inner=new number<real642>::Scratchpad(ntype); break;
-    case NumberType::typeEmpty: working_assert(false);
-  }
+  // TODO: delete all this?
+  return;
+  // //working_assert(false); //what's up with inner?
+  // switch (ntype)
+  // {
+  //   // For each concrete type we (a) allocate the concrete Scratchpad (whose ctor
+  //   // calls number<T>::set_spad(this), registering it as the thread's tl_spad),
+  //   // and (b) store a back-pointer in concrete->inner_remove pointing back to *this, so
+  //   // that number<number_any>::get_spad() can recover the wrapper Scratchpad from
+  //   // the concrete tl_spad without needing number<number_any>::tl_spad to be set.
+  //   case NumberType::typeDouble: {
+  //     auto *s = new number<double>::Scratchpad(ntype);
+  //     s->inner_remove = this; inner_remove = s;
+  //   } break;
+  //   case NumberType::typeFloat128: {
+  //     auto *s = new number<__float128>::Scratchpad(ntype);
+  //     s->inner_remove = this; inner_remove = s;
+  //   } break;
+  //   case NumberType::typeDDouble: {
+  //     auto *s = new number<dd_real>::Scratchpad(ntype);
+  //     s->inner_remove = this; inner_remove = s;
+  //   } break;
+  //   case NumberType::typeQDouble: {
+  //     auto *s = new number<dq_real>::Scratchpad(ntype);
+  //     s->inner_remove = this; inner_remove = s;
+  //   } break;
+  //   case NumberType::typeReal642: {
+  //     auto *s = new number<real642>::Scratchpad(ntype);
+  //     s->inner_remove = this; inner_remove = s;
+  //   } break;
+  //   case NumberType::typeEmpty: working_assert(false);
+  // }
+  // // Make this Scratchpad reachable from the constructing thread's
+  // // number<number_any>::tl_spad so that main-thread get_spad() fallback works
+  // // even when standalone concrete scratchpads later overwrite their tl_spad.
+  // tl_spad = this;
 }
 
 template<>
@@ -3832,7 +3840,7 @@ number<real642>::Scratchpad::~Scratchpad()
 template<>
 number<number_any>::Scratchpad::~Scratchpad()
 {
-  switch (ntype)
+/*  switch (ntype)
   {
     case NumberType::typeDouble: delete (number<double>::Scratchpad *)inner; break;
     case NumberType::typeFloat128: delete (number<__float128>::Scratchpad *)inner; break;
@@ -3840,7 +3848,7 @@ number<number_any>::Scratchpad::~Scratchpad()
     case NumberType::typeQDouble: delete (number<dq_real>::Scratchpad *)inner; break;
     case NumberType::typeReal642: delete (number<real642>::Scratchpad *)inner; break;
     case NumberType::typeEmpty: working_assert(false);
-  }
+  }*/
 }
 
 
@@ -3996,13 +4004,13 @@ complex<BASE> &complex<BASE>::sqr()
   //r:=(r+i)*(r-i)
   //i=2*r*i
   //should be more precise (+ fewer mul but sqr is cheaper than mul so not really)
-  number<BASE>::tl_spad->tmp1.assign(re);
-  number<BASE>::tl_spad->tmp1.sub(im);    //r-i
-  number<BASE>::tl_spad->tmp2.assign(im);
+  re.get_spad()->tmp1.assign(re);
+  re.get_spad()->tmp1.sub(im);    //r-i
+  re.get_spad()->tmp2.assign(im);
   im.mul(re);
   im.lshift(1); //2*r*i
-  re.add(number<BASE>::tl_spad->tmp2);    //r+i
-  re.mul(number<BASE>::tl_spad->tmp1);
+  re.add(re.get_spad()->tmp2);    //r+i
+  re.mul(re.get_spad()->tmp1);
 #endif
   return *this;
 }
@@ -4020,15 +4028,15 @@ complex<BASE> &complex<BASE>::mul(complex const &other)
 {
   //r:=r1*r2-i1*i2
   //i:=r1*i2+i1*r2
-  number<BASE>::tl_spad->tmp1.assign(re);
-  number<BASE>::tl_spad->tmp2.assign(im);
+  re.get_spad()->tmp1.assign(re);
+  re.get_spad()->tmp2.assign(im);
   re.mul(other.im);
   im.mul(other.re);
-  number<BASE>::tl_spad->tmp1.mul(other.re); //r1*r2
-  number<BASE>::tl_spad->tmp2.mul(other.im); //i1*i2
-  number<BASE>::tl_spad->tmp1.sub(number<BASE>::tl_spad->tmp2); //r1*r2-i1*i2
+  re.get_spad()->tmp1.mul(other.re); //r1*r2
+  re.get_spad()->tmp2.mul(other.im); //i1*i2
+  re.get_spad()->tmp1.sub(re.get_spad()->tmp2); //r1*r2-i1*i2
   im.add(re); //i1*r2+r1*i2
-  re.assign(number<BASE>::tl_spad->tmp1);
+  re.assign(re.get_spad()->tmp1);
   return *this;
 }
 
@@ -4043,42 +4051,42 @@ complex<BASE> &complex<BASE>::recip()
 template<typename BASE>
 complex<BASE> &complex<BASE>::recip_prepared()
 { // 1/(re+i*im) = (re-i*im)/((re+i*im)*(re-i*im)) = (re-i*im)/(re*re+im*im)
-  number<BASE>::tl_spad->tmp1.recip();
+  re.get_spad()->tmp1.recip();
   im.chs();
-  re.mul(number<BASE>::tl_spad->tmp1);
-  im.mul(number<BASE>::tl_spad->tmp1);
+  re.mul(re.get_spad()->tmp1);
+  im.mul(re.get_spad()->tmp1);
   return *this;
 }
 
 template<typename BASE>
 complex<BASE> &complex<BASE>::sqrt()
 {
-  /*number<BASE>::tl_spad->tmp1.assign(re);
-  number<BASE>::tl_spad->tmp2.assign(im);
-  number<BASE>::tl_spad->tmp1.sqr();
-  number<BASE>::tl_spad->tmp2.sqr();
-  number<BASE>::tl_spad->tmp1.add(number<BASE>::tl_spad->tmp2); //re*re+im*im*/
+  /*re.get_spad()->tmp1.assign(re);
+  re.get_spad()->tmp2.assign(im);
+  re.get_spad()->tmp1.sqr();
+  re.get_spad()->tmp2.sqr();
+  re.get_spad()->tmp1.add(re.get_spad()->tmp2); //re*re+im*im*/
   getMag_tmp();
-  number<BASE>::tl_spad->tmp1.sqrt();
+  re.get_spad()->tmp1.sqrt();
   if (!re.isle0())
   {
-    number<BASE>::tl_spad->tmp1.add(re);
-    number<BASE>::tl_spad->tmp1.lshift(-1);
-    number<BASE>::tl_spad->tmp1.sqrt(); //t1=sqrt((sqrt(re*re+im*im)+re)/2);
-    re.assign(number<BASE>::tl_spad->tmp1); //re=t1
+    re.get_spad()->tmp1.add(re);
+    re.get_spad()->tmp1.lshift(-1);
+    re.get_spad()->tmp1.sqrt(); //t1=sqrt((sqrt(re*re+im*im)+re)/2);
+    re.assign(re.get_spad()->tmp1); //re=t1
     /*if (t1==0)
       *res_im=0;
     else*/
-    number<BASE>::tl_spad->tmp1.lshift(1);
-    number<BASE>::tl_spad->tmp1.recip();
-    im.mul(number<BASE>::tl_spad->tmp1); //im=im/(2*t1);
+    re.get_spad()->tmp1.lshift(1);
+    re.get_spad()->tmp1.recip();
+    im.mul(re.get_spad()->tmp1); //im=im/(2*t1);
   }
   else
   {
-    number<BASE>::tl_spad->tmp1.sub(re);
-    number<BASE>::tl_spad->tmp1.lshift(-1);
-    number<BASE>::tl_spad->tmp1.sqrt(); //t1=sqrt((sqrt(re*re+im*im)-re)/2);
-    if (number<BASE>::tl_spad->tmp1.isle0()) //t1==0
+    re.get_spad()->tmp1.sub(re);
+    re.get_spad()->tmp1.lshift(-1);
+    re.get_spad()->tmp1.sqrt(); //t1=sqrt((sqrt(re*re+im*im)-re)/2);
+    if (re.get_spad()->tmp1.isle0()) //t1==0
     {
       re.zero();
       im.zero();
@@ -4086,10 +4094,10 @@ complex<BASE> &complex<BASE>::sqrt()
     else
     {
       re.assign(im);
-      im.assign(number<BASE>::tl_spad->tmp1); //new im=t1
-      number<BASE>::tl_spad->tmp1.lshift(1);
-      number<BASE>::tl_spad->tmp1.recip();
-      re.mul(number<BASE>::tl_spad->tmp1); //re=old im/(2*t1);
+      im.assign(re.get_spad()->tmp1); //new im=t1
+      re.get_spad()->tmp1.lshift(1);
+      re.get_spad()->tmp1.recip();
+      re.mul(re.get_spad()->tmp1); //re=old im/(2*t1);
       if (re.isl0())
       {
         re.chs();
@@ -4114,8 +4122,8 @@ complex<BASE> &complex<BASE>::pow_uint(unsigned int n)
   {
     return sqr();
   };
-  number<BASE>::tl_spad->tmp3.assign(re);
-  number<BASE>::tl_spad->tmp4.assign(im);
+  re.get_spad()->tmp3.assign(re);
+  re.get_spad()->tmp4.assign(im);
 
   //works for n>=2
   unsigned int n2=n>>2;
@@ -4133,15 +4141,15 @@ complex<BASE> &complex<BASE>::pow_uint(unsigned int n)
     sqr();
     if (n&mask)
     {
-      number<BASE>::tl_spad->tmp1.assign(re);
-      number<BASE>::tl_spad->tmp2.assign(im);
-      re.mul(number<BASE>::tl_spad->tmp4);        //      r1*i2
-      im.mul(number<BASE>::tl_spad->tmp3);        //i1*r2
-      number<BASE>::tl_spad->tmp1.mul(number<BASE>::tl_spad->tmp3); //r1*r2
-      number<BASE>::tl_spad->tmp2.mul(number<BASE>::tl_spad->tmp4); //      i1*i2
+      re.get_spad()->tmp1.assign(re);
+      re.get_spad()->tmp2.assign(im);
+      re.mul(re.get_spad()->tmp4);        //      r1*i2
+      im.mul(re.get_spad()->tmp3);        //i1*r2
+      re.get_spad()->tmp1.mul(re.get_spad()->tmp3); //r1*r2
+      re.get_spad()->tmp2.mul(re.get_spad()->tmp4); //      i1*i2
       im.add(re);               //i1*r2+r1*i2
-      number<BASE>::tl_spad->tmp1.sub(number<BASE>::tl_spad->tmp2); //r1*r2-i1*i2
-      re.assign(number<BASE>::tl_spad->tmp1);
+      re.get_spad()->tmp1.sub(re.get_spad()->tmp2); //r1*r2-i1*i2
+      re.assign(re.get_spad()->tmp1);
     };
     mask>>=1;
   }
@@ -4184,10 +4192,10 @@ template<typename BASE>
 complex<BASE> &complex<BASE>::sign()
 {
   getMag_tmp();
-  number<BASE>::tl_spad->tmp1.sqrt();
-  number<BASE>::tl_spad->tmp1.recip();
-  re.mul(number<BASE>::tl_spad->tmp1);
-  im.mul(number<BASE>::tl_spad->tmp1);
+  re.get_spad()->tmp1.sqrt();
+  re.get_spad()->tmp1.recip();
+  re.mul(re.get_spad()->tmp1);
+  im.mul(re.get_spad()->tmp1);
   return *this;
 }
 
@@ -4221,25 +4229,25 @@ double complex<BASE>::getMag_double() const
 template<typename BASE>
 const number<BASE> *complex<BASE>::getMag_tmp() const
 {
-  number<BASE>::tl_spad->tmp1.assign(re);
-  number<BASE>::tl_spad->tmp1.sqr();
-  number<BASE>::tl_spad->tmp2.assign(im);
-  number<BASE>::tl_spad->tmp2.sqr();
-  number<BASE>::tl_spad->tmp1.add(number<BASE>::tl_spad->tmp2);
-  return &number<BASE>::tl_spad->tmp1;
+  re.get_spad()->tmp1.assign(re);
+  re.get_spad()->tmp1.sqr();
+  re.get_spad()->tmp2.assign(im);
+  re.get_spad()->tmp2.sqr();
+  re.get_spad()->tmp1.add(re.get_spad()->tmp2);
+  return &re.get_spad()->tmp1;
 }
 
 template<typename BASE>
 const number<BASE> *complex<BASE>::getMag1_tmp() const
 {
   //TODO: merge with mag_cmp_1
-  number<BASE>::tl_spad->tmp1.assign(re);
-  number<BASE>::tl_spad->tmp1.sqr();
-  number<BASE>::tl_spad->tmp2.assign(im);
-  number<BASE>::tl_spad->tmp2.sqr();
-  number<BASE>::tl_spad->tmp1.add(number<BASE>::tl_spad->tmp2);
-  number<BASE>::tl_spad->tmp1.add_double(-1);
-  return &number<BASE>::tl_spad->tmp1;
+  re.get_spad()->tmp1.assign(re);
+  re.get_spad()->tmp1.sqr();
+  re.get_spad()->tmp2.assign(im);
+  re.get_spad()->tmp2.sqr();
+  re.get_spad()->tmp1.add(re.get_spad()->tmp2);
+  re.get_spad()->tmp1.add_double(-1);
+  return &re.get_spad()->tmp1;
 }
 
 template<typename BASE>
@@ -4247,24 +4255,24 @@ const number<BASE> *complex<BASE>::getDist1_tmp() const
 {
   //TODO: add parameter   double from=1.0
   //      merge with getMag_tmp()
-  number<BASE>::tl_spad->tmp1.assign(re);
-  number<BASE>::tl_spad->tmp1.add_double(-1);
-  number<BASE>::tl_spad->tmp1.sqr();
-  number<BASE>::tl_spad->tmp2.assign(im);
-  number<BASE>::tl_spad->tmp2.sqr();
-  number<BASE>::tl_spad->tmp1.add(number<BASE>::tl_spad->tmp2);
-  return &number<BASE>::tl_spad->tmp1;
+  re.get_spad()->tmp1.assign(re);
+  re.get_spad()->tmp1.add_double(-1);
+  re.get_spad()->tmp1.sqr();
+  re.get_spad()->tmp2.assign(im);
+  re.get_spad()->tmp2.sqr();
+  re.get_spad()->tmp1.add(re.get_spad()->tmp2);
+  return &re.get_spad()->tmp1;
 }
 
 template<typename BASE>
 const number<BASE> *complex<BASE>::mulreT_tmp(complex const &other) const
 {
-  number<BASE>::tl_spad->tmp1.assign(re);
-  number<BASE>::tl_spad->tmp2.assign(im);
-  number<BASE>::tl_spad->tmp1.mul(other.re);
-  number<BASE>::tl_spad->tmp2.mul(other.im);
-  number<BASE>::tl_spad->tmp1.add(number<BASE>::tl_spad->tmp2);
-  return &number<BASE>::tl_spad->tmp1;
+  re.get_spad()->tmp1.assign(re);
+  re.get_spad()->tmp2.assign(im);
+  re.get_spad()->tmp1.mul(other.re);
+  re.get_spad()->tmp2.mul(other.im);
+  re.get_spad()->tmp1.add(re.get_spad()->tmp2);
+  return &re.get_spad()->tmp1;
 }
 
 /**
@@ -4279,40 +4287,40 @@ const number<BASE> *complex<BASE>::ccw_tmp(complex const &other) const
   //im(other/this)=im((o.re+i*o.im)/(t.re+i*t.im))=im((o.re+i*o.im)*(t.re-i*t.im)/((t.re+i*t.im)*(t.re-i*t.im)))=
   //im((o.re*t.re+o.im*t.im+i*(o.im*t.re-o.re*t.im))/(t.re*t.re+t.im*t.im))=
   //(t.re*o.im-t.im*o.re)/(t.re*t.re+t.im*t.im)
-  number<BASE>::tl_spad->tmp1.assign(re);
-  number<BASE>::tl_spad->tmp2.assign(im);
-  number<BASE>::tl_spad->tmp1.mul(other.im);
-  number<BASE>::tl_spad->tmp2.mul(other.re);
-  number<BASE>::tl_spad->tmp1.sub(number<BASE>::tl_spad->tmp2); //re*o.im-im*o.re
-  return &number<BASE>::tl_spad->tmp1;
+  re.get_spad()->tmp1.assign(re);
+  re.get_spad()->tmp2.assign(im);
+  re.get_spad()->tmp1.mul(other.im);
+  re.get_spad()->tmp2.mul(other.re);
+  re.get_spad()->tmp1.sub(re.get_spad()->tmp2); //re*o.im-im*o.re
+  return &re.get_spad()->tmp1;
 }
 
 template<typename BASE>
 double complex<BASE>::dist2_double(complex const &other) const
 {
-  number<BASE>::tl_spad->tmp1.assign(re);
-  number<BASE>::tl_spad->tmp2.assign(im);
-  number<BASE>::tl_spad->tmp1.sub(other.re);
-  number<BASE>::tl_spad->tmp2.sub(other.im);
-  /*number<BASE>::tl_spad->tmp1.sqr();
-  number<BASE>::tl_spad->tmp2.sqr();
-  number<BASE>::tl_spad->tmp1.add(number<BASE>::tl_spad->tmp2);
-  return number<BASE>::tl_spad->tmp1.toDouble();*/
-  double result=sqr_double(number<BASE>::tl_spad->tmp1.toDouble())+sqr_double(number<BASE>::tl_spad->tmp2.toDouble());
+  re.get_spad()->tmp1.assign(re);
+  re.get_spad()->tmp2.assign(im);
+  re.get_spad()->tmp1.sub(other.re);
+  re.get_spad()->tmp2.sub(other.im);
+  /*re.get_spad()->tmp1.sqr();
+  re.get_spad()->tmp2.sqr();
+  re.get_spad()->tmp1.add(re.get_spad()->tmp2);
+  return re.get_spad()->tmp1.toDouble();*/
+  double result=sqr_double(re.get_spad()->tmp1.toDouble())+sqr_double(re.get_spad()->tmp2.toDouble());
   return result;
 }
 
 template<typename BASE>
 const number<BASE> *complex<BASE>::dist2_tmp(complex const &other) const
 {
-  number<BASE>::tl_spad->tmp1.assign(re);
-  number<BASE>::tl_spad->tmp2.assign(im);
-  number<BASE>::tl_spad->tmp1.sub(other.re);
-  number<BASE>::tl_spad->tmp2.sub(other.im);
-  number<BASE>::tl_spad->tmp1.sqr();
-  number<BASE>::tl_spad->tmp2.sqr();
-  number<BASE>::tl_spad->tmp1.add(number<BASE>::tl_spad->tmp2);
-  return &number<BASE>::tl_spad->tmp1;
+  re.get_spad()->tmp1.assign(re);
+  re.get_spad()->tmp2.assign(im);
+  re.get_spad()->tmp1.sub(other.re);
+  re.get_spad()->tmp2.sub(other.im);
+  re.get_spad()->tmp1.sqr();
+  re.get_spad()->tmp2.sqr();
+  re.get_spad()->tmp1.add(re.get_spad()->tmp2);
+  return &re.get_spad()->tmp1;
 }
 
 template<typename BASE>
@@ -4320,12 +4328,12 @@ complex<BASE> &complex<BASE>::from_pmdist(const complex &one, const complex &sec
 {
   //(a-c)^2+(b-d)^2=a^2-2*a*c+c^2+b^2-2*b*d+d^2=a^2+b^2+c^2+d^2 -2*a*c-2*b*d
   //(a+c)^2+(b+d)^2=a^2+2*a*c+c^2+b^2+2*b*d+d^2=a^2+b^2+c^2+d^2 +2*a*c+2*b*d
-  number<BASE>::tl_spad->tmp1.assign(one.re);
+  re.get_spad()->tmp1.assign(one.re);
   im.assign(one.im);
-  number<BASE>::tl_spad->tmp1.mul(second.re);
+  re.get_spad()->tmp1.mul(second.re);
   im.mul(second.im);
-  number<BASE>::tl_spad->tmp1.add(im); //a*c+b*d
-  number<BASE>::tl_spad->tmp1.lshift(1);
+  re.get_spad()->tmp1.add(im); //a*c+b*d
+  re.get_spad()->tmp1.lshift(1);
 
   re.assign(one.re);
   re.sqr();
@@ -4340,8 +4348,8 @@ complex<BASE> &complex<BASE>::from_pmdist(const complex &one, const complex &sec
   re.add(im); //a^2+b^2+c^2+d^2
 
   im.assign(re);
-  re.sub(number<BASE>::tl_spad->tmp1);
-  im.add(number<BASE>::tl_spad->tmp1);
+  re.sub(re.get_spad()->tmp1);
+  im.add(re.get_spad()->tmp1);
   return *this;
 }
 
@@ -4377,23 +4385,23 @@ std::strong_ordering complex<BASE>::mag_cmp_1() const
 {
   //first reduce fz_re, fz_im to 2nd octant:
   //  fz.re>=0, fz.im>=0, fz.im>=fz.re
-  number<BASE>::tl_spad->tmp1.assign(re);
-  number<BASE>::tl_spad->tmp2.assign(im);
-  if (number<BASE>::tl_spad->tmp1.isl0()) number<BASE>::tl_spad->tmp1.chs();
-  if (number<BASE>::tl_spad->tmp2.isl0()) number<BASE>::tl_spad->tmp2.chs();
-  if (!number<BASE>::tl_spad->tmp1.isle(number<BASE>::tl_spad->tmp2))
+  re.get_spad()->tmp1.assign(re);
+  re.get_spad()->tmp2.assign(im);
+  if (re.get_spad()->tmp1.isl0()) re.get_spad()->tmp1.chs();
+  if (re.get_spad()->tmp2.isl0()) re.get_spad()->tmp2.chs();
+  if (!re.get_spad()->tmp1.isle(re.get_spad()->tmp2))
   {
-    number<BASE>::tl_spad->tmp3.assign(number<BASE>::tl_spad->tmp1);
-    number<BASE>::tl_spad->tmp1.assign(number<BASE>::tl_spad->tmp2);
-    number<BASE>::tl_spad->tmp2.assign(number<BASE>::tl_spad->tmp3);
+    re.get_spad()->tmp3.assign(re.get_spad()->tmp1);
+    re.get_spad()->tmp1.assign(re.get_spad()->tmp2);
+    re.get_spad()->tmp2.assign(re.get_spad()->tmp3);
   };
   //im>=re, now check re^2+im^2>1
-  if ((number<BASE>::tl_spad->tmp1.toDouble()>=0.71) || //im>=re>=0.71 -> mag>=1.0082
-      (number<BASE>::tl_spad->tmp2.toDouble()>=1.01))   //im>=1.01 -> mag>=1.01
+  if ((re.get_spad()->tmp1.toDouble()>=0.71) || //im>=re>=0.71 -> mag>=1.0082
+      (re.get_spad()->tmp2.toDouble()>=1.01))   //im>=1.01 -> mag>=1.01
   {
     return std::strong_ordering::greater;//+1
   }
-  else if (number<BASE>::tl_spad->tmp2.toDouble()<=0.70) //0.70>=im>=re -> mag<=0.98
+  else if (re.get_spad()->tmp2.toDouble()<=0.70) //0.70>=im>=re -> mag<=0.98
     return std::strong_ordering::less;//-1
   else
   { //   re*re+im*im>1
@@ -4407,20 +4415,20 @@ std::strong_ordering complex<BASE>::mag_cmp_1() const
     //   x2=x-(x*x+2*x+r*r)/(2*x+2)
     //>> x2=(x*x-r*r)/(2*x+2)
     //   x2=(x-1)(r*r-x*x)/(1-x*x)/2
-    number<BASE>::tl_spad->tmp1.sqr(); //r^2
-    number<BASE>::tl_spad->tmp1.chs();
-    number<BASE>::tl_spad->tmp3.assign(number<BASE>::tl_spad->tmp1);
-    number<BASE>::tl_spad->tmp3.add_double(1);
-    number<BASE>::tl_spad->tmp3.sqrt();              //sqrt(1-r*r) = x+1
-    number<BASE>::tl_spad->tmp4.assign(number<BASE>::tl_spad->tmp3);
-    number<BASE>::tl_spad->tmp4.add_double(-1);        //x
-    number<BASE>::tl_spad->tmp4.sqr();
-    number<BASE>::tl_spad->tmp1.add(number<BASE>::tl_spad->tmp4);    //x*x-r*r
-    number<BASE>::tl_spad->tmp3.recip(); //-1..-0.51 -> -1..-1.96
-    number<BASE>::tl_spad->tmp1.mul(number<BASE>::tl_spad->tmp3);
-    number<BASE>::tl_spad->tmp1.lshift(-1);           //(x*x-r*r)/(x+1)/2 = better x
-    number<BASE>::tl_spad->tmp2.add_double(-1);
-    return number<BASE>::tl_spad->tmp2.compare(number<BASE>::tl_spad->tmp1); //im-1 vs limit
+    re.get_spad()->tmp1.sqr(); //r^2
+    re.get_spad()->tmp1.chs();
+    re.get_spad()->tmp3.assign(re.get_spad()->tmp1);
+    re.get_spad()->tmp3.add_double(1);
+    re.get_spad()->tmp3.sqrt();              //sqrt(1-r*r) = x+1
+    re.get_spad()->tmp4.assign(re.get_spad()->tmp3);
+    re.get_spad()->tmp4.add_double(-1);        //x
+    re.get_spad()->tmp4.sqr();
+    re.get_spad()->tmp1.add(re.get_spad()->tmp4);    //x*x-r*r
+    re.get_spad()->tmp3.recip(); //-1..-0.51 -> -1..-1.96
+    re.get_spad()->tmp1.mul(re.get_spad()->tmp3);
+    re.get_spad()->tmp1.lshift(-1);           //(x*x-r*r)/(x+1)/2 = better x
+    re.get_spad()->tmp2.add_double(-1);
+    return re.get_spad()->tmp2.compare(re.get_spad()->tmp1); //im-1 vs limit
   };
 }
 
@@ -4693,10 +4701,121 @@ template<> thread_local number<number_any>::Scratchpad   *number<number_any>::tl
 
 // Out-of-line set_spad definitions — must live in the same TU as tl_spad so
 // that GCC's TLS wrapper uses the correct (non-null) init-function pointer.
-template<> void number<double>::set_spad(Scratchpad *s)       { tl_spad = s; }
-template<> void number<__float128>::set_spad(Scratchpad *s)   { tl_spad = s; }
-template<> void number<dd_real>::set_spad(Scratchpad *s)      { tl_spad = s; }
-template<> void number<dq_real>::set_spad(Scratchpad *s)      { tl_spad = s; }
-template<> void number<real642>::set_spad(Scratchpad *s)      { tl_spad = s; }
+template<> void number<double>::set_spad(NumberType ntype, Scratchpad *s)       { tl_spad = s; }
+template<> void number<__float128>::set_spad(NumberType ntype, Scratchpad *s)   { tl_spad = s; }
+template<> void number<dd_real>::set_spad(NumberType ntype, Scratchpad *s)      { tl_spad = s; }
+template<> void number<dq_real>::set_spad(NumberType ntype, Scratchpad *s)      { tl_spad = s; }
+template<> void number<real642>::set_spad(NumberType ntype, Scratchpad *s)      { tl_spad = s; }
+
+static thread_local number<number_any>::Scratchpad *double_spad = nullptr;
+static thread_local number<number_any>::Scratchpad *float128_spad = nullptr;
+static thread_local number<number_any>::Scratchpad *dd_real_spad = nullptr;
+static thread_local number<number_any>::Scratchpad *dq_real_spad = nullptr;
+static thread_local number<number_any>::Scratchpad *real642_spad = nullptr;
+
+// number<number_any>::set_spad: sets tl_spad AND wires the embedded concrete
+// tl_spad.  Only needed by evaluator worker-thread startup; main-thread code
+// should rely on get_spad() which dispatches via the variant type instead.
+template<>
+void number<number_any>::set_spad(NumberType ntype, Scratchpad *s)
+{
+  switch (ntype)
+  {
+    case NumberType::typeDouble:   double_spad = s; break;
+    case NumberType::typeFloat128: float128_spad = s; break;
+    case NumberType::typeDDouble:  dd_real_spad = s; break;
+    case NumberType::typeQDouble:  dq_real_spad = s; break;
+    case NumberType::typeReal642:  real642_spad = s; break;
+    default: working_assert(false); break;
+  }
+/*  tl_spad = s;
+  if (!s) return;
+  switch (s->ntype)
+  {
+    case NumberType::typeDouble:   number<double>::set_spad  ((number<double>::Scratchpad   *)s->inner); break;
+    case NumberType::typeFloat128: number<__float128>::set_spad((number<__float128>::Scratchpad*)s->inner); break;
+    case NumberType::typeDDouble:  number<dd_real>::set_spad ((number<dd_real>::Scratchpad  *)s->inner); break;
+    case NumberType::typeQDouble:  number<dq_real>::set_spad ((number<dq_real>::Scratchpad  *)s->inner); break;
+    case NumberType::typeReal642:  number<real642>::set_spad ((number<real642>::Scratchpad  *)s->inner); break;
+    default: working_assert(false);
+  }*/
+}
+
+// number<number_any>::get_spad() — non-static, instance-aware.
+// Inspects the active variant alternative and follows the back-pointer
+// (concrete_spad->inner == enclosing number_any::Scratchpad) to return the
+// correct wrapper Scratchpad for *this* instance, even when multiple models
+// with different precision types coexist on the same thread.
+template<>
+number<number_any>::Scratchpad *number<number_any>::get_spad() const
+{
+  // Try instance-specific dispatch: look up the active variant type's concrete
+  // tl_spad and follow the back-pointer (concrete->inner) to the enclosing
+  // number_any::Scratchpad.  This works on worker threads (where set_spad is
+  // called at startup with proper back-pointers set) and gives per-instance
+  // correctness even when multiple number_any scratchpads coexist on the same
+  // thread with different underlying types.
+  // If inner is nullptr the concrete spad is standalone (not owned by a
+  // number_any wrapper), so fall back to tl_spad which is always set by the
+  // number<number_any>::Scratchpad constructor for the main-thread case.
+  switch (store.index())
+  {
+    case 1:
+    {
+      if (!double_spad)
+      {
+        double_spad = new Scratchpad(NumberType::typeDouble);
+        printf("Missed creating double_spad\n");
+      };
+      return double_spad;
+    } break;
+    case 2:
+    {
+      if (!float128_spad)
+      {
+        float128_spad = new Scratchpad(NumberType::typeFloat128);
+        printf("Missed creating float128_spad\n");
+      };
+      return float128_spad;
+    } break;
+    case 3:
+    {
+      if (!dd_real_spad)
+      {
+        dd_real_spad = new Scratchpad(NumberType::typeDDouble);
+        printf("Missed creating dd_real_spad\n");
+      };
+      return dd_real_spad;
+    } break;
+    case 4:
+    {
+      if (!dq_real_spad)
+      {
+        dq_real_spad = new Scratchpad(NumberType::typeQDouble);
+        printf("Missed creating dq_real_spad\n");
+      };
+      return dq_real_spad;
+    } break;
+    case 5:
+    {
+      if (!real642_spad)
+      {
+        real642_spad = new Scratchpad(NumberType::typeReal642);
+        printf("Missed creating real642_spad\n");
+      };
+      return real642_spad;
+    } break;
+    default: working_assert(false); break;
+/*
+    case 1: { auto *s = number<double>::tl_spad;    if (s && s->inner) return (Scratchpad*)s->inner; break; }
+    case 2: { auto *s = number<__float128>::tl_spad; if (s && s->inner) return (Scratchpad*)s->inner; break; }
+    case 3: { auto *s = number<dd_real>::tl_spad;   if (s && s->inner) return (Scratchpad*)s->inner; break; }
+    case 4: { auto *s = number<dq_real>::tl_spad;   if (s && s->inner) return (Scratchpad*)s->inner; break; }
+    case 5: { auto *s = number<real642>::tl_spad;   if (s && s->inner) return (Scratchpad*)s->inner; break; }
+    default: break;
+*/
+  }
+  return tl_spad; // monostate or inner==nullptr: best-effort fallback
+}
 
 } // namespace MandelMath

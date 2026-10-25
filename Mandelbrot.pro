@@ -1,4 +1,4 @@
-QT += quick
+QT += quick widgets
 
 CONFIG += c++20
 CONFIG += force_debug_info

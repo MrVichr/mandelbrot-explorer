@@ -60,6 +60,14 @@ members monostate (uninitialised) whenever a `Scratchpad *` was not available.
 | `complex(Scratchpad *spad)` initialises `re(spad), im(spad)` | `MandelMath.hpp` line ~535 — ensures `number<number_any>(spad)` runs for both components, emplacing the variant |
 | `MandelPoint`, `JuliaPoint`, `LaguerrePoint` each have a `(Store*, Scratchpad*)` constructor overload | `MandelEvaluator.hpp/.cpp` — all `complex`/`number` member fields initialised with `spad`, so they are never monostate |
 | `wtiPoint` in all three `PrecisionRecord` constructors uses the spad overload | `MandelModel.cpp`, `JuliaModel.cpp`, `LaguerreModel.cpp` — passes `&orbit.evaluator.tmp` which is already constructed at that point |
+| `NUMBER_IS_VARIANT=0` virtual-dispatch `#else` branch deleted; all `#if`/`#endif` guards removed; `#define NUMBER_IS_VARIANT 1` removed | `MandelMath.hpp` — ~160 dead lines gone |
+| `number(Scratchpad*)` → `number(NumberType)` and `complex(Scratchpad*)` → `complex(NumberType)` throughout | `MandelMath.hpp`, `MandelMath_var.cpp`, `MandelEvaluator.cpp/hpp`, `MandelModel.cpp`, `JuliaModel.cpp`, `LaguerreModel.cpp`, `runner/main_runner.cpp` |
+| Concrete-type `Scratchpad` constructors call `set_spad(this)` in their bodies instead of threading `this` through `tmp1(this)…tmp4(this)` | `MandelMath_var.cpp` |
+| Explicit specialisation declaration `template<> void number<number_any>::set_spad(Scratchpad *)` added to header | `MandelMath.hpp` — prevents GCC from emitting an inline TLS-wrapper with a null init-function pointer in other TUs (SIGSEGV fix) |
+| `number<BASE>::get_spad()` made non-static; `number<number_any>::get_spad()` is a per-instance out-of-line override | `MandelMath.hpp`, `MandelMath_var.cpp` — for concrete types `get_spad()` inlines to `return tl_spad`; for `number_any` it dispatches on `store.index()`, follows the `concrete_tl_spad->inner` back-pointer if valid, falls back to `number<number_any>::tl_spad` otherwise |
+| `number<number_any>::Scratchpad` constructor sets back-pointers and initialises `tl_spad` | `MandelMath_var.cpp` — inner concrete spad gets `s->inner = this` (back-pointer to wrapper); `number<number_any>::tl_spad = this` ensures main-thread fallback works even after worker `MandelEvaluator<T>` constructors overwrite the concrete `tl_spad` with standalone (inner=nullptr) spads |
+| All per-operation `number<number_any>::set_spad()` calls removed from model code | `MandelModel.cpp` (10), `JuliaModel.cpp` (11), `LaguerreModel.cpp` (11), `runner/main_runner.cpp` (2), `MandelEvaluator.hpp` `ShareableViewInfo` ctor — 35 call sites deleted; `set_spad` now only called at worker-thread startup in `doMandelThreadedSplit`, `doJuliaThreadedSplit`, `doLaguerreThreadedSplit` |
+| All 153 `number<BASE>::tl_spad->` accesses in `complex<BASE>` arithmetic replaced with `re.get_spad()->` | `MandelMath_var.cpp` — for concrete types the call inlines to the same code; for `number_any` it dispatches correctly per instance |
 
 ### Testing improvements — done
 
@@ -81,30 +89,51 @@ members monostate (uninitialised) whenever a `Scratchpad *` was not available.
 
 ### What still needs work (scratchpad refactoring)
 
-1. **`number<BASE>` still carries `Scratchpad *tmp`** — the 8-byte member
-   pointer exists on every `number<double>` instance.  Now that `tl_spad` is
-   `thread_local`, this pointer is redundant for all operations that already
-   call `set_spad`.  Removing it would halve the size of `number<double>` and
-   eliminate the remaining constructor plumbing.  The main obstacle is that
-   `Scratchpad` itself contains `number<BASE>` members (`tmp1`–`tmp4`), so the
-   two types are mutually recursive; careful ordering is needed.
+1. ~~**`number<BASE>` still carries `Scratchpad *tmp`**~~ — **DONE**: the `#else`
+   (virtual-dispatch) branch was deleted; the variant branch never had
+   `Scratchpad *tmp`, so all `number<BASE>` instances now contain only
+   `BASE store`.
 
-2. **`Scratchpad` should be static**
-   - set_spad should only be called near MandelEvaluator::moveToThread.
+2. **`Scratchpad` should be static** — `set_spad` is now called **only** in
+   the three worker-thread split functions (`doMandelThreadedSplit`,
+   `doJuliaThreadedSplit`, `doLaguerreThreadedSplit`) in `MandelEvaluator.cpp`,
+   plus implicitly during `Scratchpad` construction.  Main-thread code relies on
+   `get_spad()` dispatching via the variant type.
 
-3. **`Scratchpad` constructor parameter still threads through many call sites**
-   — `PrecisionRecord` members (`position`, `params`, `lagu_c`, etc.) all
-   accept `Scratchpad *` in their constructors.  Once `tl_spad` is fully
-   trusted these could use `tl_spad` directly and drop the parameter.
+   > **Known limitation**: if two models with the **same** concrete precision
+   > type coexist on the main thread (e.g. both `typeDouble`), the second model's
+   > `Scratchpad` construction overwrites `number<number_any>::tl_spad`, so
+   > arithmetic on the first model uses the second model's temporaries.  In
+   > practice `MandelModel`, `JuliaModel`, and `LaguerreModel` each use
+   > `number_any` with potentially different underlying types, and the
+   > `get_spad()` instance-dispatch (back-pointer path) resolves correctly
+   > for **different** types.  Fixing the same-type case requires per-instance
+   > scratchpad pointers and is deferred.
 
-4. **`Scratchpad::ntype` is redundant** — with `NUMBER_IS_VARIANT=1` the
+3. **`Scratchpad *` parameter still threads through higher-level call sites**
+   — `number<BASE>::number(Scratchpad*)` and `complex<BASE>::complex(Scratchpad*)`
+   have been replaced with `number(NumberType)` / `complex(NumberType)`.
+   Higher-level structs (`Position`, `Params`, `Bulb`, `ComputeMandelParams`,
+   `LaguerreStep`, etc.) still accept `Scratchpad *spad` and use `spad->ntype`
+   internally when initialising their `number`/`complex` members.  Once
+   `tl_spad` is fully trusted, callers could drop the `Scratchpad*` parameter
+   entirely and rely on the already-registered `tl_spad`.
+
+4. **`Scratchpad::ntype` is redundant** — with the variant design the
    variant's `.index()` already encodes the type.  The field can be removed
    once callers that read `spad->ntype` are updated to use
-   `number<number_any>::get_spad()->ntype` or the variant index instead.
+   the variant index instead.
 
-5. **Delete the `NUMBER_IS_VARIANT=0` branch** — two parallel implementations
-   exist (variant vs. virtual dispatch).  The virtual dispatch branch is dead
-   code; delete everything inside the `#else` block down to `#endif`.
+5. ~~**Delete the `NUMBER_IS_VARIANT=0` branch**~~ — **DONE**: the `#else`
+   block (virtual-dispatch implementation) has been deleted from
+   `MandelMath.hpp`, and all `#if NUMBER_IS_VARIANT` / `#endif` guards have
+   been removed.  `NUMBER_IS_VARIANT` macro definition also removed.
+
+   > **Important**: `number<number_any>::set_spad` requires an explicit
+   > specialisation declaration in `MandelMath.hpp` (added:
+   > `template<> void number<number_any>::set_spad(Scratchpad *s);`).
+   > Without it, GCC instantiates an inline copy in every TU whose TLS-wrapper
+   > function pointer is null, causing a SIGSEGV on first access.
 
 6. **Return by value from `_tmp()` methods** — `getMag_tmp()` etc. return
    `const number<BASE>*` into a scratch pool.  NRVO makes returning by value

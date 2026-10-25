@@ -4,6 +4,7 @@
 #include <cmath>
 //C++20 also don't have #include <numbers>
 //has gcd since C++17 which I apparently don't have #include <numeric>
+#include <QtGlobal>
 
 #define USE_GCD_FOR_CHECKPERIOD 0
 #define CLEVER_FIX 0
@@ -16,8 +17,8 @@
 void nop(); //defined in MandelMath
 
 template <typename BASE>
-ComputeLaguerreParams<BASE>::ComputeLaguerreParams(typename MandelMath::number<BASE>::Scratchpad *spad):
-  period(1), fastHoming(true), c(spad), first_z(spad)
+ComputeLaguerreParams<BASE>::ComputeLaguerreParams(MandelMath::NumberType ntype):
+  period(1), fastHoming(true), c(ntype), first_z(ntype)
 {
 }
 
@@ -49,8 +50,8 @@ void LaguerrePointStore::assign(const LaguerrePointStore *src)
 
 
 template <typename BASE>
-LaguerrePoint<BASE>::LaguerrePoint(LaguerrePointStore *store, typename MandelMath::number<BASE>::Scratchpad *spad):
-  store(store), r(spad), fz_r(spad), nth_fz(spad)
+LaguerrePoint<BASE>::LaguerrePoint(LaguerrePointStore *store, MandelMath::NumberType ntype):
+  store(store), r(ntype), fz_r(ntype), nth_fz(ntype)
 {
 }
 
@@ -85,8 +86,8 @@ void LaguerrePoint<BASE>::zero(const MandelMath::complex<BASE> &c)
 }
 
 template <typename BASE>
-ComputeMandelParams<BASE>::ComputeMandelParams(typename MandelMath::number<BASE>::Scratchpad *spad):
-  c(spad), bailout(spad), first_z(spad)
+ComputeMandelParams<BASE>::ComputeMandelParams(MandelMath::NumberType ntype):
+  c(ntype), bailout(ntype), first_z(ntype)
 {
   bailout.zero(4);
 }
@@ -126,11 +127,11 @@ void MandelPointStore::assign(const MandelPointStore *src)
 }
 
 template <typename BASE>
-MandelPoint<BASE>::MandelPoint(MandelPointStore *store, typename MandelMath::number<BASE>::Scratchpad *spad):
-  store(store), f(spad), fc_c(spad), fz_r(spad), fz_c_mag(spad),
-  sure_fz_mag(spad), sure_startf(spad), lookper_startf(spad), lookper_nearr(spad),
-  lookper_nearr_dist(spad), lookper_totalFzmag(spad),
-  near0m(spad), nearzm(spad), root(spad), extangle(spad)
+MandelPoint<BASE>::MandelPoint(MandelPointStore *store, MandelMath::NumberType ntype):
+  store(store), f(ntype), fc_c(ntype), fz_r(ntype), fz_c_mag(ntype),
+  sure_fz_mag(ntype), sure_startf(ntype), lookper_startf(ntype), lookper_nearr(ntype),
+  lookper_nearr_dist(ntype), lookper_totalFzmag(ntype),
+  near0m(ntype), nearzm(ntype), root(ntype), extangle(ntype)
 {
 }
 
@@ -244,9 +245,9 @@ void MandelPoint<BASE>::zero(const MandelMath::complex<BASE> &first_z)
 }
 
 template <typename BASE>
-ComputeJuliaParams<BASE>::ComputeJuliaParams(typename MandelMath::number<BASE>::Scratchpad *spad):
+ComputeJuliaParams<BASE>::ComputeJuliaParams(MandelMath::NumberType ntype):
   period(1), //must agree with c==0+0i
-  c(spad), root(spad), root0(spad), patchSizeExterior(0), bailout(spad), alphaShort(spad), alpha(spad), first_z(spad)
+  c(ntype), root(ntype), root0(ntype), patchSizeExterior(0), bailout(ntype), alphaShort(ntype), alpha(ntype), first_z(ntype)
 {
   bailout.zero(4);
 }
@@ -293,11 +294,11 @@ void JuliaPointStore::assign(const JuliaPointStore *src)
 }
 
 template <typename BASE>
-JuliaPoint<BASE>::JuliaPoint(JuliaPointStore *store, typename MandelMath::number<BASE>::Scratchpad *spad):
-  store(store), f(spad), fz_z(spad), fzz_z(spad), fz_z_mag(spad),
-  lookper_distr(spad), lookper_fz(spad),
-  nearzm(spad), near0fzm(spad), near0m(spad), since0fzm(spad), bigfzfzzm(spad), shrinkfactor(spad),
-  nearmrm(spad), nearmr_f(spad), nearmr_fz(spad), extangle(spad), nearmr(*this)
+JuliaPoint<BASE>::JuliaPoint(JuliaPointStore *store, MandelMath::NumberType ntype):
+  store(store), f(ntype), fz_z(ntype), fzz_z(ntype), fz_z_mag(ntype),
+  lookper_distr(ntype), lookper_fz(ntype),
+  nearzm(ntype), near0fzm(ntype), near0m(ntype), since0fzm(ntype), bigfzfzzm(ntype), shrinkfactor(ntype),
+  nearmrm(ntype), nearmr_f(ntype), nearmr_fz(ntype), extangle(ntype), nearmr(*this)
 {
 }
 
@@ -569,9 +570,9 @@ ShareableViewInfo &ShareableViewInfo::operator=(ShareableViewInfo &&src)
 }
 
 template<typename BASE>
-LaguerreStep<BASE>::LaguerreStep(typename MandelMath::number<BASE>::Scratchpad *spad):
-  step(spad), s1(spad), s2(spad), tmp1(spad), tmp2(spad),
-  laguG(spad), laguG2(spad), laguH(spad), laguX(spad), fzzf(spad)
+LaguerreStep<BASE>::LaguerreStep(MandelMath::NumberType ntype):
+  step(ntype), s1(ntype), s2(ntype), tmp1(ntype), tmp2(ntype),
+  laguG(ntype), laguG2(ntype), laguH(ntype), laguX(ntype), fzzf(ntype)
 {
 }
 
@@ -591,12 +592,12 @@ bool LaguerreStep<BASE>::eval(int lg2_degree, MandelMath::complex<BASE> const &f
   if (lg2_degree<5)
   {
     maxm=1+lg2_degree; //in theory up to n-1 but for Mandelbrot only 1+period = 1+log2(n)
-    order1=ldexp(1, -lg2_degree);
+    order1=ldexp(1.0, -lg2_degree);
   }
   else if (lg2_degree<1024)
   {
     maxm=15;
-    order1=ldexp(1, -lg2_degree);
+    order1=ldexp(1.0, -lg2_degree);
   }
   else
   {
@@ -1046,11 +1047,11 @@ bool LaguerreStep<BASE>::eval(int lg2_degree, MandelMath::complex<BASE> const &f
 }
 
 template<typename BASE>
-MandelLoopEvaluator<BASE>::MandelLoopEvaluator(typename MandelMath::number<BASE>::Scratchpad *spad):
-  f(spad), f_z(spad), f_c(spad),
-  f_zz(spad), f_zc(spad), f_cc(spad), f_zzc(spad),
-  multi(0), first_multi(spad), near0iter_1(0), sumA(spad), f_z_mag(spad), f_z_minmag(spad),
-  s1(spad), s2(spad)
+MandelLoopEvaluator<BASE>::MandelLoopEvaluator(MandelMath::NumberType ntype):
+  f(ntype), f_z(ntype), f_c(ntype),
+  f_zz(ntype), f_zc(ntype), f_cc(ntype), f_zzc(ntype),
+  multi(0), first_multi(ntype), near0iter_1(0), sumA(ntype), f_z_mag(ntype), f_z_minmag(ntype),
+  s1(ntype), s2(ntype)
 {
 }
 
@@ -1665,6 +1666,7 @@ int MandelEvaluatorThread::syncLaguerre()
   return MandelMath::visit([](auto &owner) {
     if constexpr (!std::is_same_v<std::decay_t<decltype(owner)>, std::nullptr_t>)
     {
+      MandelMath::number<typename std::decay_t<decltype(*owner)>::BASE>::set_spad(owner->ntype, &owner->tmp);
       return owner->laguerre(owner->currentParams.laguerre.period, owner->currentParams.laguerre.c, &owner->laguerreData.r, owner->currentParams.laguerre.fastHoming);
     }
     else
@@ -1677,10 +1679,12 @@ int MandelEvaluatorThread::syncLaguerre()
 
 void MandelEvaluatorThread::doMandelThreaded(int epoch)
 {
+  // printf(">>> doMandelThreaded(epoch=%d) @ tid=%p\n", epoch, QThread::currentThread());
   MandelMath::visit([](auto &owner, int epoch) {
     if constexpr (!std::is_same_v<std::decay_t<decltype(owner)>, std::nullptr_t>)
       owner->doMandelThreadedSplit(epoch);
   }, owner, epoch);
+  // printf("<<< doMandelThreaded(epoch=%d) @ tid=%p\n", epoch, QThread::currentThread());
 }
 
 void MandelEvaluatorThread::doJuliaThreaded(int epoch)
@@ -1703,20 +1707,20 @@ void MandelEvaluatorThread::doLaguerreThreaded(int epoch)
 template <typename BASE>
 MandelEvaluator<BASE>::MandelEvaluator(MandelMath::NumberType ntype, bool dontRun):
   busyEpoch(0), thread(this),
-  ntype(MandelMath::NumberTypeFromBase<BASE>::ntype),
+  ntype(ntype),
   totalNewtonIterations(0),
   tmp(ntype),
-  currentParams(&tmp),
-  laguerreData(&laguerreStore, &tmp),
-  mandelData(&mandelDataStore, &tmp),
-  juliaData(&juliaStore, &tmp),
-  loope(&tmp),
-  newtres(&tmp),
-  eval(&tmp),
-  newt(&tmp),
-  interior(&tmp),
-  bulb(&tmp, &loope),
-  extangle(&tmp, &loope, &bulb.lagu, this)
+  currentParams(ntype),
+  laguerreData(&laguerreStore, ntype),
+  mandelData(&mandelDataStore, ntype),
+  juliaData(&juliaStore, ntype),
+  loope(ntype),
+  newtres(ntype),
+  eval(ntype),
+  newt(ntype),
+  interior(ntype),
+  bulb(ntype, &loope),
+  extangle(ntype, &loope, &bulb.lagu, this)
 {
   if (!dontRun)
     thread.start(QThread::Priority::LowestPriority);
@@ -1813,6 +1817,7 @@ void MandelEvaluator::simple_multi(MandelMath::multiprec *cr, MandelMath::multip
 template <class WORKER_MULTI>
 void MandelEvaluator<WORKER_MULTI>::syncMandelSplit()
 {
+  MandelMath::number<BASE>::set_spad(ntype, &tmp);
   //still called from paintOrbit()
   evaluateMandel();
   pointsComputed++;
@@ -1821,6 +1826,7 @@ void MandelEvaluator<WORKER_MULTI>::syncMandelSplit()
 template <class WORKER_MULTI>
 void MandelEvaluator<WORKER_MULTI>::syncJuliaSplit()
 {
+  MandelMath::number<BASE>::set_spad(ntype, &tmp);
   //still called from paintOrbit()
   evaluateJulia();
   pointsComputed++;
@@ -1844,7 +1850,7 @@ void MandelEvaluator::doCompute()
 template <typename BASE>
 void MandelEvaluator<BASE>::doMandelThreadedSplit(int epoch)
 {
-  MandelMath::number<BASE>::set_spad(&tmp);
+  MandelMath::number<BASE>::set_spad(ntype, &tmp);
   busyEpoch=epoch;
   timeThreaded.start();
   threaded_errorcode=0;
@@ -1885,7 +1891,7 @@ void MandelEvaluator<BASE>::doMandelThreadedSplit(int epoch)
 template <typename BASE>
 void MandelEvaluator<BASE>::doJuliaThreadedSplit(int epoch)
 {
-  MandelMath::number<BASE>::set_spad(&tmp);
+  MandelMath::number<BASE>::set_spad(ntype, &tmp);
   busyEpoch=epoch;
   timeThreaded.start();
   threaded_errorcode=0;
@@ -1926,7 +1932,7 @@ void MandelEvaluator<BASE>::doJuliaThreadedSplit(int epoch)
 template <typename BASE>
 void MandelEvaluator<BASE>::doLaguerreThreadedSplit(int epoch)
 {
-  MandelMath::number<BASE>::set_spad(&tmp);
+  MandelMath::number<BASE>::set_spad(ntype, &tmp);
   busyEpoch=epoch;
   timeThreaded.start();
   threaded_errorcode=0;
@@ -3101,16 +3107,16 @@ solve [0=0+d*C+e*R*C+f*C^2/2+g*R^3/6+h*R^2*C/2, -1=e*C+g*R^2/2+h*R*C, -124.79612
 }
 
 template<typename BASE>
-MandelEvaluator<BASE>::Bulb::Bulb(MandelMath::number<BASE>::Scratchpad *spad, MandelLoopEvaluator<BASE> *loope):
+MandelEvaluator<BASE>::Bulb::Bulb(MandelMath::NumberType ntype, MandelLoopEvaluator<BASE> *loope):
   loope(loope),
-  baseZC(spad), baseCC(spad),
-  t1(spad), t2(spad), t3(spad), deltac(spad), deltar(spad),
-  first_cb(spad), firstStep(0), dbg_first_rb(spad), prev_rb(spad),
-  target_f_z(spad),
-  res_cb(spad), res_rb(spad), res_xc(spad),
-  res_baseZC(spad), res_baseCC(spad),
-  res_card(false), res_foundMult(0), res_valid(false), res_baseFz(spad),
-  lagu(spad)
+  baseZC(ntype), baseCC(ntype),
+  t1(ntype), t2(ntype), t3(ntype), deltac(ntype), deltar(ntype),
+  first_cb(ntype), firstStep(0), dbg_first_rb(ntype), prev_rb(ntype),
+  target_f_z(ntype),
+  res_cb(ntype), res_rb(ntype), res_xc(ntype),
+  res_baseZC(ntype), res_baseCC(ntype),
+  res_card(false), res_foundMult(0), res_valid(false), res_baseFz(ntype),
+  lagu(ntype)
 {
   //working_assert(self_allocator.checkFill());
 }
@@ -6413,59 +6419,59 @@ void MandelEvaluator<BASE>::evaluateJulia()
 
 
 template<typename BASE>
-MandelEvaluator<BASE>::ComputeParams::ComputeParams(MandelMath::number<BASE>::Scratchpad *spad):
-  mandel(spad), laguerre(spad), julia(spad),
+MandelEvaluator<BASE>::ComputeParams::ComputeParams(MandelMath::NumberType ntype):
+  mandel(ntype), laguerre(ntype), julia(ntype),
   epoch(-1), pixelIndex(-1), maxiter(1), breakOnNewNearest(false), want_fc_r(false), want_extangle(false),
   nth_fz(0)
 {
 }
 
 template<typename BASE>
-MandelEvaluator<BASE>::NewtRes::NewtRes(typename MandelMath::number<BASE>::Scratchpad *spad):
+MandelEvaluator<BASE>::NewtRes::NewtRes(MandelMath::NumberType ntype):
   cyclesNeeded(-1),
-  fz_r(spad), nth_fz(spad),
-  first_guess_lagu(spad), first_guess_newt(spad)
+  fz_r(ntype), nth_fz(ntype),
+  first_guess_lagu(ntype), first_guess_newt(ntype)
 {
   //working_assert(self_allocator.checkFill());
 }
 
 template<typename BASE>
-MandelEvaluator<BASE>::Eval::Eval(typename MandelMath::number<BASE>::Scratchpad *spad):
-  fz_r(spad), fz_mag(spad)
+MandelEvaluator<BASE>::Eval::Eval(MandelMath::NumberType ntype):
+  fz_r(ntype), fz_mag(ntype)
 {
   //working_assert(self_allocator.checkFill());
 }
 
 template<typename BASE>
-MandelEvaluator<BASE>::Newt::Newt(typename MandelMath::number<BASE>::Scratchpad *spad):
-  bestr(spad), f_r(spad), fzz_r(spad), tmp1(spad),
-  laguH(spad), laguG(spad), laguG2(spad),
-  laguX(spad), newtX(spad), prevR(spad), prevGz(spad),
-  fzzf(spad), tmp2(spad)
+MandelEvaluator<BASE>::Newt::Newt(MandelMath::NumberType ntype):
+  bestr(ntype), f_r(ntype), fzz_r(ntype), tmp1(ntype),
+  laguH(ntype), laguG(ntype), laguG2(ntype),
+  laguX(ntype), newtX(ntype), prevR(ntype), prevGz(ntype),
+  fzzf(ntype), tmp2(ntype)
 {
   //working_assert(self_allocator.checkFill());
 }
 
 template<typename BASE>
-MandelEvaluator<BASE>::InteriorInfo::InteriorInfo(typename MandelMath::number<BASE>::Scratchpad *spad):
-  inte(spad), inte_abs(spad), fz(spad), fz_mag(spad), step_to_root(spad), alphak_other(spad), alphak(spad), zoom(spad)
+MandelEvaluator<BASE>::InteriorInfo::InteriorInfo(MandelMath::NumberType ntype):
+  inte(ntype), inte_abs(ntype), fz(ntype), fz_mag(ntype), step_to_root(ntype), alphak_other(ntype), alphak(ntype), zoom(ntype)
 {
   //working_assert(self_allocator.checkFill());
 }
 
 template<class BASE>
-MandelEvaluator<BASE>::ExtAngle::ExtAngle(MandelMath::number<BASE>::Scratchpad *spad, MandelLoopEvaluator<BASE> *loope, LaguerreStep<BASE> *lagus, MandelEvaluator<BASE> *owner):
-  owner(owner), ntype(spad->ntype), loope(loope), lagus(lagus),
-  z(spad), r(spad), angleC(spad), angle(spad), x(spad), target(spad),
-  dldlz(spad), d2ldlz2(spad), dbg(spad)
+MandelEvaluator<BASE>::ExtAngle::ExtAngle(MandelMath::NumberType ntype, MandelLoopEvaluator<BASE> *loope, LaguerreStep<BASE> *lagus, MandelEvaluator<BASE> *owner):
+  owner(owner), ntype(ntype), loope(loope), lagus(lagus),
+  z(ntype), r(ntype), angleC(ntype), angle(ntype), x(ntype), target(ntype),
+  dldlz(ntype), d2ldlz2(ntype), dbg(ntype)
 {
 }
 
 template<>
-MandelEvaluator<MandelMath::number_any>::ExtAngle::ExtAngle(MandelMath::number<MandelMath::number_any>::Scratchpad *spad, MandelLoopEvaluator<MandelMath::number_any> *loope, LaguerreStep<MandelMath::number_any> *lagus, MandelEvaluator<MandelMath::number_any> *owner):
-  owner(owner), ntype(spad->ntype), loope(loope), lagus(lagus),
-  z(spad), r(spad), angleC(spad), angle(spad), x(spad), target(spad),
-  dldlz(spad), d2ldlz2(spad), dbg(spad)
+MandelEvaluator<MandelMath::number_any>::ExtAngle::ExtAngle(MandelMath::NumberType ntype, MandelLoopEvaluator<MandelMath::number_any> *loope, LaguerreStep<MandelMath::number_any> *lagus, MandelEvaluator<MandelMath::number_any> *owner):
+  owner(owner), ntype(ntype), loope(loope), lagus(lagus),
+  z(ntype), r(ntype), angleC(ntype), angle(ntype), x(ntype), target(ntype),
+  dldlz(ntype), d2ldlz2(ntype), dbg(ntype)
 {
   switch (ntype)
   {

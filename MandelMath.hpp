@@ -13,7 +13,6 @@
 
 #define NUMBER_DOUBLE_EXISTS 1
 #define NUMBER_DOUBLE_ONLY 0
-#define NUMBER_IS_VARIANT 1
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -159,9 +158,7 @@ class number;
 template<typename BASE>
 class complex;
 
-#if NUMBER_IS_VARIANT
 using number_any=std::variant<std::monostate, number<double>, number<__float128>, number<dd_real>, number<dq_real>, number<real642>>;
-#endif
 
 template<typename T>
 concept IMandelNumber = requires(T a, T b)
@@ -238,15 +235,12 @@ concept IMandelComplex = requires(T a, T b)
   requires IMandelNumber<T>;
 };
 
-#if NUMBER_IS_VARIANT
 template<typename BASE>
 class number
 {
   public:
   struct Scratchpad
   {
-    NumberType ntype;
-    void *inner;
     number<BASE> tmp1;
     number<BASE> tmp2;
     number<BASE> tmp3;
@@ -270,14 +264,14 @@ class number
   friend class complex<BASE>; // needs tl_spad access
   public:
   static thread_local Scratchpad *tl_spad; // one per thread, set via set_spad()
-  static void set_spad(Scratchpad *s) { tl_spad = s; }
-  static Scratchpad *get_spad() { return tl_spad; }
+  static void set_spad(NumberType ntype, Scratchpad *s);// { tl_spad = s; }
+  Scratchpad *get_spad() const { return tl_spad; } // non-static: number_any overrides via explicit specialisation
   double eps2() const;
   double eps234() const;
   number(): store() { } //for ShareableViewInfo
   number(const number &x) noexcept: store(x.store) { }
   number(number &&x) noexcept: store() { x.swap(*this); };
-  number(Scratchpad *spad); // sets tl_spad as a side-effect
+  number(NumberType ntype); // ntype selects variant for number_any; no-op for concrete types
   ~number();
   void constructLateBecauseQtIsAwesome(const number &arc); //starts to look like copy_construct
   void swap(number &other) noexcept { std::swap(store, other.store); }
@@ -351,175 +345,15 @@ class number
 // Explicit specialization declarations here suppress the inline instantiation
 // in every other TU, preventing a GCC TLS-wrapper crash caused by a null
 // dynamic-init-function pointer in the weak inline copy.
-template<> void number<double>::set_spad(Scratchpad *s);
-template<> void number<__float128>::set_spad(Scratchpad *s);
-template<> void number<dd_real>::set_spad(Scratchpad *s);
-template<> void number<dq_real>::set_spad(Scratchpad *s);
-template<> void number<real642>::set_spad(Scratchpad *s);
-// number<number_any>::set_spad is already out-of-line in MandelMath_var.cpp
-
-#else
-class number_a
-{
-protected:
-  /*friend class number<double>;
-  friend class number<__float128>;
-  friend class number<dd_real>;
-  friend class number<real642>;
-  friend class number<number<bool> *>;*/
-public:
-  virtual double eps2() const=0;
-  virtual double eps234() const=0;
-  number_a();//: store() {}
-  //number(NumberType ntype);
-  //number(BASE store): store(store) {}
-  virtual ~number_a();
-  virtual NumberType ntype() const=0;// { return this->_ntype; }
-  virtual NumberType raw_ntype() const=0;// { return this->_ntype; }
-  virtual void readFrom(void *storage, int index)=0; //BASE storage[index]
-  virtual void writeTo(void *storage, int index) const=0; //BASE storage[index]
-  //static void *convert_block(NumberType old_type, const void *old_data, int count);
-
-  virtual number_a &zero(double val=0)=0;
-  virtual number_a &assign(const number_a &src)=0;
-  virtual number_a &assign_across(const number_a &src)=0;
-  virtual number_a &chs()=0;
-  virtual number_a &lshift(int shoft)=0; // self <<= shoft; 1 lshift -10000 = 0 not error
-  virtual number_a &round()=0;
-  virtual number_a &frac()=0; //-1<result<1
-  virtual number_a &mod1()=0; //0<=result<1
-  virtual number_a &add_double(double x)=0;
-  virtual number_a &mul_double(double x)=0;
-  virtual number_a &add(const number_a &other)=0;
-  virtual number_a &sub(const number_a &other)=0;
-  virtual number_a &rsub(const number_a &other)=0;
-  virtual number_a &mul(const number_a &other)=0;
-  virtual number_a &sqr()=0;
-  virtual double radixfloor() const=0; //nearest smaller power of 2 (1.5->1->1)
-  virtual number_a &recip()=0;
-  virtual number_a &sqrt()=0;
-  virtual bool reduce_angle()=0; //one step towards -pi<=x<pi, true if changed
-  virtual number_a &add_pi(double x)=0;
-  virtual std::strong_ordering compare(const number_a &other) const=0; //return -1 if <, 0 if =, +1 if >; std::strong_ordering not in my compiler yet
-  std::strong_ordering operator<=>(number_a const &other) const { return compare(other); }
-  virtual bool isequal(const number_a &other) const=0; //return store==other
-  virtual bool is0() const=0;
-  virtual bool isle(const number_a &other) const=0; //return store<=other
-  virtual bool isle0() const=0; //return store<=0
-  virtual bool isl0() const=0; //return store<0
-  virtual bool isl1() const=0; //return store<1
-  virtual number_a &min(const number_a &other)=0;
-
-  virtual QString toString() const=0;
-  virtual int toRound() const=0;
-  virtual double toDouble() const=0;
-};
-
-using number_any=number_a *;
-
-template<typename BASE>
-class number: public number_a
-{
-  public:
-  struct Scratchpad
-  {
-      NumberType ntype;
-      void *inner;
-      number<BASE> tmp1;
-      number<BASE> tmp2;
-      number<BASE> tmp3;
-      number<BASE> tmp4;
-      //Scratchpad(): ntype(NumberType::typeEmpty), inner(nullptr), tmp1(), tmp2(), tmp3(), tmp4() { }
-      Scratchpad(NumberType ntype);//: ntype(ntype), tmp1(this), tmp2(this), tmp3(this), tmp4(this), inner(nullptr) { }
-      //Scratchpad(Scratchpad *inner): ntype(inner->ntype), tmp1(this), tmp2(this), tmp3(this), tmp4(this), inner(inner) { }
-      ~Scratchpad();
-  };
-protected:
-  BASE store; //either "double" for special optimized template
-              //or "double *" for universal implementation
-              //going meta by using BASE="number<actual base> *"
-  Scratchpad *tmp;
-  //friend class ::ShareableViewInfo;
-  friend class number<double>;
-  friend class number<__float128>;
-  friend class number<dd_real>;
-  friend class number<dq_real>;
-  friend class number<real642>;
-  friend class number<number_any>;
-public:
-  virtual double eps2() const override;
-  virtual double eps234() const override;
-  number(): number_a(), store(), tmp(nullptr) { } //for ShareableViewInfo
-  number(const number &x) noexcept;
-  number(number &&x) noexcept: store(), tmp(x.tmp) { x.swap(*this); };
-  number(Scratchpad *spad);
-  void constructLateBecauseQtIsAwesome(const number &arc); //starts to look like copy_construct
-  void swap(number &other) noexcept { std::swap(store, other.store); }
-  //number(BASE store): store(store) {}
-  virtual ~number() override;
-  virtual NumberType ntype() const override;// { return this->_ntype; }
-  virtual NumberType raw_ntype() const override;
-  virtual void readFrom(void *storage, int index) override; //BASE storage[index]
-  virtual void writeTo(void *storage, int index) const override; //BASE storage[index]
-  static BASE *convert_block(NumberType old_type, const void *old_data, int count);
-  //static worker_multi *create(Type ntype, int capacity);
-  //static worker_multi *create(Type ntype, Allocator<worker_multi> *allocator);
-  //Allocator<worker_multi> *getAllocator() { return &allocator; }
-  //virtual void assign_block(int dst, worker_multi *src_worker, int src, int len)=0; //for now, assert(this.ntype==src.ntype)
-    //or assign_block(int dst, allocator *src) + assign_block(allocator *dst, int src) + assign_block(int dst, int src, int len)
-  //virtual void assign_block(int dst, const Allocator<worker_multi> *src)
-   //{ int first, capac; src->_getFirstCapac(first, capac); assign_block(dst, src->worker, first, capac); }
-
-  virtual number &zero(double val=0) override;
-  virtual number &assign(const number_a &src) override;
-  number &assign(const number<BASE> &src) noexcept;
-  virtual number &assign_across(const number_a &src) override;
-  //template <typename OTHER_BASE>
-  //void assign_across(const number<OTHER_BASE> *src);
-  number &assign_across(const number<BASE> &src);
-  //void assign_across(BASE src);
-  virtual number &chs() override;
-  virtual number &lshift(int shoft) override; // self <<= shoft; 1 lshift -10000 = 0 not error
-  virtual number &round() override;
-  virtual number &frac() override; //-1<result<1
-  virtual number &mod1() override; //0<=result<1
-  virtual number &add_double(double x) override;
-  virtual number &mul_double(double x) override;
-  virtual number &add(const number_a &other) override;
-  number &add(const number<BASE> &other);
-  virtual number &sub(const number_a &other) override;
-  number &sub(const number<BASE> &other);
-  virtual number &rsub(const number_a &other) override;
-  number &rsub(const number<BASE> &other);
-  virtual number &mul(const number_a &other) override;
-  number &mul(const number<BASE> &other);
-  virtual number &sqr() override;
-  virtual double radixfloor() const override;
-  //double radixfloor(const number<BASE> &other) const; //nearest smaller power of 2 (1.5->1->1)
-  virtual number &recip() override;
-  virtual number &sqrt() override;
-  virtual bool reduce_angle() override;
-  virtual number &add_pi(double x) override;
-  virtual std::strong_ordering compare(const number_a &other) const override; //return -1 if <, 0 if =, +1 if >; std::strong_ordering not in my compiler yet
-  std::strong_ordering compare(const number<BASE> &other) const; //return -1 if <, 0 if =, +1 if >; std::strong_ordering not in my compiler yet
-  std::strong_ordering operator<=>(number_a const &other) const { return compare(other); }
-  std::strong_ordering operator<=>(number<BASE> const &other) const { return compare(other); }
-  virtual bool isequal(const number_a &other) const override; //return store==other
-  bool isequal(const number<BASE> &other) const; //return store==other
-  virtual bool is0() const override;
-  virtual bool isle(const number_a &other) const override; //return store<=other
-  bool isle(const number<BASE> &other) const; //return store<=other
-  virtual bool isle0() const override; //return store<=0
-  virtual bool isl0() const override; //return store<0
-  virtual bool isl1() const override; //return store<1
-  virtual number &min(const number_a &other) override;
-  number &min(const number<BASE> &other);
-
-  virtual QString toString() const override;
-  virtual int toRound() const override;
-  virtual double toDouble() const override;
-};
-#endif
+template<> void number<double>::set_spad(NumberType ntype, Scratchpad *s);// { tl_spad = s; }
+template<> void number<__float128>::set_spad(NumberType ntype, Scratchpad *s);// { tl_spad = s; }
+template<> void number<dd_real>::set_spad(NumberType ntype, Scratchpad *s);// { tl_spad = s; }
+template<> void number<dq_real>::set_spad(NumberType ntype, Scratchpad *s);// { tl_spad = s; }
+template<> void number<real642>::set_spad(NumberType ntype, Scratchpad *s);// { tl_spad = s; }
+template<> void number<number_any>::set_spad(NumberType ntype, Scratchpad *s); // out-of-line in MandelMath_var.cpp
+// get_spad for number_any inspects the active variant and follows the back-pointer
+// stored in the concrete type's tl_spad->inner, avoiding reliance on number<number_any>::tl_spad.
+template<> number<number_any>::Scratchpad *number<number_any>::get_spad() const;
 
 template <typename BASE>
 class complex
@@ -531,8 +365,7 @@ public:
   double eps2() const { return re.eps2(); }
   double eps234() const { return re.eps234(); }
   complex(): re(), im() { }
-  //complex(NumberType ntype): re(ntype), im(ntype) { }
-  complex(Scratchpad *spad): re(spad), im(spad) { } // number<BASE>::number(spad) sets tl_spad and emplaces the variant for number_any
+  complex(NumberType ntype): re(ntype), im(ntype) { } // ntype selects variant for number_any; no-op for concrete types
   complex(complex const &src) noexcept: re(src.re), im(src.im) { }
   void constructLateBecauseQtIsAwesome(const complex &src);
   //complex(BASE re, BASE im): re(re), im(im) { }

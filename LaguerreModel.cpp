@@ -117,7 +117,7 @@ QString LaguerreModel::getTextInfoGen()
     return "-";
   int orbit_x, orbit_y;
   {
-    MandelMath::number<MandelMath::number_any> tmp(&precisionRecord->orbit.evaluator.tmp);
+    MandelMath::number<MandelMath::number_any> tmp(precisionRecord->orbit.evaluator.ntype);
     reimToPixel(&orbit_x, &orbit_y, precisionRecord->orbit.evaluator.currentParams.laguerre.first_z, &tmp);
   }
   if ((orbit_x<0) || (orbit_x>=imageWidth) || (orbit_y<0) | (orbit_y>=imageHeight))
@@ -153,7 +153,7 @@ QString LaguerreModel::getTextInfoSpec()
     return "-";
   int orbit_x, orbit_y;
   {
-    MandelMath::number<MandelMath::number_any> tmp(&precisionRecord->orbit.evaluator.tmp);
+    MandelMath::number<MandelMath::number_any> tmp(precisionRecord->orbit.evaluator.ntype);
     reimToPixel(&orbit_x, &orbit_y, precisionRecord->orbit.evaluator.currentParams.laguerre.first_z, &tmp);
   }
   if ((orbit_x<0) || (orbit_x>=imageWidth) || (orbit_y<0) | (orbit_y>=imageHeight))
@@ -282,11 +282,13 @@ void LaguerreModel::setParams(ShareableViewInfo viewInfo)
     precisionRecord->params.c.assign(precisionRecord->orbit.evaluator.currentParams.laguerre.c);
     recomputeRoot(viewInfo.max_root_effort);
 
-    MandelMath::complex<MandelMath::number_any> old_center(&precisionRecord->orbit.evaluator.tmp);
+
+    MandelMath::complex<MandelMath::number_any> old_center(precisionRecord->orbit.evaluator.ntype);
     old_center.assign(precisionRecord->position.center);
     int old_step_log=precisionRecord->position.step_log;
 
-    MandelMath::complex<MandelMath::number_any> view_here(&precisionRecord->orbit.evaluator.tmp);
+
+    MandelMath::complex<MandelMath::number_any> view_here(precisionRecord->orbit.evaluator.ntype);
     view_here.assign_across(viewInfo.view);
     precisionRecord->position.setView(view_here, viewInfo.scale);
 
@@ -376,7 +378,8 @@ void LaguerreModel::transformStore(void *old_points, LaguerrePointStore *old_sto
     xtrans.setShift(&tmp, new_width);
   }
 
-  MandelMath::complex<MandelMath::number_any> c(&precisionRecord->orbit.evaluator.tmp);
+
+  MandelMath::complex<MandelMath::number_any> c(precisionRecord->orbit.evaluator.ntype);
   for (int newy=0; newy<new_height; newy++)
   {
     int oldy=ytrans.transform(newy, old_height/2);
@@ -445,7 +448,7 @@ void LaguerreModel::transformStore(void *old_points, LaguerrePointStore *old_sto
 
 void LaguerreModel::setView(MandelMath::complex<MandelMath::number_any> const &c, double scale)
 {
-  MandelMath::complex<MandelMath::number_any> old_c(&precisionRecord->orbit.evaluator.tmp);
+  MandelMath::complex<MandelMath::number_any> old_c(precisionRecord->orbit.evaluator.ntype);
   old_c.assign(precisionRecord->position.center);
   int old_step_log=precisionRecord->position.step_log;
 
@@ -465,7 +468,7 @@ void LaguerreModel::setView(MandelMath::complex<MandelMath::number_any> const &c
 void LaguerreModel::drag(double delta_x, double delta_y)
 {
   //qDebug()<<"drag ("<<delta_x<<","<<delta_y<<")";
-  MandelMath::complex<MandelMath::number_any> old_c(&precisionRecord->orbit.evaluator.tmp);
+  MandelMath::complex<MandelMath::number_any> old_c(precisionRecord->orbit.evaluator.ntype);
   old_c.assign(precisionRecord->position.center);
 
   {
@@ -486,7 +489,7 @@ void LaguerreModel::drag(double delta_x, double delta_y)
 
 void LaguerreModel::zoom(double x, double y, int inlog)
 {
-  MandelMath::complex<MandelMath::number_any> old_c(&precisionRecord->orbit.evaluator.tmp);
+  MandelMath::complex<MandelMath::number_any> old_c(precisionRecord->orbit.evaluator.ntype);
 
   old_c.assign(precisionRecord->position.center);
   int old_step_log=precisionRecord->position.step_log;
@@ -679,7 +682,8 @@ void LaguerreModel::paintOrbit(ShareableImageWrapper image, int x, int y)
     default: ;
   }*/
 
-  MandelMath::number<MandelMath::number_any> tmp(&precisionRecord->orbit.evaluator.tmp);
+
+  MandelMath::number<MandelMath::number_any> tmp(precisionRecord->orbit.evaluator.ntype);
   {
     int circ_x, circ_y;
     painter.setBrush(Qt::BrushStyle::NoBrush);
@@ -1470,8 +1474,8 @@ void LaguerreModel::selectedPrecisionChanged()
   }
 }
 
-LaguerreModel::Params::Params(MandelMath::number<MandelMath::number_any>::Scratchpad *spad, const Params *source):
-  period(source?source->period:1), nth_fz(source?source->nth_fz:1), c(spad), root(spad), nth_fz_limit(spad)
+LaguerreModel::Params::Params(MandelMath::NumberType ntype, const Params *source):
+  period(source?source->period:1), nth_fz(source?source->nth_fz:1), c(ntype), root(ntype), nth_fz_limit(ntype)
 {
   if (source)
   {
@@ -1488,8 +1492,8 @@ LaguerreModel::Params::Params(MandelMath::number<MandelMath::number_any>::Scratc
 }
 
 
-LaguerreModel::Position::Position(MandelMath::number<MandelMath::number_any>::Scratchpad *spad, const Position *source):
-  center(spad)
+LaguerreModel::Position::Position(MandelMath::NumberType ntype, const Position *source):
+  center(ntype)
 {
   if (source)
   {
@@ -1631,7 +1635,7 @@ void LaguerreModel::Position::pixelYtoIM(int y, MandelMath::number<BASE> *result
 
 LaguerreModel::Orbit::Orbit(MandelMath::NumberType ntype, Orbit const *source):
   evaluator(ntype, true),
-  pointDataStore(), pointData(&pointDataStore, &evaluator.tmp),
+  pointDataStore(), pointData(&pointDataStore, ntype),
   first_mu_re(0), first_mu_im(0), first_mum_re(0), first_mum_im(0)
 {
   if (source)
@@ -1650,9 +1654,9 @@ LaguerreModel::Orbit::~Orbit()
 
 LaguerreModel::PrecisionRecord::PrecisionRecord(MandelMath::NumberType ntype, PrecisionRecord *source, LaguerreModel *doneReceiver):
   ntype(ntype), orbit(ntype, source?&source->orbit:nullptr),
-  wtiPoint(nullptr, &orbit.evaluator.tmp),
-  params(&orbit.evaluator.tmp, source?&source->params:nullptr),
-  position(&orbit.evaluator.tmp, source?&source->position:nullptr),
+  wtiPoint(nullptr, ntype),
+  params(ntype, source?&source->params:nullptr),
+  position(ntype, source?&source->position:nullptr),
   //tmp_place(&orbit.evaluator.tmp),
   threadCount(source?source->threadCount:0), threads()
 {

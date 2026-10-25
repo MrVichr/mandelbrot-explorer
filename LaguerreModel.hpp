@@ -54,7 +54,7 @@ public:
     MandelMath::complex<MandelMath::number_any> c;
     MandelMath::complex<MandelMath::number_any> root;
     MandelMath::number<MandelMath::number_any> nth_fz_limit;
-    Params(MandelMath::number<MandelMath::number_any>::Scratchpad *spad, const Params *source);
+    Params(MandelMath::NumberType ntype, const Params *source);
   };
 
 
@@ -133,7 +133,7 @@ protected:
     double step_size; //TODO: should use special methods on number to add, mul and div by 2^-step_log
     int cached_center_re_mod; //(center/step) mod 32768
     int cached_center_im_mod;
-    Position(MandelMath::number<MandelMath::number_any>::Scratchpad *spad, const Position *source);
+    Position(MandelMath::NumberType ntype, const Position *source);
     ~Position();
     //void assign(Position *src);
     void setView(MandelMath::complex<MandelMath::number_any> const &c, double scale);

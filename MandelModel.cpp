@@ -198,7 +198,7 @@ QString MandelModel::getTextInfoGen()
     return "-";
   int orbit_x, orbit_y;
   {
-    MandelMath::number<MandelMath::number_any> tmp(&precisionRecord->orbit.evaluator.tmp);
+    MandelMath::number<MandelMath::number_any> tmp(precisionRecord->orbit.evaluator.ntype);
     reimToPixel(&orbit_x, &orbit_y, precisionRecord->orbit.evaluator.currentParams.mandel.first_z, &tmp);
   }
   if ((orbit_x<0) || (orbit_x>=imageWidth) || (orbit_y<0) | (orbit_y>=imageHeight))
@@ -248,7 +248,7 @@ QString MandelModel::getTextInfoSpec()
     return "-";
   int orbit_x, orbit_y;
   {
-    MandelMath::number<MandelMath::number_any> tmp(&precisionRecord->orbit.evaluator.tmp);
+    MandelMath::number<MandelMath::number_any> tmp(precisionRecord->orbit.evaluator.ntype);
     reimToPixel(&orbit_x, &orbit_y, precisionRecord->orbit.evaluator.currentParams.mandel.first_z, &tmp);
   }
   if ((orbit_x<0) || (orbit_x>=imageWidth) || (orbit_y<0) | (orbit_y>=imageHeight))
@@ -302,7 +302,7 @@ QString MandelModel::getTextInfoSpec()
 
 ShareableViewInfo MandelModel::getViewInfo()
 {
-  ShareableViewInfo result(&precisionRecord->orbit.evaluator.tmp);
+  ShareableViewInfo result(precisionRecord->ntype);
   //MandelMath::complex<MandelMath::number_any>::Scratchpad spad(precisionRecord->ntype);
   //result.worker=orbit.worker;
   result.nth_fz=precisionRecord->orbit.evaluator.mandelData.store->near0iter_1;/*precisionRecord->orbit.evaluator.currentData.store->period;
@@ -331,7 +331,7 @@ ShareableViewInfo MandelModel::getViewInfo()
 
 ShareableViewInfo MandelModel::makeViewInfo(const QVariantMap &params)
 {
-  ShareableViewInfo result(&precisionRecord->orbit.evaluator.tmp);
+  ShareableViewInfo result(precisionRecord->ntype);
   result.view.zero(params.value("viewRe", 0.0).toDouble(), params.value("viewIm", 0.0).toDouble());
   result.scale=params.value("viewZoom", 0.0).toDouble();
   result.c.zero(params.value("cRe", 0.0).toDouble(), params.value("cIm", 0.0).toDouble());
@@ -418,7 +418,8 @@ void MandelModel::transformStore(void *old_points, MandelPointStore *old_store, 
     xtrans.setShift(&tmp, new_width);
   }
 
-  MandelMath::complex<MandelMath::number_any> first_z(&precisionRecord->orbit.evaluator.tmp);
+
+  MandelMath::complex<MandelMath::number_any> first_z(precisionRecord->orbit.evaluator.ntype);
   for (int newy=0; newy<new_height; newy++)
   {
     int oldy=ytrans.transform(newy, old_height/2);
@@ -487,14 +488,14 @@ void MandelModel::transformStore(void *old_points, MandelPointStore *old_store, 
 
 void MandelModel::setView_double(double c_re, double c_im, double scale)
 {
-  MandelMath::complex<MandelMath::number_any> c(&precisionRecord->orbit.evaluator.tmp);
+  MandelMath::complex<MandelMath::number_any> c(precisionRecord->orbit.evaluator.ntype);
   c.zero(c_re, c_im);
   setView(c, scale);
 }
 
 void MandelModel::setView(MandelMath::complex<MandelMath::number_any> const &c, double scale)
 {
-  MandelMath::complex<MandelMath::number_any> old_c(&precisionRecord->orbit.evaluator.tmp);
+  MandelMath::complex<MandelMath::number_any> old_c(precisionRecord->orbit.evaluator.ntype);
   old_c.assign(precisionRecord->position.center);
   int old_step_log=precisionRecord->position.step_log;
 
@@ -514,7 +515,7 @@ void MandelModel::setView(MandelMath::complex<MandelMath::number_any> const &c, 
 void MandelModel::drag(double delta_x, double delta_y)
 {
   //qDebug()<<"drag ("<<delta_x<<","<<delta_y<<")";
-  MandelMath::complex<MandelMath::number_any> old_c(&precisionRecord->orbit.evaluator.tmp);
+  MandelMath::complex<MandelMath::number_any> old_c(precisionRecord->orbit.evaluator.ntype);
   old_c.assign(precisionRecord->position.center);
 
   {
@@ -545,7 +546,7 @@ void MandelModel::drag(double delta_x, double delta_y)
 
 void MandelModel::zoom(double x, double y, int inlog)
 {
-  MandelMath::complex<MandelMath::number_any> old_c(&precisionRecord->orbit.evaluator.tmp);
+  MandelMath::complex<MandelMath::number_any> old_c(precisionRecord->orbit.evaluator.ntype);
   old_c.assign(precisionRecord->position.center);
   int old_step_log=precisionRecord->position.step_log;
 
@@ -767,7 +768,7 @@ void MandelModel::paintOrbit(ShareableImageWrapper image, int x, int y)
   //MandelMath::worker_multi::Allocator allo(storeWorker->getAllocator(), (y*imageWidth+x)*MandelPoint::LEN, MandelPoint::LEN, nullptr);
   //MandelPoint data_(&pointStore_[y*imageWidth+x], &allo);
   //MandelPoint *data=&orbit_->evaluator.currentData;
-  MandelMath::number<MandelMath::number_any> tmp(&precisionRecord->orbit.evaluator.tmp);
+  MandelMath::number<MandelMath::number_any> tmp(precisionRecord->orbit.evaluator.ntype);
   MandelPointStore *resultStore=&pointStore[y*imageWidth+x];
   if (!precisionRecord->lagu_c.is0())
   {
@@ -1943,8 +1944,8 @@ void MandelModel::selectedPrecisionChanged()
 }
 
 
-MandelModel::Position::Position(MandelMath::number<MandelMath::number_any>::Scratchpad *spad, const Position *source):
-  center(spad)
+MandelModel::Position::Position(MandelMath::NumberType ntype, const Position *source):
+  center(ntype)
 {
   if (source)
   {
@@ -2085,7 +2086,7 @@ void MandelModel::Position::pixelYtoIM(int y, MandelMath::number<BASE> *result)
 
 
 MandelModel::Orbit::Orbit(MandelMath::NumberType ntype):
-  evaluator(ntype, true), bulb(&evaluator.tmp)
+  evaluator(ntype, true), bulb(ntype)
 {
 }
 
@@ -2096,9 +2097,9 @@ MandelModel::Orbit::~Orbit()
   evaluator.thread.wait(1000);
 }
 
-MandelModel::Orbit::Bulb::Bulb(MandelMath::number<MandelMath::number_any>::Scratchpad *spad):
-  cb_unused(spad), rb_unused(spad), xc_unused(spad),
-  baseZC_unused(spad), baseCC_unused(spad), baseFz(spad)
+MandelModel::Orbit::Bulb::Bulb(MandelMath::NumberType ntype):
+  cb_unused(ntype), rb_unused(ntype), xc_unused(ntype),
+  baseZC_unused(ntype), baseCC_unused(ntype), baseFz(ntype)
 {
 }
 
@@ -2114,10 +2115,10 @@ struct BaseExtractor<MandelEvaluator<B>> {using ttt=B;};
 */
 
 MandelModel::PrecisionRecord::PrecisionRecord(MandelMath::NumberType ntype, PrecisionRecord *source, MandelModel *doneReceiver):
-  ntype(ntype), orbit(ntype), wtiPoint(nullptr, &orbit.evaluator.tmp),
+  ntype(ntype), orbit(ntype), wtiPoint(nullptr, ntype),
   //, source?&source->orbit:nullptr),
-  position(&orbit.evaluator.tmp, source?&source->position:nullptr),
-  lagu_c(&orbit.evaluator.tmp), lagu_r(&orbit.evaluator.tmp),
+  position(ntype, source?&source->position:nullptr),
+  lagu_c(ntype), lagu_r(ntype),
   //tmp_place(&orbit.evaluator.tmp),
   threadCount(source?source->threadCount:0), threads()
 {

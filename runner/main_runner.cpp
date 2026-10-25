@@ -57,9 +57,9 @@ struct JuliaModelInspector : public JuliaModel {
     int width()  const { return imageWidth; }
     int height() const { return imageHeight; }
     void setView_double(double cx, double cy, double scale) {
-        MandelMath::complex<MandelMath::number_any> c(&precisionRecord->orbit.evaluator.tmp);
-        c.zero(cx, cy);
-        setView(c, scale);
+        MandelMath::complex<MandelMath::number_any> center(precisionRecord->orbit.evaluator.ntype);
+        center.zero(cx, cy);
+        setView(center, scale);
     }
 };
 
@@ -68,9 +68,9 @@ struct LaguerreModelInspector : public LaguerreModel {
     int width()  const { return imageWidth; }
     int height() const { return imageHeight; }
     void setView_double(double cx, double cy, double scale) {
-        MandelMath::complex<MandelMath::number_any> c(&precisionRecord->orbit.evaluator.tmp);
-        c.zero(cx, cy);
-        setView(c, scale);
+        MandelMath::complex<MandelMath::number_any> center(precisionRecord->orbit.evaluator.ntype);
+        center.zero(cx, cy);
+        setView(center, scale);
     }
 };
 
