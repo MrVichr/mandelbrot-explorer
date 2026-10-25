@@ -3,6 +3,7 @@
 *.lo
 *.o
 *.a
+*.d
 *.la
 *.lai
 *.so
@@ -52,4 +53,8 @@ compile_commands.json
 *creator.user*
 personaltypes.pyc
 
+/.vscode/
+/blessed/
+/current/
+/mandel_runner
 /wiki_images

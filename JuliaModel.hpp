@@ -25,7 +25,7 @@ public:
                       void *new_points, JuliaPointStore *new_store, int new_width, int new_height, MandelMath::complex<MandelMath::number_any> const &new_c,
                       int inlog, int new_step_log);
   void recomputeRoot(int max_effort);
-  Q_INVOKABLE void setParams(ShareableViewInfo viewInfo);
+  Q_INVOKABLE void setParams(class ShareableViewInfo viewInfo);
   void setView(MandelMath::complex<MandelMath::number_any> const &c, double scale);
   Q_INVOKABLE void drag(double delta_x, double delta_y);
   Q_INVOKABLE void zoom(double x, double y, int inlog);

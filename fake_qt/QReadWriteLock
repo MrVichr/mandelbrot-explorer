@@ -1,0 +1,79 @@
+#pragma once
+#include "QObject"
+#include <shared_mutex>
+#include <mutex>
+#include <memory>
+
+// ---------------------------------------------------------------------------
+// QReadWriteLock — backed by std::shared_mutex
+// ---------------------------------------------------------------------------
+class QReadWriteLock {
+public:
+    enum RecursionMode { NonRecursive, Recursive };
+    explicit QReadWriteLock(RecursionMode = NonRecursive) {}
+    ~QReadWriteLock() = default;
+
+    void lockForRead()    { _mtx.lock_shared(); }
+    void lockForWrite()   { _mtx.lock(); }
+    void unlockRead()     { _mtx.unlock_shared(); }
+    void unlockWrite()    { _mtx.unlock(); }
+
+    bool tryLockForRead()             { return _mtx.try_lock_shared(); }
+    bool tryLockForRead(int)          { return _mtx.try_lock_shared(); }
+    bool tryLockForWrite()            { return _mtx.try_lock(); }
+    bool tryLockForWrite(int)         { return _mtx.try_lock(); }
+
+    // Generic unlock — not recommended; prefer unlockRead/unlockWrite.
+    void unlock() { unlockWrite(); }
+
+private:
+    std::shared_mutex _mtx;
+};
+
+class QReadLocker {
+public:
+    explicit QReadLocker(QReadWriteLock *lock) : _lock(lock) {
+        if (_lock) _lock->lockForRead();
+    }
+    ~QReadLocker() { if (_lock) _lock->unlockRead(); }
+private:
+    QReadWriteLock *_lock;
+};
+
+class QWriteLocker {
+public:
+    explicit QWriteLocker(QReadWriteLock *lock) : _lock(lock) {
+        if (_lock) _lock->lockForWrite();
+    }
+    ~QWriteLocker() { if (_lock) _lock->unlockWrite(); }
+private:
+    QReadWriteLock *_lock;
+};
+
+// ---------------------------------------------------------------------------
+// QMutex — backed by std::mutex (recursive variant uses std::recursive_mutex)
+// ---------------------------------------------------------------------------
+class QMutex {
+public:
+    enum RecursionMode { NonRecursive, Recursive };
+    explicit QMutex(RecursionMode mode = NonRecursive) : _recursive(mode == Recursive) {
+        if (_recursive) _rmtx = std::make_unique<std::recursive_mutex>();
+    }
+    void lock()   { _recursive ? (void)_rmtx->lock()   : (void)_mtx.lock(); }
+    void unlock() { _recursive ? (void)_rmtx->unlock() : (void)_mtx.unlock(); }
+    bool tryLock(int /*timeout*/ = 0) {
+        return _recursive ? _rmtx->try_lock() : _mtx.try_lock();
+    }
+private:
+    bool _recursive;
+    std::mutex _mtx;
+    std::unique_ptr<std::recursive_mutex> _rmtx;
+};
+
+class QMutexLocker {
+public:
+    explicit QMutexLocker(QMutex *m) : _m(m) { if (_m) _m->lock(); }
+    ~QMutexLocker() { if (_m) _m->unlock(); }
+private:
+    QMutex *_m;
+};

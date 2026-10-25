@@ -1,0 +1,13 @@
+#pragma once
+#include "QQuickItem"
+#include "QPainter"
+
+class QQuickPaintedItem : public QQuickItem {
+public:
+    explicit QQuickPaintedItem(QQuickItem *parent = nullptr) : QQuickItem(parent) {}
+    virtual ~QQuickPaintedItem() = default;
+    virtual void paint(QPainter *painter) = 0;
+    void update() {}
+    void setContentsSize(int, int) {}
+    void setRenderTarget(int) {}
+};

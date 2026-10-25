@@ -35,24 +35,43 @@ MandelModel::MandelModel(): QObject(),
   dd2hi+=3;
   dd1.split(dd2hi);*/
   dd1.split(0x1fffffff); //-> 0x20000000 - 0x1
+  assert(dd1.hi==0x20000000 && dd1.lo_==-1);
   dd1.split(0x20000000); //-> 0x20000000 + 0x0
+  assert(dd1.hi==0x20000000 && dd1.lo_==0);
   dd1.split(0x20000001); //-> 0x20000000 + 0x1
+  assert(dd1.hi==0x20000000 && dd1.lo_==1);
   dd1.split(0x20000002); //-> 0x20000000 + 0x2
+  assert(dd1.hi==0x20000000 && dd1.lo_==2);
   dd1.split(0x20000003); //-> 0x20000000 + 0x3
+  assert(dd1.hi==0x20000000 && dd1.lo_==3);
   dd1.split(0x20000004); //-> 0x20000000 + 0x4
+  assert(dd1.hi==0x20000000 && dd1.lo_==4);
   dd1.split(0x20000005); //-> 0x20000000 + 0x5
+  assert(dd1.hi==0x20000000 && dd1.lo_==5);
   dd1.split(0x20000006); //-> 0x20000000 + 0x6
+  assert(dd1.hi==0x20000000 && dd1.lo_==6);
   dd1.split(0x20000007); //-> 0x20000000 + 0x7
+  assert(dd1.hi==0x20000000 && dd1.lo_==7);
   dd1.split(0x20000008); //-> 0x20000000 + 0x8                       100 0000 0000 002                                     80 0000 0000 0010
+  assert(dd1.hi==0x20000000 && dd1.lo_==8);
   dd1.split(0x20000009); //-> 0x20000010 - 0x7  0x20000009*0x8000001=100 0000 6800 0009 @52b= 100 0000 0000 0000 -20000009=FF FFFF DFFF FFF7 rounds to FF FFFF DFFF FFF0
+  assert(dd1.hi==0x20000010 && dd1.lo_==-7);
   dd1.split(0x2000000a); //-> 0x20000010 - 0x6
+  assert(dd1.hi==0x20000010 && dd1.lo_==-6);
   dd1.split(0x2000000b); //-> 0x20000010 - 0x5
+  assert(dd1.hi==0x20000010 && dd1.lo_==-5);
   dd1.split(0x2000000c); //-> 0x20000010 - 0x4
+  assert(dd1.hi==0x20000010 && dd1.lo_==-4);
   dd1.split(0x2000000d); //-> 0x20000010 - 0x3
+  assert(dd1.hi==0x20000010 && dd1.lo_==-3);
   dd1.split(0x2000000e); //-> 0x20000010 - 0x2
+  assert(dd1.hi==0x20000010 && dd1.lo_==-2);
   dd1.split(0x2000000f); //-> 0x20000010 - 0x1
+  assert(dd1.hi==0x20000010 && dd1.lo_==-1);
   dd1.split(0x20000010); //-> 0x20000010 + 0x0
+  assert(dd1.hi==0x20000010 && dd1.lo_==0);
   dd1.split(0x20000011); //-> 0x20000010 + 0x1
+  assert(dd1.hi==0x20000010 && dd1.lo_==1);
   dd1.split(-0.00043541188577694845);
 
   _selectedPaintStyle=paintStyleCls;//Kind;
@@ -387,9 +406,6 @@ void MandelModel::transformStore(void *old_points, MandelPointStore *old_store, 
     dbgPoint();
     return;
   };
-  /*int indexOfWtiPoint, wtiIndexLen;
-  precisionRecord->wtiPoint.self_allocator._getFirstCapac(indexOfWtiPoint, wtiIndexLen);
-  working_assert((wtiIndexLen==MandelPoint<WORKER_MULTI, 0>::LEN));*/
   PixelPositionTransformer ytrans=PixelPositionTransformer(inlog, new_step_log);
   PixelPositionTransformer xtrans=PixelPositionTransformer(inlog, new_step_log);
   {

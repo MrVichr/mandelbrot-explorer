@@ -1,0 +1,259 @@
+#pragma once
+#include "QString"   // pulls in QtGlobal which defines Qt::ConnectionType
+#include "QVector"
+
+#include <functional>
+#include <vector>
+#include <map>
+#include <mutex>
+#include <cstring>
+#include <tuple>
+#include <utility>
+
+// ---------------------------------------------------------------------------
+// Qt meta-object macros
+// ---------------------------------------------------------------------------
+#define Q_OBJECT
+#define Q_GADGET
+#define Q_PROPERTY(...)
+#define Q_INVOKABLE
+#define Q_DECLARE_METATYPE(...)
+#define Q_ENUM(E)
+#define Q_FLAG(F)
+#define Q_CLASSINFO(a, b)
+#define Q_INTERFACES(...)
+#define Q_REVISION(...)
+#define Q_DISABLE_COPY(Class)
+#define Q_DECLARE_PRIVATE(Class)
+#define Q_DECLARE_PUBLIC(Class)
+#define Q_D(Class)
+#define Q_Q(Class)
+#define QT_DEPRECATED
+
+#define signals public
+#define Q_SIGNALS public
+#define slots   /* nothing */
+#define Q_SLOTS /* nothing */
+
+#ifndef emit
+#define emit
+#endif
+
+// ---------------------------------------------------------------------------
+// Forward declarations
+// ---------------------------------------------------------------------------
+class QThread;
+class QObject;
+
+// ---------------------------------------------------------------------------
+// Internal connection registry
+// receiver stored as void* so FakeConnEntry can be defined before QObject.
+// ---------------------------------------------------------------------------
+struct FakeConnEntry {
+    void*                        receiver;
+    QThread*                     receiverThread;
+    Qt::ConnectionType           connType;
+    std::function<void(void*)>   packed_invoke;
+};
+
+using FakeConnKey = std::pair<const void*, uintptr_t>;
+
+inline std::mutex& fakeConnMutex()
+{
+    static std::mutex m;
+    return m;
+}
+
+inline std::map<FakeConnKey, std::vector<FakeConnEntry>>& fakeConnRegistry()
+{
+    static std::map<FakeConnKey, std::vector<FakeConnEntry>> r;
+    return r;
+}
+
+inline std::map<const void*, QThread*>& fakeThreadAffinity()
+{
+    static std::map<const void*, QThread*> t;
+    return t;
+}
+
+inline QThread*& fakeMainThread()
+{
+    static QThread* p = nullptr;
+    return p;
+}
+
+// Tasks queued while a receiver had no thread affinity at emit time.
+// Drained into the real thread by moveToThread(), or run on the
+// main thread by fakeProcessPendingTasks() called from processEvents().
+inline std::map<const void*, std::vector<std::function<void()>>>& fakePendingTasks()
+{
+    static std::map<const void*, std::vector<std::function<void()>>> p;
+    return p;
+}
+
+template<typename PMF>
+inline uintptr_t pmfKey(PMF pmf)
+{
+    uintptr_t k = 0;
+    static_assert(sizeof(PMF) >= sizeof(uintptr_t),
+                  "PMF smaller than uintptr_t -- unexpected ABI");
+    std::memcpy(&k, &pmf, sizeof(uintptr_t));
+    return k;
+}
+
+template<typename ...SArgs, typename ...Args, std::size_t ...Is>
+inline std::tuple<SArgs...> fakeSubtuple(std::tuple<Args...> &tup,
+                                         std::index_sequence<Is...>)
+{
+    return std::tuple<SArgs...>{ std::get<Is>(tup)... };
+}
+
+// fakeEmitDispatch, fakeDrainPendingTasksToThread, and
+// fakeProcessPendingTasks are defined at the bottom of fake_qt/QThread
+// (after QThread is fully declared).
+template<typename ...Args>
+void fakeEmitDispatch(const std::vector<FakeConnEntry> &conns,
+                      std::tuple<Args...> &tup);
+void fakeDrainPendingTasksToThread(QThread *t, const void *receiver);
+void fakeProcessPendingTasks();
+
+// ---------------------------------------------------------------------------
+// QMetaObject
+// ---------------------------------------------------------------------------
+struct QMetaObject {
+    struct Connection {};
+
+    template<typename Object, typename Func>
+    static bool invokeMethod(Object *, Func,
+                             Qt::ConnectionType = Qt::AutoConnection) { return true; }
+    template<typename Object, typename Func, typename ...Args>
+    static bool invokeMethod(Object *, Func, Qt::ConnectionType, Args &&...) { return true; }
+    template<typename Object, typename Func, typename ...Args>
+    static bool invokeMethod(Object *, Func, Args &&...) { return true; }
+};
+
+// ---------------------------------------------------------------------------
+// QObject
+// ---------------------------------------------------------------------------
+class QObject {
+public:
+    explicit QObject(QObject *parent = nullptr) { (void)parent; }
+    virtual ~QObject()
+    {
+        std::lock_guard<std::mutex> lk(fakeConnMutex());
+        fakeThreadAffinity().erase(static_cast<const void*>(this));
+        fakePendingTasks().erase(static_cast<const void*>(this));
+    }
+
+    QObject *parent() const { return nullptr; }
+    void setParent(QObject *) {}
+
+    virtual QString objectName() const { return {}; }
+    void setObjectName(const QString &) {}
+
+    QObject(const QObject &) = delete;
+    QObject &operator=(const QObject &) = delete;
+
+    void moveToThread(QThread *t)
+    {
+        {
+            std::lock_guard<std::mutex> lk(fakeConnMutex());
+            if (t)
+                fakeThreadAffinity()[static_cast<const void*>(this)] = t;
+            else
+                fakeThreadAffinity().erase(static_cast<const void*>(this));
+        }
+        if (t)
+            fakeDrainPendingTasksToThread(t, static_cast<const void*>(this));
+    }
+
+    // 4-argument PMF connect
+    template<typename Sender, typename ...Args,
+             typename Receiver, typename ...SArgs>
+    static QMetaObject::Connection connect(
+        Sender *sender,
+        void (Sender::*signal)(Args...),
+        Receiver *receiver,
+        void (Receiver::*slot)(SArgs...),
+        Qt::ConnectionType connType = Qt::AutoConnection)
+    {
+        FakeConnKey key { static_cast<const void*>(sender), pmfKey(signal) };
+
+        auto invoke = [receiver, slot](void *argpack) {
+            auto &tup = *static_cast<std::tuple<Args...>*>(argpack);
+            // Qt allows slots with fewer parameters than the signal — drop trailing args.
+            auto subtup = fakeSubtuple<SArgs...>(
+                tup, std::make_index_sequence<sizeof...(SArgs)>{});
+            std::apply([receiver, slot](SArgs... args) {
+                (receiver->*slot)(std::forward<SArgs>(args)...);
+            }, subtup);
+        };
+
+        QThread *recvThread = nullptr;
+        {
+            std::lock_guard<std::mutex> lk(fakeConnMutex());
+            auto it = fakeThreadAffinity().find(static_cast<const void*>(receiver));
+            if (it != fakeThreadAffinity().end())
+                recvThread = it->second;
+        }
+
+        FakeConnEntry entry { static_cast<void*>(receiver), recvThread,
+                              connType, std::move(invoke) };
+        {
+            std::lock_guard<std::mutex> lk(fakeConnMutex());
+            fakeConnRegistry()[key].push_back(std::move(entry));
+        }
+        return {};
+    }
+
+    // 3-argument functor connect
+    template<typename Sender, typename ...Args, typename Functor>
+    static QMetaObject::Connection connect(
+        Sender *sender,
+        void (Sender::*signal)(Args...),
+        Functor functor)
+    {
+        FakeConnKey key { static_cast<const void*>(sender), pmfKey(signal) };
+
+        auto invoke = [functor](void *argpack) mutable {
+            auto &tup = *static_cast<std::tuple<Args...>*>(argpack);
+            std::apply(functor, tup);
+        };
+
+        FakeConnEntry entry { nullptr, nullptr, Qt::DirectConnection, std::move(invoke) };
+        {
+            std::lock_guard<std::mutex> lk(fakeConnMutex());
+            fakeConnRegistry()[key].push_back(std::move(entry));
+        }
+        return {};
+    }
+
+    // catch-all for non-PMF signals (QML stubs, etc.)
+    template<typename ...Ts>
+    static QMetaObject::Connection connect(Ts &&...) { return {}; }
+
+    static bool disconnect(const QMetaObject::Connection &) { return false; }
+
+    void deleteLater() {}
+
+    template<typename Sender, typename ...Args>
+    static void emitSignal(Sender *sender,
+                           void (Sender::*signal)(Args...),
+                           Args... args)
+    {
+        FakeConnKey key { static_cast<const void*>(sender), pmfKey(signal) };
+
+        std::vector<FakeConnEntry> conns;
+        {
+            std::lock_guard<std::mutex> lk(fakeConnMutex());
+            auto it = fakeConnRegistry().find(key);
+            if (it == fakeConnRegistry().end()) return;
+            conns = it->second;
+        }
+
+        if (conns.empty()) return;
+
+        auto tup = std::tuple<Args...>(std::forward<Args>(args)...);
+        fakeEmitDispatch(conns, tup);
+    }
+};

@@ -2,7 +2,11 @@
 #define MANDELMATH_NUMBER_HPP
 
 #include <cstdint>
+#include <tuple>
+#include <variant>
+#include <bit>
 #include <QString>
+#include <cassert>
 
 #include "double_double.hpp"
 //#include "multiprec.hpp"
@@ -21,7 +25,8 @@ void dbgPointII(int x1, int x2);
 #if QT_NO_DEBUG
 #define working_assert(x)
 #else
-#define working_assert(x) { if (!(x)) dbgPoint(); }
+//#define working_assert(x) { if (!(x)) dbgPoint(); }
+#define working_assert(x) assert(x)
 #endif
 
 template <typename Tout, typename Tin> //typechecked hard cast
@@ -151,6 +156,9 @@ extern int CreatedInstancesOfNumber;
 template<typename BASE>
 class number;
 
+template<typename BASE>
+class complex;
+
 #if NUMBER_IS_VARIANT
 using number_any=std::variant<std::monostate, number<double>, number<__float128>, number<dd_real>, number<dq_real>, number<real642>>;
 #endif
@@ -252,7 +260,6 @@ class number
   BASE store; //either "double" for special optimized template
       //or "double *" for universal implementation
       //going meta by using BASE="number<actual base> *"
-  Scratchpad *tmp;
   //friend class ::ShareableViewInfo;
   friend class number<double>;
   friend class number<__float128>;
@@ -260,13 +267,17 @@ class number
   friend class number<dq_real>;
   friend class number<real642>;
   friend class number<number_any>;
+  friend class complex<BASE>; // needs tl_spad access
   public:
+  static thread_local Scratchpad *tl_spad; // one per thread, set via set_spad()
+  static void set_spad(Scratchpad *s) { tl_spad = s; }
+  static Scratchpad *get_spad() { return tl_spad; }
   double eps2() const;
   double eps234() const;
-  number(): store(), tmp(nullptr) { } //for ShareableViewInfo
-  number(const number &x) noexcept: store(x.store), tmp(x.tmp) { }
-  number(number &&x) noexcept: store(), tmp(x.tmp) { x.swap(*this); };
-  number(Scratchpad *spad);
+  number(): store() { } //for ShareableViewInfo
+  number(const number &x) noexcept: store(x.store) { }
+  number(number &&x) noexcept: store() { x.swap(*this); };
+  number(Scratchpad *spad); // sets tl_spad as a side-effect
   ~number();
   void constructLateBecauseQtIsAwesome(const number &arc); //starts to look like copy_construct
   void swap(number &other) noexcept { std::swap(store, other.store); }
@@ -335,6 +346,18 @@ class number
   int toRound() const;
   double toDouble() const;
 };
+
+// set_spad for concrete types is defined out-of-line in MandelMath_var.cpp.
+// Explicit specialization declarations here suppress the inline instantiation
+// in every other TU, preventing a GCC TLS-wrapper crash caused by a null
+// dynamic-init-function pointer in the weak inline copy.
+template<> void number<double>::set_spad(Scratchpad *s);
+template<> void number<__float128>::set_spad(Scratchpad *s);
+template<> void number<dd_real>::set_spad(Scratchpad *s);
+template<> void number<dq_real>::set_spad(Scratchpad *s);
+template<> void number<real642>::set_spad(Scratchpad *s);
+// number<number_any>::set_spad is already out-of-line in MandelMath_var.cpp
+
 #else
 class number_a
 {
@@ -501,18 +524,16 @@ public:
 template <typename BASE>
 class complex
 {
-protected:
-  using Scratchpad=typename number<BASE>::Scratchpad;
-  Scratchpad *tmp;
 public:
+  using Scratchpad=typename number<BASE>::Scratchpad;
   number<BASE> re;
   number<BASE> im;
   double eps2() const { return re.eps2(); }
   double eps234() const { return re.eps234(); }
-  complex(): tmp(nullptr), re(), im() { }
+  complex(): re(), im() { }
   //complex(NumberType ntype): re(ntype), im(ntype) { }
-  complex(Scratchpad *spad): tmp(spad), re(spad), im(spad) { }
-  complex(complex const &src) noexcept: tmp(src.tmp), re(src.re), im(src.im) { }
+  complex(Scratchpad *spad): re(spad), im(spad) { } // number<BASE>::number(spad) sets tl_spad and emplaces the variant for number_any
+  complex(complex const &src) noexcept: re(src.re), im(src.im) { }
   void constructLateBecauseQtIsAwesome(const complex &src);
   //complex(BASE re, BASE im): re(re), im(im) { }
   void readFrom(void *storage, int index); //BASE storage[index], [index+1]

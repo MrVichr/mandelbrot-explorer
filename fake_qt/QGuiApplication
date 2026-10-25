@@ -1,0 +1,13 @@
+#pragma once
+#include "QObject"
+
+class QGuiApplication {
+public:
+    QGuiApplication(int &argc, char **argv) { (void)argc; (void)argv; }
+    ~QGuiApplication() = default;
+    static int exec() { return 0; }
+    static void quit() {}
+    static void setApplicationName(const QString &) {}
+    static void setOrganizationName(const QString &) {}
+    static void setOrganizationDomain(const QString &) {}
+};

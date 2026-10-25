@@ -4,6 +4,7 @@
 #include <QObject>
 #include <QImage>
 #include <QReadWriteLock>
+#include <qvariant.h>
 
 #include "atomic_update_rect.hpp"
 #include "ShareableImageWrapper.hpp"

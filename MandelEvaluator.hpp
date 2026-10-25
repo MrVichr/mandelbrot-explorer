@@ -2,6 +2,9 @@
 #define MANDELEVALUATOR_HPP
 
 #include <QThread>
+#include <atomic>
+#include <variant>
+#include <functional>
 
 #include "MandelMath.hpp"
 //#include "double_double.hpp"
@@ -15,7 +18,7 @@ struct ComputeLaguerreParams
     bool fastHoming;
     MandelMath::complex<BASE> c;
     MandelMath::complex<BASE> first_z; //used
-    ComputeLaguerreParams(MandelMath::number<BASE>::Scratchpad *spad);
+    ComputeLaguerreParams(typename MandelMath::number<BASE>::Scratchpad *spad);
     template<typename OTHER_BASE>
     void assign_across(const ComputeLaguerreParams<OTHER_BASE> &src);
 };
@@ -45,7 +48,7 @@ struct LaguerrePoint
   };
   static constexpr size_t LEN=iiw__END-iiw__BASE;
   LaguerrePointStore *store;
-  LaguerrePoint(LaguerrePointStore *store, MandelMath::number<BASE>::Scratchpad *spad);
+  LaguerrePoint(LaguerrePointStore *store, typename MandelMath::number<BASE>::Scratchpad *spad);
   MandelMath::complex<BASE> r;
   MandelMath::complex<BASE> fz_r;
   MandelMath::complex<BASE> nth_fz;
@@ -62,7 +65,7 @@ struct ComputeMandelParams
   MandelMath::complex<BASE> c;
   MandelMath::number<BASE> bailout; //4 for mandel
   MandelMath::complex<BASE> first_z; //used
-  ComputeMandelParams(MandelMath::number<BASE>::Scratchpad *spad);
+  ComputeMandelParams(typename MandelMath::number<BASE>::Scratchpad *spad);
   template<typename OTHER_BASE>
   void assign_across(const ComputeMandelParams<OTHER_BASE> &src);
 };
@@ -118,7 +121,7 @@ struct MandelPoint
   };
   static constexpr size_t LEN=iiw__END-iiw__BASE;
   MandelPointStore *store;
-  MandelPoint(MandelPointStore *store, MandelMath::number<BASE>::Scratchpad *spad);
+  MandelPoint(MandelPointStore *store, typename MandelMath::number<BASE>::Scratchpad *spad);
   MandelMath::complex<BASE> f;
   MandelMath::complex<BASE> fc_c; //fc_c, or fz_r if stPeriod2 or stPeriod3
   MandelMath::complex<BASE> fz_r;
@@ -155,7 +158,7 @@ struct ComputeJuliaParams
   MandelMath::complex<BASE> alphaShort; // alpha but only from r to near0
   MandelMath::complex<BASE> alpha; // |alpha|<1
   MandelMath::complex<BASE> first_z;
-  ComputeJuliaParams(MandelMath::number<BASE>::Scratchpad *spad);
+  ComputeJuliaParams(typename MandelMath::number<BASE>::Scratchpad *spad);
   template<typename OTHER_BASE>
   void assign_across(const ComputeJuliaParams<OTHER_BASE> &src);
 };
@@ -230,7 +233,7 @@ struct JuliaPoint
   };
   static constexpr size_t LEN=iiw__END-iiw__BASE;
   JuliaPointStore *store;
-  JuliaPoint(JuliaPointStore *store, MandelMath::number<BASE>::Scratchpad *spad);
+  JuliaPoint(JuliaPointStore *store, typename MandelMath::number<BASE>::Scratchpad *spad);
   MandelMath::complex<BASE> f;
   MandelMath::complex<BASE> fz_z;
   MandelMath::complex<BASE> fzz_z;
@@ -316,7 +319,7 @@ protected:
 public:
   //static constexpr size_t LEN=19;
   //LaguerreStep(MandelMath::NumberType ntype);
-  LaguerreStep(MandelMath::number<BASE>::Scratchpad *spad);
+  LaguerreStep(typename MandelMath::number<BASE>::Scratchpad *spad);
   //~LaguerreStep();
   //void switchType(MandelMath::number_worker *worker);
   //do one Laguerre step
@@ -370,7 +373,7 @@ public:
     iiw__END=iiw__BASE+26
   };*/
   //static constexpr size_t LEN=26;
-  MandelLoopEvaluator(MandelMath::number<BASE>::Scratchpad *spad);
+  MandelLoopEvaluator(typename MandelMath::number<BASE>::Scratchpad *spad);
   //~MandelLoopEvaluator();
   /*union Place
   {
@@ -554,7 +557,7 @@ public:
     double first_lagu1_re, first_lagu1_im, first_lagu1o_re, first_lagu1o_im;
     double firstMu_re, firstMu_im, firstMum_re, firstMum_im;
     double accy_tostop, accy_multiplier, accy_noise; //in units of eps2()
-    NewtRes(MandelMath::number<BASE>::Scratchpad *spad);
+    NewtRes(typename MandelMath::number<BASE>::Scratchpad *spad);
   } newtres;
 protected:
   struct Eval

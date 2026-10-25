@@ -1,0 +1,5 @@
+#pragma once
+#include "QObject"
+
+// Q_DECLARE_METATYPE is already defined as empty in QObject
+// This header is included for completeness

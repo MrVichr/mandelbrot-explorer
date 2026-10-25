@@ -1,0 +1,342 @@
+#pragma once
+#include <climits>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <atomic>
+#include <functional>
+#include <vector>
+#include <chrono>
+#include <unordered_map>
+#include "QObject"
+#include "QElapsedTimer"
+
+// ---------------------------------------------------------------------------
+// QThread – real std::thread-backed implementation with an exec() event loop.
+//
+// The exec() loop drains a thread-safe task queue until quit() is called.
+// Other code can post callable objects to a thread's queue via postTask().
+// This is what QueuedConnection dispatch will use in future steps.
+// ---------------------------------------------------------------------------
+class QThread : public QObject {
+public:
+    using Task = std::function<void()>;
+
+    enum class Priority {
+        IdlePriority,
+        LowestPriority,
+        LowPriority,
+        NormalPriority,
+        HighPriority,
+        HighestPriority,
+        TimeCriticalPriority,
+        InheritPriority
+    };
+
+    explicit QThread(QObject *parent = nullptr)
+        : QObject(parent), _running(false), _finished(true), _quit(false)
+    {}
+
+    virtual ~QThread()
+    {
+        // If still running, signal quit and join so we don't destroy a live thread.
+        if (_thread.joinable()) {
+            quit();
+            _thread.join();
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Start the thread: spawns an OS thread that calls run().
+    // -----------------------------------------------------------------------
+    void start(Priority priority = Priority::NormalPriority)
+    {
+        (void)priority;
+        if (_running.load())
+            return; // already running
+
+        _quit.store(false);
+        _running.store(true);
+        _finished.store(false);
+
+        _thread = std::thread([this]() {
+            // Register this QThread as the current thread for this OS thread.
+            _s_currentThread = this;
+            run();
+            _running.store(false);
+            _finished.store(true);
+            {
+                std::lock_guard<std::mutex> lk(_mutex);
+                // wake anyone waiting in wait()
+            }
+            _cv_done.notify_all();
+            _s_currentThread = nullptr;
+        });
+    }
+
+    // -----------------------------------------------------------------------
+    // Default run(): executes the event loop (blocks until quit()).
+    // Subclasses can override to do their own work.
+    // -----------------------------------------------------------------------
+    virtual void run()
+    {
+        exec();
+    }
+
+    // -----------------------------------------------------------------------
+    // exec(): event-loop – drains the task queue in a loop until quit().
+    // -----------------------------------------------------------------------
+    int exec()
+    {
+        while (true) {
+            std::vector<Task> batch;
+            {
+                std::unique_lock<std::mutex> lk(_mutex);
+                _cv_tasks.wait(lk, [this]{ return !_tasks.empty() || _quit.load(); });
+                if (_tasks.empty() && _quit.load())
+                    break;
+                batch = std::move(_tasks);
+                _tasks.clear();
+            }
+            for (auto &t : batch)
+                t();
+        }
+        return 0;
+    }
+
+    // -----------------------------------------------------------------------
+    // Post a callable to this thread's event queue (used by QueuedConnection).
+    // -----------------------------------------------------------------------
+    void postTask(Task fn)
+    {
+        {
+            std::lock_guard<std::mutex> lk(_mutex);
+            _tasks.push_back(std::move(fn));
+        }
+        _cv_tasks.notify_one();
+    }
+
+    // -----------------------------------------------------------------------
+    // Process all pending tasks on the *calling* thread without blocking.
+    // Useful when the "main thread" has tasks queued to it and is running its
+    // own manual loop (no exec() running).
+    // -----------------------------------------------------------------------
+    void processEvents()
+    {
+        std::vector<Task> batch;
+        {
+            std::lock_guard<std::mutex> lk(_mutex);
+            batch = std::move(_tasks);
+            _tasks.clear();
+        }
+        for (auto &t : batch)
+            t();
+        // Also drain pending tasks for receivers that live on this thread
+        // (those that never called moveToThread).
+        fakeProcessPendingTasks();
+    }
+
+    // -----------------------------------------------------------------------
+    // Lifecycle controls
+    // -----------------------------------------------------------------------
+    void quit()
+    {
+        _quit.store(true);
+        _cv_tasks.notify_all();
+    }
+
+    void exit(int returnCode = 0) { (void)returnCode; quit(); }
+
+    bool wait(unsigned long msecs = ULONG_MAX)
+    {
+        if (!_thread.joinable())
+            return true;
+
+        if (msecs == ULONG_MAX) {
+            _thread.join();
+            return true;
+        }
+
+        std::unique_lock<std::mutex> lk(_mutex);
+        bool done = _cv_done.wait_for(lk,
+                                       std::chrono::milliseconds(msecs),
+                                       [this]{ return _finished.load(); });
+        lk.unlock();
+        if (done && _thread.joinable())
+            _thread.join();
+        return done;
+    }
+
+    void terminate() { quit(); }
+
+    bool isRunning()             const { return _running.load(); }
+    bool isFinished()            const { return _finished.load(); }
+    bool isInterruptionRequested() const { return _quit.load(); }
+
+    // -----------------------------------------------------------------------
+    // Static helpers
+    // -----------------------------------------------------------------------
+    static int idealThreadCount()
+    {
+        unsigned int n = std::thread::hardware_concurrency();
+        return (n > 0) ? static_cast<int>(n) : 4;
+    }
+
+    static QThread *currentThread() { return _s_currentThread; }
+
+    // Allow the main thread (or any OS thread) to register itself.
+    // Call once at the top of main(): QThread::setCurrentThread(&mainThread);
+    static void setCurrentThread(QThread *t) { _s_currentThread = t; }
+    static void msleep(unsigned long msecs)
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(msecs));
+    }
+    static void sleep(unsigned long secs)
+    {
+        std::this_thread::sleep_for(std::chrono::seconds(secs));
+    }
+    static void usleep(unsigned long usecs)
+    {
+        std::this_thread::sleep_for(std::chrono::microseconds(usecs));
+    }
+    static void yieldCurrentThread() { std::this_thread::yield(); }
+
+private:
+    std::thread              _thread;
+    mutable std::mutex       _mutex;
+    std::condition_variable  _cv_tasks;   // woken when tasks arrive or quit
+    std::condition_variable  _cv_done;    // woken when thread finishes
+    std::vector<Task>        _tasks;
+    std::atomic<bool>        _running;
+    std::atomic<bool>        _finished;
+    std::atomic<bool>        _quit;
+
+    // Per-OS-thread pointer to the owning QThread (set inside run()).
+    // 'inline' (C++17) lets us define it here without a separate .cpp.
+    inline static thread_local QThread *_s_currentThread = nullptr;
+};
+
+// ---------------------------------------------------------------------------
+// fakeEmitDispatch — the body of QObject::emitSignal<Args...>.
+//
+// Defined here (after QThread is complete) so it can call
+// QThread::currentThread() and QThread::postTask().
+// ---------------------------------------------------------------------------
+template<typename ...Args>
+void fakeEmitDispatch(const std::vector<FakeConnEntry> &conns,
+                      std::tuple<Args...> &tup)
+{
+    QThread *callerThread = QThread::currentThread();
+
+    for (const auto &conn : conns) {
+        // Resolve receiver's thread at dispatch time for AutoConnection.
+        QThread *recvThread = conn.receiverThread;
+        if (!recvThread && conn.receiver) {
+            std::lock_guard<std::mutex> lk(fakeConnMutex());
+            auto it = fakeThreadAffinity().find(conn.receiver);
+            if (it != fakeThreadAffinity().end())
+                recvThread = it->second;
+        }
+
+        if (!recvThread && conn.receiver) {
+            // Receiver has no known thread affinity yet.
+            auto tup_copy = tup;
+            auto fn       = conn.packed_invoke;
+            if (callerThread == fakeMainThread() && fakeMainThread() != nullptr) {
+                // Emitted from the main thread: store in fakePendingTasks so
+                // that moveToThread() can drain it into the worker, or
+                // fakeProcessPendingTasks() can run it on the main thread if
+                // the receiver is never moved.
+                // printf("Receiver %p has no thread affinity; queuing task on main thread\n", conn.receiver);
+                std::lock_guard<std::mutex> lk(fakeConnMutex());
+                fakePendingTasks()[conn.receiver].push_back([fn, tup_copy]() mutable {
+                    fn(const_cast<void*>(static_cast<const void*>(&tup_copy)));
+                });
+            } else if (fakeMainThread()) {
+                // Emitted from a worker thread, receiver on the main thread:
+                // post directly (original fallback behaviour).
+                // printf("Posting to main thread\n");
+                fakeMainThread()->postTask([fn, tup_copy]() mutable {
+                    fn(const_cast<void*>(static_cast<const void*>(&tup_copy)));
+                });
+            } else {
+                // printf("No receiver or main thread, executing\n");
+                // No main thread registered; invoke directly as last resort.
+                fn(const_cast<void*>(static_cast<const void*>(&tup)));
+            }
+            continue;
+        }
+
+        bool post = false;
+        if (conn.connType == Qt::QueuedConnection) {
+            post = true;
+        } else if (conn.connType == Qt::AutoConnection) {
+            post = (recvThread != nullptr && recvThread != callerThread);
+        }
+
+        if (post && recvThread) {
+            auto tup_copy = tup;
+            auto fn       = conn.packed_invoke;
+            // printf("Posting task to thread %p for receiver %p\n", recvThread, conn.receiver);
+            recvThread->postTask([fn, tup_copy]() mutable {
+                fn(const_cast<void*>(static_cast<const void*>(&tup_copy)));
+            });
+        } else {
+            // printf("Invoking directly for receiver %p\n", conn.receiver);
+            conn.packed_invoke(const_cast<void*>(static_cast<const void*>(&tup)));
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// fakeDrainPendingTasksToThread — called by QObject::moveToThread.
+//
+// Moves tasks queued while a receiver had no thread affinity into the
+// newly assigned thread's event queue.
+// ---------------------------------------------------------------------------
+inline void fakeDrainPendingTasksToThread(QThread *t, const void *receiver)
+{
+    std::vector<std::function<void()>> tasks;
+    {
+        std::lock_guard<std::mutex> lk(fakeConnMutex());
+        auto it = fakePendingTasks().find(receiver);
+        if (it == fakePendingTasks().end())
+        {
+            // printf("No pending tasks for receiver %p\n", receiver);
+            return;
+        }
+        tasks = std::move(it->second);
+        fakePendingTasks().erase(it);
+    }
+    for (auto &task : tasks)
+    {
+        // printf("Draining pending task for receiver %p into thread %p\n", receiver, t);
+        t->postTask(std::move(task));
+    }
+}
+
+// ---------------------------------------------------------------------------
+// fakeProcessPendingTasks — called by QThread::processEvents.
+//
+// Runs tasks for receivers that have no explicit thread affinity (i.e. they
+// live on the main thread and will never call moveToThread).
+// ---------------------------------------------------------------------------
+inline void fakeProcessPendingTasks()
+{
+    std::map<const void*, std::vector<std::function<void()>>> toRun;
+    {
+        std::lock_guard<std::mutex> lk(fakeConnMutex());
+        auto &pending = fakePendingTasks();
+        for (auto it = pending.begin(); it != pending.end(); ) {
+            if (fakeThreadAffinity().find(it->first) == fakeThreadAffinity().end()) {
+                toRun[it->first] = std::move(it->second);
+                it = pending.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+    for (auto &[recv, tasks] : toRun)
+        for (auto &task : tasks)
+            task();
+}

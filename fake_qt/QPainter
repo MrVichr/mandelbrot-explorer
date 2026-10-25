@@ -1,0 +1,156 @@
+#pragma once
+#include "QImage"
+
+class QColor {
+public:
+    QColor() = default;
+    QColor(int r, int g, int b, int a = 255) { (void)r;(void)g;(void)b;(void)a; }
+    QColor(QRgb rgb) { (void)rgb; }
+    QColor(Qt::GlobalColor c) { (void)c; }
+    int red() const { return 0; }
+    int green() const { return 0; }
+    int blue() const { return 0; }
+    int alpha() const { return 255; }
+};
+
+class QPoint {
+    int _x, _y;
+public:
+    QPoint() : _x(0), _y(0) {}
+    QPoint(int x, int y) : _x(x), _y(y) {}
+    int x() const { return _x; }
+    int y() const { return _y; }
+    int &rx() { return _x; }
+    int &ry() { return _y; }
+    void setX(int v) { _x = v; }
+    void setY(int v) { _y = v; }
+};
+
+class QPointF {
+public:
+    double x, y;
+    QPointF() : x(0), y(0) {}
+    QPointF(double x, double y) : x(x), y(y) {}
+};
+
+class QLine {
+public:
+    int x1, y1, x2, y2;
+    QLine() : x1(0), y1(0), x2(0), y2(0) {}
+    QLine(int x1, int y1, int x2, int y2) : x1(x1), y1(y1), x2(x2), y2(y2) {}
+};
+
+class QLineF {
+public:
+    double x1, y1, x2, y2;
+    QLineF() : x1(0), y1(0), x2(0), y2(0) {}
+    QLineF(double x1, double y1, double x2, double y2) : x1(x1), y1(y1), x2(x2), y2(y2) {}
+};
+
+class QRectF {
+public:
+    double x, y, w, h;
+    QRectF() : x(0), y(0), w(0), h(0) {}
+    QRectF(double x, double y, double w, double h) : x(x), y(y), w(w), h(h) {}
+};
+
+class QRect {
+public:
+    int x1, y1, x2, y2;
+    QRect() : x1(0), y1(0), x2(0), y2(0) {}
+    QRect(int x, int y, int w, int h) : x1(x), y1(y), x2(x+w), y2(y+h) {}
+    int width() const { return x2 - x1; }
+    int height() const { return y2 - y1; }
+};
+
+class QBrush {
+public:
+    QBrush() = default;
+    QBrush(const QColor &) {}
+    QBrush(Qt::GlobalColor) {}
+    QBrush(Qt::BrushStyle) {}
+};
+
+class QPen {
+public:
+    QPen() = default;
+    QPen(const QColor &) {}
+    QPen(Qt::PenStyle) {}
+    QPen(const QBrush &, int, Qt::PenStyle = Qt::SolidLine) {}
+};
+
+class QPainter {
+public:
+    enum class CompositionMode {
+        CompositionMode_SourceOver,
+        CompositionMode_DestinationOver,
+        CompositionMode_Clear,
+        CompositionMode_Source,
+        CompositionMode_Destination,
+        CompositionMode_SourceIn,
+        CompositionMode_DestinationIn,
+        CompositionMode_SourceOut,
+        CompositionMode_DestinationOut,
+        CompositionMode_SourceAtop,
+        CompositionMode_DestinationAtop,
+        CompositionMode_Xor,
+        CompositionMode_Plus,
+        CompositionMode_Multiply,
+        CompositionMode_Screen,
+        CompositionMode_Overlay,
+    };
+
+    enum RenderHint {
+        Antialiasing        = 0x01,
+        TextAntialiasing    = 0x02,
+        SmoothPixmapTransform = 0x04,
+        LosslessImageRendering = 0x40,
+    };
+
+    QPainter() = default;
+    explicit QPainter(QImage *) {}
+    ~QPainter() {}
+
+    bool begin(QImage *) { return true; }
+    bool end() { return true; }
+    bool isActive() const { return false; }
+
+    void setCompositionMode(CompositionMode) {}
+    void setPen(const QPen &) {}
+    void setPen(const QColor &) {}
+    void setPen(Qt::PenStyle) {}
+    void setBrush(const QBrush &) {}
+    void setBrush(const QColor &) {}
+    void setBrush(Qt::BrushStyle) {}
+    void setBrush(Qt::GlobalColor) {}
+    void setOpacity(double) {}
+    void setRenderHint(RenderHint, bool = true) {}
+    void setRenderHints(int, bool = true) {}
+
+    void drawImage(int, int, const QImage &) {}
+    void drawImage(const QRect &, const QImage &) {}
+    void drawImage(const QRectF &, const QImage &) {}
+    void fillRect(int, int, int, int, const QColor &) {}
+    void fillRect(int, int, int, int, Qt::GlobalColor) {}
+    void fillRect(const QRect &, const QColor &) {}
+    void fillRect(const QRect &, Qt::GlobalColor) {}
+    void drawRect(const QRect &) {}
+    void drawRect(int, int, int, int) {}
+    void drawLine(int, int, int, int) {}
+    void drawLine(const QLine &) {}
+    void drawLines(const QLine *, int) {}
+    void drawLines(const QLineF *, int) {}
+    void drawEllipse(int, int, int, int) {}
+    void drawEllipse(const QRect &) {}
+    void drawText(int, int, const QString &) {}
+    void drawText(const QRect &, int, const QString &) {}
+    void drawPolygon(const QPoint *, int) {}
+    void drawPolyline(const QPoint *, int) {}
+    void drawPoints(const QPoint *, int) {}
+
+    void save() {}
+    void restore() {}
+    void translate(double, double) {}
+    void scale(double, double) {}
+    void rotate(double) {}
+};

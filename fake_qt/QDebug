@@ -1,0 +1,24 @@
+#pragma once
+#include "QObject"
+
+// Minimal QDebug stub — supports operator<< chaining
+class QDebug {
+public:
+    QDebug() = default;
+    QDebug &operator<<(const QString &) { return *this; }
+    QDebug &operator<<(const char *) { return *this; }
+    QDebug &operator<<(int) { return *this; }
+    QDebug &operator<<(unsigned int) { return *this; }
+    QDebug &operator<<(long) { return *this; }
+    QDebug &operator<<(long long) { return *this; }
+    QDebug &operator<<(unsigned long long) { return *this; }
+    QDebug &operator<<(double) { return *this; }
+    QDebug &operator<<(float) { return *this; }
+    QDebug &operator<<(bool) { return *this; }
+    QDebug &operator<<(void *) { return *this; }
+};
+
+inline QDebug qDebug()   { return {}; }
+inline QDebug qInfo()    { return {}; }
+inline QDebug qWarning() { return {}; }
+inline QDebug qCritical(){ return {}; }

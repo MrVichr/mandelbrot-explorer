@@ -1,0 +1,38 @@
+#pragma once
+#include "QString"
+#include "qvariant.h"
+#include <string>
+#include <map>
+
+// For map/set keys we need free operator< on QString
+inline bool operator<(const QString &a, const QString &b) {
+    return a.toStdString() < b.toStdString();
+}
+
+// QUrl — minimal stub sufficient for syntax checking
+class QUrl {
+    std::string d;
+public:
+    QUrl() = default;
+    QUrl(const char *url) : d(url ? url : "") {}
+    QUrl(const QString &url) : d(url.toStdString()) {}
+    QUrl(std::string url) : d(std::move(url)) {}
+    bool isValid() const { return !d.empty(); }
+    bool isEmpty() const { return d.empty(); }
+    bool operator==(const QUrl &o) const { return d == o.d; }
+    bool operator!=(const QUrl &o) const { return d != o.d; }
+    QString toString() const { return QString(d.c_str()); }
+    std::string toStdString() const { return d; }
+};
+
+// qmlRegisterType — global template stub
+template<typename T>
+int qmlRegisterType(const char * /*uri*/, int /*major*/, int /*minor*/, const char * /*qmlName*/) {
+    return 0;
+}
+
+// qRegisterMetaType — global template stubs
+template<typename T>
+int qRegisterMetaType() { return 0; }
+template<typename T>
+int qRegisterMetaType(const char *) { return 0; }

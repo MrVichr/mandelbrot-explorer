@@ -1,0 +1,74 @@
+#pragma once
+#include <vector>
+#include <utility>
+
+// Minimal QVector<T> stub — wraps std::vector
+template<typename T>
+class QVector {
+    std::vector<T> d;
+public:
+    QVector() = default;
+    QVector(int n) : d(n) {}
+    QVector(int n, const T &val) : d(n, val) {}
+
+    using iterator = typename std::vector<T>::iterator;
+    using const_iterator = typename std::vector<T>::const_iterator;
+
+    int size() const { return (int)d.size(); }
+    int count() const { return (int)d.size(); }
+    int length() const { return (int)d.size(); }
+    bool isEmpty() const { return d.empty(); }
+    void clear() { d.clear(); }
+    void reserve(int n) { d.reserve(n); }
+    void resize(int n) { d.resize(n); }
+    void append(const T &v) { d.push_back(v); }
+    void push_back(const T &v) { d.push_back(v); }
+    void pop_back() { d.pop_back(); }
+    T &back() { return d.back(); }
+    const T &back() const { return d.back(); }
+    T &front() { return d.front(); }
+    const T &front() const { return d.front(); }
+    T &operator[](int i) { return d[i]; }
+    const T &operator[](int i) const { return d[i]; }
+    T &at(int i) { return d.at(i); }
+    const T &at(int i) const { return d.at(i); }
+    const T *constData() const { return d.data(); }
+    T *data() { return d.data(); }
+    iterator begin() { return d.begin(); }
+    iterator end() { return d.end(); }
+    const_iterator begin() const { return d.begin(); }
+    const_iterator end() const { return d.end(); }
+    const_iterator cbegin() const { return d.cbegin(); }
+    const_iterator cend() const { return d.cend(); }
+};
+
+// Minimal QList<T> stub — same as QVector
+template<typename T>
+using QList = QVector<T>;
+
+// Minimal QMap<K,V> stub
+template<typename K, typename V>
+class QMap {
+    std::vector<std::pair<K,V>> d;
+public:
+    QMap() = default;
+    bool isEmpty() const { return d.empty(); }
+    int size() const { return (int)d.size(); }
+    V value(const K &key, const V &def = V{}) const {
+        for (auto &kv : d) if (kv.first == key) return kv.second;
+        return def;
+    }
+    bool contains(const K &key) const {
+        for (auto &kv : d) if (kv.first == key) return true;
+        return false;
+    }
+    void insert(const K &key, const V &val) {
+        for (auto &kv : d) if (kv.first == key) { kv.second = val; return; }
+        d.push_back({key, val});
+    }
+    V &operator[](const K &key) {
+        for (auto &kv : d) if (kv.first == key) return kv.second;
+        d.push_back({key, V{}});
+        return d.back().second;
+    }
+};

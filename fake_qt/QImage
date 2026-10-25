@@ -1,0 +1,86 @@
+#pragma once
+#include "QObject"
+#include <cstdint>
+#include <utility>
+#include <vector>
+
+typedef unsigned int QRgb;
+
+class QSize {
+public:
+    int w, h;
+    QSize() : w(0), h(0) {}
+    QSize(int w, int h) : w(w), h(h) {}
+    int width() const { return w; }
+    int height() const { return h; }
+    bool isEmpty() const { return w <= 0 || h <= 0; }
+};
+
+// Qt namespace is provided by QtGlobal (already included via QObject -> QString -> QtGlobal)
+
+class QImage {
+public:
+    enum class Format {
+        Format_Invalid = 0,
+        Format_Mono, Format_MonoLSB, Format_Indexed8,
+        Format_RGB32,
+        Format_ARGB32,
+        Format_ARGB32_Premultiplied,
+        Format_RGB16, Format_ARGB8565_Premultiplied, Format_RGB666,
+        Format_ARGB6666_Premultiplied, Format_RGB555, Format_ARGB8555_Premultiplied,
+        Format_RGB888, Format_RGB444, Format_ARGB4444_Premultiplied,
+        Format_RGBX8888, Format_RGBA8888, Format_RGBA8888_Premultiplied,
+        Format_BGR30, Format_A2BGR30_Premultiplied, Format_RGB30, Format_A2RGB30_Premultiplied,
+        Format_Alpha8, Format_Grayscale8, Format_RGBX64, Format_RGBA64,
+        Format_RGBA64_Premultiplied, Format_Grayscale16, Format_BGR888,
+    };
+
+    QImage() : _w(0), _h(0), _fmt(Format::Format_Invalid) {}
+    QImage(int w, int h, Format fmt)
+        : _w(w), _h(h), _fmt(fmt), _buf(static_cast<std::size_t>(w > 0 && h > 0 ? w * h : 0), 0u) {}
+    QImage(const QSize &sz, Format fmt)
+        : QImage(sz.w, sz.h, fmt) {}
+    QImage(const QImage &) = default;
+    QImage(QImage &&) = default;
+    QImage &operator=(const QImage &) = default;
+    QImage &operator=(QImage &&) = default;
+    virtual ~QImage() = default;
+
+    bool isNull() const { return _w <= 0 || _h <= 0; }
+    int width()   const { return _w; }
+    int height()  const { return _h; }
+    QSize size()  const { return QSize(_w, _h); }
+    Format format() const { return _fmt; }
+
+    void fill(QRgb color) { std::fill(_buf.begin(), _buf.end(), color); }
+    void fill(Qt::GlobalColor /*color*/) {}
+
+    unsigned char *bits()             { return reinterpret_cast<unsigned char*>(_buf.data()); }
+    const unsigned char *bits() const { return reinterpret_cast<const unsigned char*>(_buf.data()); }
+    unsigned char *scanLine(int line)             { return bits() + line * _w * 4; }
+    const unsigned char *scanLine(int line) const { return bits() + line * _w * 4; }
+    int bytesPerLine() const { return _w * 4; }
+    std::size_t sizeInBytes() const { return _buf.size() * 4; }
+
+    QRgb pixel(int x, int y) const {
+        if (x < 0 || x >= _w || y < 0 || y >= _h) return 0;
+        return _buf[static_cast<std::size_t>(y * _w + x)];
+    }
+    void setPixel(int x, int y, QRgb color) {
+        if (x < 0 || x >= _w || y < 0 || y >= _h) return;
+        _buf[static_cast<std::size_t>(y * _w + x)] = color;
+    }
+    void setPixelColor(int x, int y, QRgb color) { setPixel(x, y, color); }
+
+    QImage convertToFormat(Format fmt) const { QImage r(*this); r._fmt = fmt; return r; }
+    QImage scaled(int w, int h) const { (void)w; (void)h; return {}; }
+    QImage copy(int x=0, int y=0, int w=-1, int h=-1) const {
+        (void)x; (void)y; (void)w; (void)h; return {};
+    }
+    void swap(QImage &other) noexcept { std::swap(*this, other); }
+
+private:
+    int _w, _h;
+    Format _fmt;
+    std::vector<QRgb> _buf;   // one QRgb (uint32) per pixel, ARGB32 layout
+};

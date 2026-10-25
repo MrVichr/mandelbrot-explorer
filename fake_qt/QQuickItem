@@ -1,0 +1,13 @@
+#pragma once
+#include "QObject"
+
+class QQuickItem : public QObject {
+public:
+    explicit QQuickItem(QQuickItem *parent = nullptr) : QObject(nullptr) { (void)parent; }
+    virtual ~QQuickItem() = default;
+    void update() {}
+    void setWidth(double) {}
+    void setHeight(double) {}
+    double width() const { return 0; }
+    double height() const { return 0; }
+};

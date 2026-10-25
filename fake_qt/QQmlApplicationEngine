@@ -1,0 +1,19 @@
+#pragma once
+#include "QObject"
+#include "QUrl"
+
+class QQmlApplicationEngine : public QObject {
+public:
+    explicit QQmlApplicationEngine(QObject *parent = nullptr) : QObject(parent) {}
+    ~QQmlApplicationEngine() = default;
+
+    void load(const QString &filePath) { (void)filePath; }
+    void load(const QUrl &url) { (void)url; }
+    bool hasError() const { return false; }
+    void rootContext() {}
+
+    class QQmlContext *rootContext_ptr() { return nullptr; }
+
+    // Signal stub — pointer-to-member used in QObject::connect calls
+    static void objectCreated(QObject *, const QUrl &) {}
+};

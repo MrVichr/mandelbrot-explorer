@@ -1,5 +1,6 @@
 #include "MandelEvaluator.hpp"
 #define _USE_MATH_DEFINES //some magic
+#include <cassert>
 #include <cmath>
 //C++20 also don't have #include <numbers>
 //has gcd since C++17 which I apparently don't have #include <numeric>
@@ -15,7 +16,7 @@
 void nop(); //defined in MandelMath
 
 template <typename BASE>
-ComputeLaguerreParams<BASE>::ComputeLaguerreParams(MandelMath::number<BASE>::Scratchpad *spad):
+ComputeLaguerreParams<BASE>::ComputeLaguerreParams(typename MandelMath::number<BASE>::Scratchpad *spad):
   period(1), fastHoming(true), c(spad), first_z(spad)
 {
 }
@@ -47,8 +48,8 @@ void LaguerrePointStore::assign(const LaguerrePointStore *src)
 }
 
 
-template<typename BASE>
-LaguerrePoint<BASE>::LaguerrePoint(LaguerrePointStore *store, MandelMath::number<BASE>::Scratchpad *spad):
+template <typename BASE>
+LaguerrePoint<BASE>::LaguerrePoint(LaguerrePointStore *store, typename MandelMath::number<BASE>::Scratchpad *spad):
   store(store), r(spad), fz_r(spad), nth_fz(spad)
 {
 }
@@ -84,7 +85,7 @@ void LaguerrePoint<BASE>::zero(const MandelMath::complex<BASE> &c)
 }
 
 template <typename BASE>
-ComputeMandelParams<BASE>::ComputeMandelParams(MandelMath::number<BASE>::Scratchpad *spad):
+ComputeMandelParams<BASE>::ComputeMandelParams(typename MandelMath::number<BASE>::Scratchpad *spad):
   c(spad), bailout(spad), first_z(spad)
 {
   bailout.zero(4);
@@ -124,8 +125,8 @@ void MandelPointStore::assign(const MandelPointStore *src)
   interior=src->interior;
 }
 
-template<typename BASE>
-MandelPoint<BASE>::MandelPoint(MandelPointStore *store, MandelMath::number<BASE>::Scratchpad *spad):
+template <typename BASE>
+MandelPoint<BASE>::MandelPoint(MandelPointStore *store, typename MandelMath::number<BASE>::Scratchpad *spad):
   store(store), f(spad), fc_c(spad), fz_r(spad), fz_c_mag(spad),
   sure_fz_mag(spad), sure_startf(spad), lookper_startf(spad), lookper_nearr(spad),
   lookper_nearr_dist(spad), lookper_totalFzmag(spad),
@@ -243,7 +244,7 @@ void MandelPoint<BASE>::zero(const MandelMath::complex<BASE> &first_z)
 }
 
 template <typename BASE>
-ComputeJuliaParams<BASE>::ComputeJuliaParams(MandelMath::number<BASE>::Scratchpad *spad):
+ComputeJuliaParams<BASE>::ComputeJuliaParams(typename MandelMath::number<BASE>::Scratchpad *spad):
   period(1), //must agree with c==0+0i
   c(spad), root(spad), root0(spad), patchSizeExterior(0), bailout(spad), alphaShort(spad), alpha(spad), first_z(spad)
 {
@@ -291,12 +292,10 @@ void JuliaPointStore::assign(const JuliaPointStore *src)
   interior=src->interior;
 }
 
-template<typename BASE>
-JuliaPoint<BASE>::JuliaPoint(JuliaPointStore *store, MandelMath::number<BASE>::Scratchpad *spad):
+template <typename BASE>
+JuliaPoint<BASE>::JuliaPoint(JuliaPointStore *store, typename MandelMath::number<BASE>::Scratchpad *spad):
   store(store), f(spad), fz_z(spad), fzz_z(spad), fz_z_mag(spad),
-  //sure_fz_mag(ntype), sure_startf(ntype), lookper_startf(ntype),
   lookper_distr(spad), lookper_fz(spad),
-  //lookper_nearr_dist(ntype), lookper_totalFzmag(ntype),
   nearzm(spad), near0fzm(spad), near0m(spad), since0fzm(spad), bigfzfzzm(spad), shrinkfactor(spad),
   nearmrm(spad), nearmr_f(spad), nearmr_fz(spad), extangle(spad), nearmr(*this)
 {
@@ -570,7 +569,7 @@ ShareableViewInfo &ShareableViewInfo::operator=(ShareableViewInfo &&src)
 }
 
 template<typename BASE>
-LaguerreStep<BASE>::LaguerreStep(MandelMath::number<BASE>::Scratchpad *spad):
+LaguerreStep<BASE>::LaguerreStep(typename MandelMath::number<BASE>::Scratchpad *spad):
   step(spad), s1(spad), s2(spad), tmp1(spad), tmp2(spad),
   laguG(spad), laguG2(spad), laguH(spad), laguX(spad), fzzf(spad)
 {
@@ -1047,7 +1046,7 @@ bool LaguerreStep<BASE>::eval(int lg2_degree, MandelMath::complex<BASE> const &f
 }
 
 template<typename BASE>
-MandelLoopEvaluator<BASE>::MandelLoopEvaluator(MandelMath::number<BASE>::Scratchpad *spad):
+MandelLoopEvaluator<BASE>::MandelLoopEvaluator(typename MandelMath::number<BASE>::Scratchpad *spad):
   f(spad), f_z(spad), f_c(spad),
   f_zz(spad), f_zc(spad), f_cc(spad), f_zzc(spad),
   multi(0), first_multi(spad), near0iter_1(0), sumA(spad), f_z_mag(spad), f_z_minmag(spad),
@@ -1845,6 +1844,7 @@ void MandelEvaluator::doCompute()
 template <typename BASE>
 void MandelEvaluator<BASE>::doMandelThreadedSplit(int epoch)
 {
+  MandelMath::number<BASE>::set_spad(&tmp);
   busyEpoch=epoch;
   timeThreaded.start();
   threaded_errorcode=0;
@@ -1885,6 +1885,7 @@ void MandelEvaluator<BASE>::doMandelThreadedSplit(int epoch)
 template <typename BASE>
 void MandelEvaluator<BASE>::doJuliaThreadedSplit(int epoch)
 {
+  MandelMath::number<BASE>::set_spad(&tmp);
   busyEpoch=epoch;
   timeThreaded.start();
   threaded_errorcode=0;
@@ -1925,6 +1926,7 @@ void MandelEvaluator<BASE>::doJuliaThreadedSplit(int epoch)
 template <typename BASE>
 void MandelEvaluator<BASE>::doLaguerreThreadedSplit(int epoch)
 {
+  MandelMath::number<BASE>::set_spad(&tmp);
   busyEpoch=epoch;
   timeThreaded.start();
   threaded_errorcode=0;
@@ -6419,7 +6421,7 @@ MandelEvaluator<BASE>::ComputeParams::ComputeParams(MandelMath::number<BASE>::Sc
 }
 
 template<typename BASE>
-MandelEvaluator<BASE>::NewtRes::NewtRes(MandelMath::number<BASE>::Scratchpad *spad):
+MandelEvaluator<BASE>::NewtRes::NewtRes(typename MandelMath::number<BASE>::Scratchpad *spad):
   cyclesNeeded(-1),
   fz_r(spad), nth_fz(spad),
   first_guess_lagu(spad), first_guess_newt(spad)
@@ -6428,14 +6430,14 @@ MandelEvaluator<BASE>::NewtRes::NewtRes(MandelMath::number<BASE>::Scratchpad *sp
 }
 
 template<typename BASE>
-MandelEvaluator<BASE>::Eval::Eval(MandelMath::number<BASE>::Scratchpad *spad):
+MandelEvaluator<BASE>::Eval::Eval(typename MandelMath::number<BASE>::Scratchpad *spad):
   fz_r(spad), fz_mag(spad)
 {
   //working_assert(self_allocator.checkFill());
 }
 
 template<typename BASE>
-MandelEvaluator<BASE>::Newt::Newt(MandelMath::number<BASE>::Scratchpad *spad):
+MandelEvaluator<BASE>::Newt::Newt(typename MandelMath::number<BASE>::Scratchpad *spad):
   bestr(spad), f_r(spad), fzz_r(spad), tmp1(spad),
   laguH(spad), laguG(spad), laguG2(spad),
   laguX(spad), newtX(spad), prevR(spad), prevGz(spad),
@@ -6445,7 +6447,7 @@ MandelEvaluator<BASE>::Newt::Newt(MandelMath::number<BASE>::Scratchpad *spad):
 }
 
 template<typename BASE>
-MandelEvaluator<BASE>::InteriorInfo::InteriorInfo(MandelMath::number<BASE>::Scratchpad *spad):
+MandelEvaluator<BASE>::InteriorInfo::InteriorInfo(typename MandelMath::number<BASE>::Scratchpad *spad):
   inte(spad), inte_abs(spad), fz(spad), fz_mag(spad), step_to_root(spad), alphak_other(spad), alphak(spad), zoom(spad)
 {
   //working_assert(self_allocator.checkFill());

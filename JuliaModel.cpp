@@ -6,7 +6,8 @@
 #include "JuliaModel.hpp"
 #include "MandelEvaluator.hpp"
 
-#define working_assert(x) { if (!(x)) dbgPoint(); }
+//#define working_assert(x) { if (!(x)) dbgPoint(); }
+//#define working_assert(x) assert
 
 #define UPDATE_CACHED_MOD 0 //works until precision doesn't allow
 
@@ -1033,7 +1034,8 @@ void JuliaModel::paintOrbit(ShareableImageWrapper image, int x, int y)
     QPoint aroundBefore[9];
     QPoint aroundAfter[9];
     QPoint aroundDeriv[9];
-    double f_re, f_im, fz_re, fz_im, fzz_re, fzz_im;
+    // f, fz and fzz will be initialized in the loop when around==0
+    double f_re=0, f_im=0, fz_re=0, fz_im=0, fzz_re=0, fzz_im=0;
     for (int around=0; around<=8; around++)
     {
       aroundBefore[around].setX(x+offsets[around].x);
@@ -1065,6 +1067,7 @@ void JuliaModel::paintOrbit(ShareableImageWrapper image, int x, int y)
         double dim=offsets[around].y*precisionRecord->position.step_size;
         //(dr+i*di)*(dr+i*di)*(zr+i*zi)=(dr*dr-di*di+2*i*di*dr)*(zr+i*zi)=dr*dr*zr+i*dr*dr*zi-di*di*zr-i*di*di*zi+2*i*di*dr*zr-2*di*dr*zi=
         //  =dr*dr*zr-di*di*zr-2*di*dr*zi+i*dr*dr*zi-i*di*di*zi+2*i*di*dr*zr
+        // o = d * fz + d^2 * fzz
         double ore=dre*fz_re-dim*fz_im+dre*dre*fzz_re-dim*dim*fzz_re-2*dre*dim*fzz_im;
         double oim=dre*fz_im+dim*fz_re+dre*dre*fzz_im-dim*dim*fzz_im+2*dre*dim*fzz_re;
         evaluator.loope.sumA.zero(f_re+ore, f_im+oim);

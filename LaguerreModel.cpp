@@ -6,7 +6,7 @@
 #include "LaguerreModel.hpp"
 #include "MandelEvaluator.hpp"
 
-#define working_assert(x) { if (!(x)) dbgPoint(); }
+//#define working_assert(x) { if (!(x)) dbgPoint(); }
 
 #define UPDATE_CACHED_MOD 0 //works until precision doesn't allow
 

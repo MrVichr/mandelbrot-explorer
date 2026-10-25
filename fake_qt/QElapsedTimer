@@ -1,0 +1,15 @@
+#pragma once
+#include "QtGlobal"
+
+class QElapsedTimer {
+public:
+    QElapsedTimer() = default;
+    void start() {}
+    void restart() {}
+    void invalidate() {}
+    bool isValid() const { return true; }
+    qint64 elapsed() const { return 0; }
+    qint64 nsecsElapsed() const { return 0; }
+    qint64 msecsSinceReference() const { return 0; }
+    bool hasExpired(qint64) const { return false; }
+};

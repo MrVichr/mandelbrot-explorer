@@ -1,0 +1,81 @@
+#pragma once
+#include <cstdint>
+#include <cmath>
+
+// Minimal Qt global types and functions for syntax-check compilation
+
+typedef int64_t  qint64;
+typedef uint64_t quint64;
+typedef int32_t  qint32;
+typedef uint32_t quint32;
+typedef int16_t  qint16;
+typedef uint16_t quint16;
+typedef uint8_t  quint8;
+typedef intptr_t qintptr;
+typedef uintptr_t quintptr;
+
+inline int qRound(double v) { return (int)std::round(v); }
+inline int qRound(float v)  { return (int)std::round(v); }
+inline qint64 qRound64(double v) { return (qint64)std::round(v); }
+
+template<typename T> inline T qMin(T a, T b) { return a < b ? a : b; }
+template<typename T> inline T qMax(T a, T b) { return a > b ? a : b; }
+template<typename T> inline T qAbs(T a) { return a < T(0) ? -a : a; }
+template<typename T> inline T qBound(T lo, T val, T hi) { return qMax(lo, qMin(val, hi)); }
+
+inline double qSqrt(double v) { return std::sqrt(v); }
+
+// Qt namespace — core enums used throughout Qt code
+namespace Qt {
+    enum GlobalColor {
+        color0 = 0, color1,
+        black, white, darkGray, gray, lightGray,
+        red, green, blue, cyan, magenta, yellow,
+        darkRed, darkGreen, darkBlue, darkCyan, darkMagenta, darkYellow,
+        transparent = 19
+    };
+    enum ConnectionType {
+        AutoConnection,
+        DirectConnection,
+        QueuedConnection,
+        BlockingQueuedConnection,
+        UniqueConnection = 0x80
+    };
+    enum AlignmentFlag {
+        AlignLeft    = 0x0001, AlignRight  = 0x0002, AlignHCenter = 0x0004,
+        AlignTop     = 0x0020, AlignBottom = 0x0040, AlignVCenter = 0x0080,
+        AlignCenter  = AlignHCenter | AlignVCenter
+    };
+    enum BrushStyle { NoBrush, SolidPattern };
+    enum PenStyle { NoPen, SolidLine, DashLine, DotLine };
+    enum AspectRatioMode { IgnoreAspectRatio, KeepAspectRatio, KeepAspectRatioByExpanding };
+    enum SortOrder { AscendingOrder, DescendingOrder };
+    enum CursorShape { ArrowCursor, CrossCursor, PointingHandCursor };
+    enum WindowModality { NonModal, WindowModal, ApplicationModal };
+    enum ItemFlag { NoItemFlags = 0 };
+    enum ApplicationAttribute {
+        AA_EnableHighDpiScaling = 13,
+        AA_DisableHighDpiScaling = 14,
+        AA_UseHighDpiPixmaps = 24,
+    };
+}
+
+// Qt version macros
+#define QT_VERSION 0x060000
+#define QT_VERSION_CHECK(major, minor, patch) ((major<<16)|(minor<<8)|(patch))
+
+// QStringLiteral — just constructs a QString from a string literal
+#define QStringLiteral(s) QString(s)
+
+// Pixel color helpers (QRgb defined here so QtGlobal is self-contained)
+typedef unsigned int QRgb;
+inline QRgb qRgb(int r, int g, int b) { return QRgb((0xffu << 24) | (unsigned(r) << 16) | (unsigned(g) << 8) | unsigned(b)); }
+inline QRgb qRgba(int r, int g, int b, int a) { return QRgb((unsigned(a) << 24) | (unsigned(r) << 16) | (unsigned(g) << 8) | unsigned(b)); }
+
+// QCoreApplication stub — only methods that don't need QString declared here
+class QCoreApplication {
+public:
+    static void exit(int code = 0) { (void)code; }
+    static void setAttribute(Qt::ApplicationAttribute, bool = true) {}
+    static void quit() {}
+};
