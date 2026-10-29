@@ -14,16 +14,27 @@
 //
 // CLI options:
 //   --fractal man|jul|lag  Fractal type             (default man)
-//   --cx <float>           Centre real part         (default -0.5)
-//   --cy <float>           Centre imaginary part    (default 0.0)
+//   --cx <num>             Centre real part         (default -0.5)
+//   --cy <num>             Centre imaginary part    (default 0.0)
 //   --scale <float>        Scale                    (default 0.125)
 //   --width  <int>         Image width in pixels    (default 40)
 //   --height <int>         Image height in pixels   (default 20)
 //   --title <str>          Label                    (default "Wide view")
+//   --c-re <num>           Julia/Laguerre parameter c, real part
+//   --c-im <num>           Julia/Laguerre parameter c, imaginary part
+//   --period <int>         Julia/Laguerre period
+//   --precision double|float128|dd|qd|real642|ddheap (default double)
 //   --mode text|images                              (default text)
 //   --bless                Write to ./blessed/ instead of ./current/
+//   --point                Evaluate only the point (--cx, --cy) and print the result;
+//                          ignores --scale/--width/--height/--mode, writes no files
 //
-// Generated filenames are prefixed: Man_..., Jul_..., Lag_...
+// <num> values are decimal strings parsed in the selected precision, so digits
+// beyond double are kept.
+//
+// Generated filenames are prefixed: Man_..., Jul_..., Lag_...; non-double
+// precisions add a tag, e.g. Man_dd_...
+// Setup and compute wall times are printed to stderr.
 //
 // Build: make  (from the mandelbrot-explorer directory)
 // NOTE: setImageSize must be called BEFORE setView_double / setView (see AGENTS.md).
@@ -50,15 +61,26 @@ struct MandelModelInspector : public MandelModel {
     const MandelPointStore *store()  const { return pointStore; }
     int width()  const { return imageWidth; }
     int height() const { return imageHeight; }
+    QString center() const { return precisionRecord->position.center.toString(); }
+    MandelPoint<MandelMath::number_any> &point(int index) {
+        precisionRecord->wtiPoint.readFrom(precisionRecord->points, index*MandelPoint<MandelMath::number_any>::LEN);
+        return precisionRecord->wtiPoint;
+    }
 };
 
 struct JuliaModelInspector : public JuliaModel {
     const JuliaPointStore *store()  const { return pointStore; }
     int width()  const { return imageWidth; }
     int height() const { return imageHeight; }
-    void setView_double(double cx, double cy, double scale) {
+    QString center() const { return precisionRecord->position.center.toString(); }
+    QString c() const { return precisionRecord->params.c.toString(); }
+    JuliaPoint<MandelMath::number_any> &point(int index) {
+        precisionRecord->wtiPoint.readFrom(precisionRecord->points, index*JuliaPoint<MandelMath::number_any>::LEN);
+        return precisionRecord->wtiPoint;
+    }
+    void setView_str(const char *cx, const char *cy, double scale) {
         MandelMath::complex<MandelMath::number_any> center(precisionRecord->orbit.evaluator.ntype);
-        center.zero(cx, cy);
+        center.fromString(cx, cy);
         setView(center, scale);
     }
 };
@@ -67,9 +89,15 @@ struct LaguerreModelInspector : public LaguerreModel {
     const LaguerrePointStore *store()  const { return pointStore; }
     int width()  const { return imageWidth; }
     int height() const { return imageHeight; }
-    void setView_double(double cx, double cy, double scale) {
+    QString center() const { return precisionRecord->position.center.toString(); }
+    QString c() const { return precisionRecord->params.c.toString(); }
+    LaguerrePoint<MandelMath::number_any> &point(int index) {
+        precisionRecord->wtiPoint.readFrom(precisionRecord->points, index*LaguerrePoint<MandelMath::number_any>::LEN);
+        return precisionRecord->wtiPoint;
+    }
+    void setView_str(const char *cx, const char *cy, double scale) {
         MandelMath::complex<MandelMath::number_any> center(precisionRecord->orbit.evaluator.ntype);
-        center.zero(cx, cy);
+        center.fromString(cx, cy);
         setView(center, scale);
     }
 };
@@ -132,7 +160,52 @@ static const PaintStyleEntry LAG_PAINT_STYLES[] = {
 static constexpr int N_LAG_STYLES = 4;
 static constexpr int LAG_CLS_IDX  = 0;
 
+// ── Run options shared by the compute functions ──────────────────────────────
+
+// Same order as the models' precision enums.
+static const char *const PRECISION_NAMES[] = { "double", "float128", "dd", "qd", "real642", "ddheap" };
+static constexpr int N_PRECISIONS = 6;
+
+static int    g_precision = 0;
+static const char *g_cx = "-0.5";
+static const char *g_cy = "0";
+static const char *g_c_re = nullptr;
+static const char *g_c_im = nullptr;
+static int    g_period = 0;
+static bool   g_point = false;
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+static std::string file_prefix(const char *fractal_prefix)
+{
+    std::string s(fractal_prefix);
+    if (g_precision != 0)
+        s += std::string(PRECISION_NAMES[g_precision]) + "_";
+    return s;
+}
+
+template <typename MODEL>
+static void select_precision(MODEL &model, MainQThread &mainThread)
+{
+    if (g_precision != 0)
+    {
+        model.setselectedPrecision(static_cast<typename MODEL::precision>(g_precision));
+        // The change slot is queued; run it now, before the old workers get any work.
+        mainThread.processEvents();
+    }
+}
+
+using Clock = std::chrono::steady_clock;
+
+static double ms_since(Clock::time_point t0)
+{
+    return std::chrono::duration<double, std::milli>(Clock::now() - t0).count();
+}
+
+static void report_timing(double setup_ms, double compute_ms)
+{
+    std::fprintf(stderr, "timing: setup %.1f ms, compute %.1f ms\n", setup_ms, compute_ms);
+}
 
 static std::string sanitize_title(const char *title)
 {
@@ -169,7 +242,7 @@ static const char *rstate_name(JuliaPointStore::ResultState rs)
         case JuliaPointStore::ResultState::stMisiur:   return "rS";
         case JuliaPointStore::ResultState::stDiverge:  return "rD";
         case JuliaPointStore::ResultState::stPeriod2:  return "r2";
-        case JuliaPointStore::ResultState::stPeriod3:  return "r3";
+        case JuliaPointStore::ResultState::stPeriodBoundary: return "rI";
         case JuliaPointStore::ResultState::stMaxIter:  return "rM";
     }
     return "r?";
@@ -226,57 +299,158 @@ static bool wait_for_completion(MODEL &model, MainQThread &mainThread)
 }
 
 // ── Per-fractal compute ───────────────────────────────────────────────────────
+// The view centre comes from g_cx / g_cy; in --point mode paintOrbit is skipped so
+// only the worker thread evaluates the point.
 static bool compute_mandelbrot(MandelModelInspector &model, MainQThread &mainThread,
-                                int W, int H, double cx, double cy, double scale)
+                                int W, int H, double scale)
 {
-    // IMPORTANT: setImageSize before setView_double (see AGENTS.md).
+    auto t0 = Clock::now();
+    select_precision(model, mainThread);
+    // IMPORTANT: setImageSize before setView_str (see AGENTS.md).
     model.setImageSize(W, H);
-    model.setView_double(cx, cy, scale);
+    model.setView_str(g_cx, g_cy, scale);
     QImage image;
     ShareableImageWrapper wrapper(&image);
-    model.paintOrbit(wrapper, W/2, H/2); // paintOrbit must work
+    if (!g_point)
+        model.paintOrbit(wrapper, W/2, H/2); // paintOrbit must work
     // Use ExterAngle during evaluation so exterior-angle data is populated.
     model.setselectedPaintStyle(MandelModel::paintStyleExterAngle);
+    double setup_ms = ms_since(t0);
+    t0 = Clock::now();
     model.startRunning();
-    return wait_for_completion(model, mainThread);
+    bool ok = wait_for_completion(model, mainThread);
+    report_timing(setup_ms, ms_since(t0));
+    return ok;
+}
+
+// Julia/Laguerre parameters go through MandelModel::makeViewInfo, as in the GUI.
+static ShareableViewInfo make_view_info(MandelModel &mandel, MainQThread &mainThread,
+                                        int W, int H, double scale, const char *caption)
+{
+    select_precision(mandel, mainThread);
+    mandel.setImageSize(W, H);
+    mandel.setView_str(g_cx, g_cy, scale);
+    QVariantMap params;
+    params["viewRe"] = g_cx;
+    params["viewIm"] = g_cy;
+    params["viewZoom"] = scale;
+    params["cRe"] = g_c_re;
+    params["cIm"] = g_c_im;
+    params["period"] = g_period;
+    params["caption"] = caption;
+    return mandel.makeViewInfo(params);
 }
 
 static bool compute_julia(JuliaModelInspector &model, MainQThread &mainThread,
-                           int W, int H, double cx, double cy, double scale)
+                           int W, int H, double scale)
 {
+    auto t0 = Clock::now();
+    select_precision(model, mainThread);
     model.setImageSize(W, H);
-    model.setView_double(cx, cy, scale);
+    model.setView_str(g_cx, g_cy, scale);
     QImage image;
     ShareableImageWrapper wrapper(&image);
-    model.paintOrbit(wrapper, W/2, H/2); // paintOrbit must work
+    if (!g_point)
+        model.paintOrbit(wrapper, W/2, H/2); // paintOrbit must work
     MandelModel mandel;
-    mandel.setImageSize(W, H);
-    mandel.setView_double(cx, cy, scale);
-    QVariantMap params;
-    params["viewRe"] = cx;
-    params["viewIm"] = cy;
-    params["viewZoom"] = scale;
-    params["cRe"] = 0.3;
-    params["cIm"] = 0.5;
-    params["period"] = 1;
-    params["caption"] = "Main view";
-    ShareableViewInfo viewInfo=(mandel.makeViewInfo(params));
+    ShareableViewInfo viewInfo=make_view_info(mandel, mainThread, W, H, scale, "Main view");
     model.setParams(viewInfo);
     model.setselectedPaintStyle(JuliaModel::paintStyleExterAngle);
+    double setup_ms = ms_since(t0);
+    t0 = Clock::now();
     model.startRunning();
-    return wait_for_completion(model, mainThread);
+    bool ok = wait_for_completion(model, mainThread);
+    report_timing(setup_ms, ms_since(t0));
+    return ok;
 }
 
 static bool compute_laguerre(LaguerreModelInspector &model, MainQThread &mainThread,
-                              int W, int H, double cx, double cy, double scale)
+                              int W, int H, double scale)
 {
+    auto t0 = Clock::now();
+    select_precision(model, mainThread);
     model.setImageSize(W, H);
-    model.setView_double(cx, cy, scale);
+    model.setView_str(g_cx, g_cy, scale);
     QImage image;
     ShareableImageWrapper wrapper(&image);
-    model.paintOrbit(wrapper, W/2, H/2); // paintOrbit must work
+    MandelModel mandel;
+    ShareableViewInfo viewInfo=make_view_info(mandel, mainThread, W, H, scale, "Evaluate");
+    model.setParams(viewInfo);
+    if (!g_point)
+        model.paintOrbit(wrapper, W/2, H/2); // paintOrbit must work
+    double setup_ms = ms_since(t0);
+    t0 = Clock::now();
     model.startRunning();
-    return wait_for_completion(model, mainThread);
+    bool ok = wait_for_completion(model, mainThread);
+    report_timing(setup_ms, ms_since(t0));
+    return ok;
+}
+
+// ── Point mode ────────────────────────────────────────────────────────────────
+static const char *qs(const QString &s)
+{
+    static std::string buf[8];
+    static int next = 0;
+    std::string &b = buf[next++ % 8];
+    b = s.toStdString();
+    return b.c_str();
+}
+
+static void print_point_man(MandelModelInspector &model)
+{
+    const MandelPointStore &p = model.store()[0];
+    MandelPoint<MandelMath::number_any> &n = model.point(0);
+    std::printf("c          = %s\n", qs(model.center()));
+    std::printf("rstate=%s period=%d iter=%d newton_iter=%d near0iter_1=%d nearziter_0=%d surehand=%d\n",
+                rstate_name(p.rstate), p.period, p.iter, p.newton_iter, p.near0iter_1, p.nearziter_0, p.surehand);
+    std::printf("exterior_hits=%.17g exterior_avoids=%.17g interior_hits=%.17g\n",
+                p.exterior_hits, p.exterior_avoids, p.interior.hits);
+    std::printf("f          = %s\n", qs(n.f.toString()));
+    std::printf("fc_c       = %s\n", qs(n.fc_c.toString()));
+    std::printf("fz_r       = %s\n", qs(n.fz_r.toString()));
+    std::printf("root       = %s\n", qs(n.root.toString()));
+    std::printf("extangle   = %s\n", qs(n.extangle.toString()));
+}
+
+static void print_point_jul(JuliaModelInspector &model)
+{
+    const JuliaPointStore &p = model.store()[0];
+    JuliaPoint<MandelMath::number_any> &n = model.point(0);
+    std::printf("c          = %s\n", qs(model.c()));
+    std::printf("z          = %s\n", qs(model.center()));
+    std::printf("rstate=%s iter=%d near0iter_1=%d nearziter_0=%d nearmriter=%d\n",
+                rstate_name(p.rstate), p.iter, p.near0iter_1, p.nearziter_0, p.nearmriter);
+    std::printf("exterior none=%.17g/%.17g blend=%.17g/%.17g (mixed/empty)\n",
+                p.exterior.none_mixed, p.exterior.none_empty, p.exterior.blend_mixed, p.exterior.blend_empty);
+    std::printf("interior mixed=%.17g full=%.17g phi=%.17g%+.17gi first_under_1=%d\n",
+                p.interior.mixed, p.interior.full, p.interior.phi_re, p.interior.phi_im, p.interior.first_under_1);
+    std::printf("f          = %s\n", qs(n.f.toString()));
+    std::printf("fz_z       = %s\n", qs(n.fz_z.toString()));
+    std::printf("extangle   = %s\n", qs(n.extangle.toString()));
+}
+
+static void print_point_lag(LaguerreModelInspector &model)
+{
+    const LaguerrePointStore &p = model.store()[0];
+    LaguerrePoint<MandelMath::number_any> &n = model.point(0);
+    std::printf("c          = %s\n", qs(model.c()));
+    std::printf("z          = %s\n", qs(model.center()));
+    std::printf("state=%s iter=%d firstM=%.17g firstStep=%.17g%+.17gi naiveChoice=%d\n",
+                state_name(p.state.load()), p.iter, p.firstM, p.firstStep_re, p.firstStep_im, (int)p.naiveChoice);
+    std::printf("r          = %s\n", qs(n.r.toString()));
+    std::printf("fz_r       = %s\n", qs(n.fz_r.toString()));
+    std::printf("nth_fz     = %s\n", qs(n.nth_fz.toString()));
+}
+
+template <typename MODEL, typename COMPUTE, typename PRINT>
+static void run_point(MODEL &model, MainQThread &mainThread, COMPUTE compute, PRINT print)
+{
+    // Fine enough that Position::setView does not round the point to the pixel grid.
+    const double scale = std::ldexp(1.0, -300);
+    std::printf("precision  = %s\n", PRECISION_NAMES[g_precision]);
+    if (!compute(model, mainThread, 1, 1, scale))
+        std::fprintf(stderr, "Warning: computation timed out.\n");
+    print(model);
 }
 
 // ── Generic VT100 render helper ───────────────────────────────────────────────
@@ -345,7 +519,7 @@ static void run_text_mode_man(MandelModelInspector &model, MainQThread &mainThre
                                int W, int H,
                                const char *out_dir)
 {
-    if (!compute_mandelbrot(model, mainThread, W, H, cx, cy, scale))
+    if (!compute_mandelbrot(model, mainThread, W, H, scale))
         std::fprintf(stderr, "Warning: computation timed out.\n");
 
     const MandelPointStore *ps = model.store();
@@ -382,7 +556,7 @@ static void run_text_mode_man(MandelModelInspector &model, MainQThread &mainThre
 
     char json_path[1024];
     std::snprintf(json_path, sizeof(json_path),
-                  "%s/Man_%s_text.json", out_dir, sanitize_title(title).c_str());
+                  "%s/%s%s_text.json", out_dir, file_prefix("Man_").c_str(), sanitize_title(title).c_str());
 
     FILE *f = std::fopen(json_path, "w");
     if (!f) { std::perror(json_path); return; }
@@ -436,10 +610,10 @@ static void run_images_mode_man(MandelModelInspector &model, MainQThread &mainTh
                                  int W, int H,
                                  const char *out_dir)
 {
-    if (!compute_mandelbrot(model, mainThread, W, H, cx, cy, scale))
+    if (!compute_mandelbrot(model, mainThread, W, H, scale))
         std::fprintf(stderr, "Warning: computation timed out.\n");
     run_images_generic(model, title, cx, cy, scale, W, H, out_dir,
-                       "Man_", MAN_PAINT_STYLES, N_MAN_STYLES, MAN_CLS_IDX);
+                       file_prefix("Man_").c_str(), MAN_PAINT_STYLES, N_MAN_STYLES, MAN_CLS_IDX);
 }
 
 // ── Text mode — Julia ─────────────────────────────────────────────────────────
@@ -449,7 +623,7 @@ static void run_text_mode_jul(JuliaModelInspector &model, MainQThread &mainThrea
                                int W, int H,
                                const char *out_dir)
 {
-    if (!compute_julia(model, mainThread, W, H, cx, cy, scale))
+    if (!compute_julia(model, mainThread, W, H, scale))
         std::fprintf(stderr, "Warning: computation timed out.\n");
 
     const JuliaPointStore *ps = model.store();
@@ -485,7 +659,7 @@ static void run_text_mode_jul(JuliaModelInspector &model, MainQThread &mainThrea
 
     char json_path[1024];
     std::snprintf(json_path, sizeof(json_path),
-                  "%s/Jul_%s_text.json", out_dir, sanitize_title(title).c_str());
+                  "%s/%s%s_text.json", out_dir, file_prefix("Jul_").c_str(), sanitize_title(title).c_str());
 
     FILE *f = std::fopen(json_path, "w");
     if (!f) { std::perror(json_path); return; }
@@ -535,10 +709,10 @@ static void run_images_mode_jul(JuliaModelInspector &model, MainQThread &mainThr
                                  int W, int H,
                                  const char *out_dir)
 {
-    if (!compute_julia(model, mainThread, W, H, cx, cy, scale))
+    if (!compute_julia(model, mainThread, W, H, scale))
         std::fprintf(stderr, "Warning: computation timed out.\n");
     run_images_generic(model, title, cx, cy, scale, W, H, out_dir,
-                       "Jul_", JUL_PAINT_STYLES, N_JUL_STYLES, JUL_CLS_IDX);
+                       file_prefix("Jul_").c_str(), JUL_PAINT_STYLES, N_JUL_STYLES, JUL_CLS_IDX);
 }
 
 // ── Text mode — Laguerre ──────────────────────────────────────────────────────
@@ -548,7 +722,7 @@ static void run_text_mode_lag(LaguerreModelInspector &model, MainQThread &mainTh
                                int W, int H,
                                const char *out_dir)
 {
-    if (!compute_laguerre(model, mainThread, W, H, cx, cy, scale))
+    if (!compute_laguerre(model, mainThread, W, H, scale))
         std::fprintf(stderr, "Warning: computation timed out.\n");
 
     const LaguerrePointStore *ps = model.store();
@@ -584,7 +758,7 @@ static void run_text_mode_lag(LaguerreModelInspector &model, MainQThread &mainTh
 
     char json_path[1024];
     std::snprintf(json_path, sizeof(json_path),
-                  "%s/Lag_%s_text.json", out_dir, sanitize_title(title).c_str());
+                  "%s/%s%s_text.json", out_dir, file_prefix("Lag_").c_str(), sanitize_title(title).c_str());
 
     FILE *f = std::fopen(json_path, "w");
     if (!f) { std::perror(json_path); return; }
@@ -636,10 +810,10 @@ static void run_images_mode_lag(LaguerreModelInspector &model, MainQThread &main
                                  int W, int H,
                                  const char *out_dir)
 {
-    if (!compute_laguerre(model, mainThread, W, H, cx, cy, scale))
+    if (!compute_laguerre(model, mainThread, W, H, scale))
         std::fprintf(stderr, "Warning: computation timed out.\n");
     run_images_generic(model, title, cx, cy, scale, W, H, out_dir,
-                       "Lag_", LAG_PAINT_STYLES, N_LAG_STYLES, LAG_CLS_IDX);
+                       file_prefix("Lag_").c_str(), LAG_PAINT_STYLES, N_LAG_STYLES, LAG_CLS_IDX);
 }
 
 // ── Argument parsing ──────────────────────────────────────────────────────────
@@ -648,8 +822,8 @@ enum class Mode    { Text, Images };
 enum class Fractal { Man, Jul, Lag };
 
 struct Args {
-    double      cx      = -0.5;
-    double      cy      =  0.0;
+    const char *cx      = "-0.5";
+    const char *cy      = "0";
     double      scale   =  0.125;
     int         width   =  40;
     int         height  =  20;
@@ -657,6 +831,11 @@ struct Args {
     Mode        mode    = Mode::Text;
     Fractal     fractal = Fractal::Man;
     bool        bless   = false;
+    bool        point   = false;
+    const char *c_re    = nullptr;   // nullptr/0 = per-fractal default
+    const char *c_im    = nullptr;
+    int         period  = 0;
+    int         precision = 0;
 };
 
 static void print_usage(const char *prog)
@@ -664,15 +843,32 @@ static void print_usage(const char *prog)
     std::fprintf(stderr,
         "Usage: %s [options]\n"
         "  --fractal man|jul|lag  Fractal type       (default man)\n"
-        "  --cx <float>     Centre real part         (default -0.5)\n"
-        "  --cy <float>     Centre imag part         (default 0.0)\n"
+        "  --cx <num>       Centre real part         (default -0.5)\n"
+        "  --cy <num>       Centre imag part         (default 0.0)\n"
         "  --scale <float>  Scale                    (default 0.125)\n"
         "  --width <int>    Width in pixels          (default 40)\n"
         "  --height <int>   Height in pixels         (default 20)\n"
         "  --title <str>    Header label             (default 'Wide view')\n"
+        "  --c-re <num>     Julia/Laguerre c, real   (default 0.3 / -0.7067658320364081)\n"
+        "  --c-im <num>     Julia/Laguerre c, imag   (default 0.5 / 0.3540325897413918)\n"
+        "  --period <int>   Julia/Laguerre period    (default 4 / 1632)\n"
+        "  --precision double|float128|dd|qd|real642|ddheap (default double)\n"
         "  --mode text|images                        (default text)\n"
-        "  --bless          Write to ./blessed/ instead of ./current/\n",
+        "  --bless          Write to ./blessed/ instead of ./current/\n"
+        "  --point          Only evaluate the point (--cx, --cy) and print the result\n"
+        "  <num> is a decimal string, parsed in the selected precision\n",
         prog);
+}
+
+static const char *number_arg(const char *prog, const char *opt, const char *val)
+{
+    MandelMath::number<MandelMath::real642> check; // parses as both double and __float128
+    if (!check.fromString(val)) {
+        std::fprintf(stderr, "Not a number for %s: %s\n", opt, val);
+        print_usage(prog);
+        std::exit(1);
+    }
+    return val;
 }
 
 static Args parse_args(int argc, char *argv[])
@@ -680,13 +876,29 @@ static Args parse_args(int argc, char *argv[])
     Args a;
     for (int i = 1; i < argc; ++i) {
         if      (std::strcmp(argv[i], "--bless") == 0) { a.bless = true; }
+        else if (std::strcmp(argv[i], "--point") == 0) { a.point = true; }
         else if (i + 1 < argc) {
-            if      (std::strcmp(argv[i], "--cx")      == 0) { a.cx     = std::atof(argv[++i]); }
-            else if (std::strcmp(argv[i], "--cy")      == 0) { a.cy     = std::atof(argv[++i]); }
+            if      (std::strcmp(argv[i], "--cx")      == 0) { a.cx     = number_arg(argv[0], argv[i], argv[i+1]); ++i; }
+            else if (std::strcmp(argv[i], "--cy")      == 0) { a.cy     = number_arg(argv[0], argv[i], argv[i+1]); ++i; }
             else if (std::strcmp(argv[i], "--scale")   == 0) { a.scale  = std::atof(argv[++i]); }
             else if (std::strcmp(argv[i], "--width")   == 0) { a.width  = std::atoi(argv[++i]); }
             else if (std::strcmp(argv[i], "--height")  == 0) { a.height = std::atoi(argv[++i]); }
             else if (std::strcmp(argv[i], "--title")   == 0) { a.title  = argv[++i]; }
+            else if (std::strcmp(argv[i], "--c-re")    == 0) { a.c_re   = number_arg(argv[0], argv[i], argv[i+1]); ++i; }
+            else if (std::strcmp(argv[i], "--c-im")    == 0) { a.c_im   = number_arg(argv[0], argv[i], argv[i+1]); ++i; }
+            else if (std::strcmp(argv[i], "--period")  == 0) { a.period = std::atoi(argv[++i]); }
+            else if (std::strcmp(argv[i], "--precision") == 0) {
+                ++i;
+                a.precision = -1;
+                for (int p = 0; p < N_PRECISIONS; ++p)
+                    if (std::strcmp(argv[i], PRECISION_NAMES[p]) == 0)
+                        a.precision = p;
+                if (a.precision < 0) {
+                    std::fprintf(stderr, "Unknown precision: %s\n", argv[i]);
+                    print_usage(argv[0]);
+                    std::exit(1);
+                }
+            }
             else if (std::strcmp(argv[i], "--mode")    == 0) {
                 ++i;
                 if      (std::strcmp(argv[i], "text")   == 0) { a.mode = Mode::Text; }
@@ -728,40 +940,66 @@ int main(int argc, char *argv[])
 {
     Args a = parse_args(argc, argv);
 
-    const char *out_dir = a.bless ? "blessed" : "current";
-    mkdir(out_dir, 0755);   // ignore error if already exists
+    const bool lag = a.fractal == Fractal::Lag;
+    g_precision = a.precision;
+    g_cx     = a.cx;
+    g_cy     = a.cy;
+    g_c_re   = a.c_re ? a.c_re : lag ? "-0.7067658320364081" : "0.3";
+    g_c_im   = a.c_im ? a.c_im : lag ?  "0.3540325897413918" : "0.5";
+    g_period = a.period > 0 ? a.period : lag ? 1632 : 4;
+    g_point  = a.point;
+    // double copies only for the printed headers and JSON
+    const double cx = std::atof(a.cx);
+    const double cy = std::atof(a.cy);
 
     MainQThread mainThread;
+
+    if (g_point) {
+        if (a.fractal == Fractal::Man) {
+            MandelModelInspector model;
+            run_point(model, mainThread, compute_mandelbrot, print_point_man);
+        } else if (a.fractal == Fractal::Jul) {
+            JuliaModelInspector model;
+            run_point(model, mainThread, compute_julia, print_point_jul);
+        } else {
+            LaguerreModelInspector model;
+            run_point(model, mainThread, compute_laguerre, print_point_lag);
+        }
+        return 0;
+    }
+
+    const char *out_dir = a.bless ? "blessed" : "current";
+    mkdir(out_dir, 0755);   // ignore error if already exists
 
     if (a.fractal == Fractal::Man) {
         MandelModelInspector model;
         if (a.mode == Mode::Text)
             run_text_mode_man(model, mainThread,
-                              a.title, a.cx, a.cy, a.scale, a.width, a.height,
+                              a.title, cx, cy, a.scale, a.width, a.height,
                               out_dir);
         else
             run_images_mode_man(model, mainThread,
-                                a.title, a.cx, a.cy, a.scale, a.width, a.height,
+                                a.title, cx, cy, a.scale, a.width, a.height,
                                 out_dir);
     } else if (a.fractal == Fractal::Jul) {
         JuliaModelInspector model;
         if (a.mode == Mode::Text)
             run_text_mode_jul(model, mainThread,
-                              a.title, a.cx, a.cy, a.scale, a.width, a.height,
+                              a.title, cx, cy, a.scale, a.width, a.height,
                               out_dir);
         else
             run_images_mode_jul(model, mainThread,
-                                a.title, a.cx, a.cy, a.scale, a.width, a.height,
+                                a.title, cx, cy, a.scale, a.width, a.height,
                                 out_dir);
     } else {  // Fractal::Lag
         LaguerreModelInspector model;
         if (a.mode == Mode::Text)
             run_text_mode_lag(model, mainThread,
-                              a.title, a.cx, a.cy, a.scale, a.width, a.height,
+                              a.title, cx, cy, a.scale, a.width, a.height,
                               out_dir);
         else
             run_images_mode_lag(model, mainThread,
-                                a.title, a.cx, a.cy, a.scale, a.width, a.height,
+                                a.title, cx, cy, a.scale, a.width, a.height,
                                 out_dir);
     }
 

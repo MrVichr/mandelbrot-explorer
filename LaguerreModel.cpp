@@ -10,21 +10,10 @@
 
 #define UPDATE_CACHED_MOD 0 //works until precision doesn't allow
 
-LaguerreModel::LaguerreModel(): QObject(),
-  pointStore(nullptr), precisionRecord(nullptr)
+LaguerreModel::LaguerreModel(): QObject()
 {
   unsigned int oldcw; //524319 = 0x8001F = mask all interrupts, 80bit precision
   MandelMath::fpu_fix_start(&oldcw);
-  _selectedPaintStyle=paintStyleCls;//Kind;
-  _selectedPrecision=precisionDouble;
-  epoch=1;
-  imageWidth=0;
-  imageHeight=0;
-  //pointStore=nullptr;
-  nextGivenPointIndex=0;
-  effortBonus=0;
-  //threadCount=4;
-  _threadsWorking=0;
   QObject::connect(this, &LaguerreModel::selectedPrecisionChange,
                    this, &LaguerreModel::selectedPrecisionChanged);
   selectedPrecisionChanged();
@@ -300,6 +289,17 @@ void LaguerreModel::setParams(ShareableViewInfo viewInfo)
   }
 }
 
+QString LaguerreModel::getViewJson()
+{
+  return "{\"viewRe\": \""+precisionRecord->position.center.re.toString()+
+         "\", \"viewIm\": \""+precisionRecord->position.center.im.toString()+
+         "\", \"viewZoom\": "+QString::number(precisionRecord->position.step_size, 'g', 17)+
+         ", \"cRe\": \""+precisionRecord->params.c.re.toString()+
+         "\", \"cIm\": \""+precisionRecord->params.c.im.toString()+
+         "\", \"period\": "+QString::number(precisionRecord->params.nth_fz)+
+         ", \"caption\": \"\"}";
+}
+
 class PixelPositionTransformer
 {
 public:
@@ -544,6 +544,9 @@ void LaguerreModel::setImageSize(int width, int height)
       case MandelMath::NumberType::typeReal642:
         new_points=MandelMath::number<MandelMath::real642>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, newLength*LaguerrePoint<MandelMath::number_any>::LEN);
         break;
+      case MandelMath::NumberType::typeDDHeap:
+        new_points=MandelMath::number<MandelMath::dd_heap>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, newLength*LaguerrePoint<MandelMath::number_any>::LEN);
+        break;
 #endif
     }
     MandelMath::complex<MandelMath::number_any> old_c(precisionRecord->position.center);
@@ -571,6 +574,9 @@ void LaguerreModel::setImageSize(int width, int height)
         break;
       case MandelMath::NumberType::typeReal642:
         delete[] (MandelMath::real642 *)precisionRecord->points;
+        break;
+      case MandelMath::NumberType::typeDDHeap:
+        delete[] (MandelMath::dd_real *)precisionRecord->points;
         break;
 #endif
     }
@@ -1429,6 +1435,13 @@ void LaguerreModel::selectedPrecisionChanged()
     pointCount=0;
   else
     pointCount=imageWidth*imageHeight;
+  {
+    QWriteLocker locker(&threading_mutex);
+    epoch=(epoch%2000000000)+1; //old workers stop taking work and stop writing points
+    for (int i=0; i<pointCount; i++)
+      if (pointStore[i].state==LaguerrePointStore::State::stWorking)
+        pointStore[i].state=LaguerrePointStore::State::stUnknown;
+  }
   void *new_points;
   MandelMath::NumberType newPrecision;
   switch (_selectedPrecision)
@@ -1454,6 +1467,10 @@ void LaguerreModel::selectedPrecisionChanged()
     case precisionReal642:
       newPrecision=Type::typeReal642;
       new_points=MandelMath::number<MandelMath::real642>::convert_block(precisionRecord?precisionRecord->ntype:Type::typeEmpty, precisionRecord?precisionRecord->points:nullptr, pointCount*LaguerrePoint<MandelMath::real642>::LEN);
+      break;
+    case precisionDDHeap:
+      newPrecision=Type::typeDDHeap;
+      new_points=MandelMath::number<MandelMath::dd_heap>::convert_block(precisionRecord?precisionRecord->ntype:Type::typeEmpty, precisionRecord?precisionRecord->points:nullptr, pointCount*LaguerrePoint<MandelMath::dd_heap>::LEN);
       break;
 #endif
     default: goto lolwut;
@@ -1687,6 +1704,9 @@ LaguerreModel::PrecisionRecord::PrecisionRecord(MandelMath::NumberType ntype, Pr
   case MandelMath::NumberType::typeReal642:
     threads=new MandelEvaluator<MandelMath::real642> *[threadCount];
     break;
+  case MandelMath::NumberType::typeDDHeap:
+    threads=new MandelEvaluator<MandelMath::dd_heap> *[threadCount];
+    break;
 #endif
   }
   MandelMath::visit([](auto &threads, PrecisionRecord &self, LaguerreModel *doneReceiver, PrecisionRecord *source){
@@ -1735,7 +1755,8 @@ LaguerreModel::PrecisionRecord::~PrecisionRecord()
       {
           for (int t=threadCount-1; t>=0; t--)
           {
-              threads[t]->thread.wait(1000);
+              if (!threads[t]->thread.wait(1000))
+                  qDebug() << "Thread" << t << "did not finish in time";
               delete threads[t];
           }
           delete[] threads;
@@ -1762,6 +1783,9 @@ LaguerreModel::PrecisionRecord::~PrecisionRecord()
     break;
   case MandelMath::NumberType::typeReal642:
     delete[] (MandelMath::real642 *)points;
+    break;
+  case MandelMath::NumberType::typeDDHeap:
+    delete[] (MandelMath::dd_real *)points;
     break;
 #endif
   }

@@ -213,6 +213,7 @@ void MandelPoint<BASE>::zero(const MandelMath::complex<BASE> &first_z)
   sure_startf.assign(f);
   store->lookper_prevGuess=0;
   store->lookper_lastGuess=0;
+  store->lookper_nearr_dist_touched=false;
   //lookper resets at first iter
   store->near0iter_1=1;
   store->nearziter_0=1;
@@ -420,8 +421,8 @@ template<typename BASE>
 void JuliaPoint<BASE>::NearMR::tap(ComputeJuliaParams<BASE> &params, MandelMath::complex<BASE> *tmpx)
 {
 #if 1 //c blocked by r
-  tmpx->re.assign(*owner.f.dist2_tmp(params.root));
-  tmpx->im.assign(*owner.f.dist2_tmp(params.c));
+  tmpx->re.assign(owner.f.dist2(params.root));
+  tmpx->im.assign(owner.f.dist2(params.c));
   bool is_close_r=tmpx->re.isle(owner.nearmrm);
   bool is_close_c=tmpx->im.isle(owner.nearmrm);
   assert(owner.store!=nullptr);
@@ -530,7 +531,7 @@ ShareableViewInfo::ShareableViewInfo(ShareableViewInfo &src): ShareableViewInfo(
 }
 
 ShareableViewInfo::ShareableViewInfo(ShareableViewInfo const &src): QObject(),
-  spad(src.spad), view(src.view), c(src.c), nth_fz_limit(src.nth_fz_limit),
+  view(src.view), c(src.c), nth_fz_limit(src.nth_fz_limit),
   scale(src.scale), nth_fz(src.nth_fz), max_root_effort(src.max_root_effort)
 { //why do you need this?
   //doesn't "need" but calls it anyway dbgPoint();
@@ -538,7 +539,7 @@ ShareableViewInfo::ShareableViewInfo(ShareableViewInfo const &src): QObject(),
 }
 
 ShareableViewInfo::ShareableViewInfo(ShareableViewInfo &&src): QObject(),
-  spad(src.spad), view(std::move(src.view)), c(std::move(src.c)), nth_fz_limit(std::move(src.nth_fz_limit)),
+  view(std::move(src.view)), c(std::move(src.c)), nth_fz_limit(std::move(src.nth_fz_limit)),
   scale(std::move(src.scale)), nth_fz(std::move(src.nth_fz)), max_root_effort(std::move(src.max_root_effort))
 {
   //view.assign(src.view);
@@ -606,21 +607,16 @@ bool LaguerreStep<BASE>::eval(int lg2_degree, MandelMath::complex<BASE> const &f
   }
 
   //1/f should be fine, or we'd be at the root
-  tmp1.assign(f);
-  tmp1.recip();    //1/f
-  laguG.assign(f_z);
-  laguG.mul(tmp1); //laguG = f'/f
-  fzzf.assign(f_zz);
-  fzzf.mul(tmp1); //f''/f
+  tmp1=recip(f);
+  laguG=f_z*tmp1; //laguG = f'/f
+  fzzf=f_zz*tmp1; //f''/f
 
 
     // laguH=fzf^2-fzzf
     // m=Round( Re(G^2*H^T)/mag(H) )
     // a=1/(G/n +- sqrt( (1/m-1/n)*(G^2-fzzf-G^2/n) ))
-    laguG2.assign(laguG);
-    laguG2.sqr();    //G^2
-    laguH.assign(laguG2);
-    laguH.sub(fzzf); //G^2-fzzf = f'^2/f^2-f''*f/f^2 = laguH
+    laguG2=sqr(laguG);    //G^2
+    laguH=laguG2-fzzf; //G^2-fzzf = f'^2/f^2-f''*f/f^2 = laguH
     //currentWorker->assign(tmp1.re_s, laguG2.re_s);
     //currentWorker->assign(tmp1.im_s, laguG2.im_s);
     int m=1;
@@ -936,21 +932,18 @@ bool LaguerreStep<BASE>::eval(int lg2_degree, MandelMath::complex<BASE> const &f
     // a=1/(G/n +- sqrt( (1/m-1/n)*(H-G^2/n) ))
     // all but last few cycles can be done just in double precision
     //   but the cost of this compared to evaluation of f,f',f'' is negligible
-    laguX.assign(laguG2);
-    laguX.lshift(-lg2_degree); //G^2/n
-    laguX.rsub(laguH); //H-G^2/n
     tmp2.zero(m);
     tmp2.recip();
     tmp2.add_double(-order1); //1/m-1/n
-    laguX.mul(tmp2); //(1/m-1/n)*(H-G^2/n)
-    laguX.sqrt();
+    // TODO: review disassembly of the sqrt call
+    laguX=sqrt((laguH-ldexp(laguG2, -lg2_degree))*tmp2); //sqrt((1/m-1/n)*(H-G^2/n))
     //normally we need to choose +- to maximize mag(G/n+-sqrt...) but that's numerically unstable
-    if (laguX.mulreT_tmp(laguG)->isl0())
+    if (laguX.mulreT(laguG).isl0())
     {
       laguX.chs();
     };
     laguG.lshift(-lg2_degree); //G/n
-    laguX.add(laguG);
+    laguX+=laguG;
     //if 1/n~0: a=1/(0 +- sqrt( (1/m)*(H) )), m can still be 1..max
     //   fine if H!=0:       a=1/( sqrt( (1/m)*(H) )), m can still be 1..max
     //   if H==0: 1/G/(1/n + sqrt( (1/300-1/n)*(-1/n) ))=1/G* -i*sqrt(300*n)
@@ -960,10 +953,10 @@ bool LaguerreStep<BASE>::eval(int lg2_degree, MandelMath::complex<BASE> const &f
     //   if H=0: a=1/0
     //if H=0: a=1/G*m*(1 - i*sqrt(n/m-1))  m~n -> a=n/G;  m~300 -> a=-i/G*sqrt(n*300)
     //        a=1/G*m*n*(1/n - i*sqrt(1/m/n-1/n^2))
-    double X_mag=laguX.getMag_tmp()->toDouble();
-    if (X_mag>=1e-60)
+    MandelMath::number<BASE> const X_mag=laguX.getMag();
+    if (X_mag.toDouble()>=1e-60)
     {
-      laguX.recip_prepared();
+      laguX.recip_prepared(X_mag);
       lagu_valid=true;
     };
     //else
@@ -977,12 +970,10 @@ bool LaguerreStep<BASE>::eval(int lg2_degree, MandelMath::complex<BASE> const &f
     //f=(x-a)^m   f'=m*(x-a)^(m-1)  f/f'=(x-a)/m
     //Newton corrected for multiroot = f/f'*m
     //1/M=1-f''*f/f'^2   x-a=1/(f'/f-f''/f')
-    step.assign(f_z);
-    step.recip();
-    step.mul(f); //f/f'
+    step=recip(f_z)*f; //f/f'
     if (m!=1)
     {
-      step.mul_double(m);
+      step*=double(m);
     };
     newt_valid=true;
   };
@@ -1061,30 +1052,24 @@ bool MandelLoopEvaluator<BASE>::evalg(int period, MandelMath::complex<BASE> cons
   f.assign(c);
   f_c.zero(1, 0);
   f_cc.zero(0, 0);
-  //also using s2
   for (int i=0; i<period; i++)
   {
     //g_cc=2*(g_cc*g + g_c*g_c)
-    f_cc.mul(f);
-    s2.assign(f_c);
-    s2.sqr();
-    f_cc.add(s2);
-    f_cc.lshift(1);
+    f_cc=ldexp(f_cc*f + sqr(f_c), 1);
     //g_c=2*g_c*g+1
-    f_c.mul(f);
-    f_c.lshift(1);
+    f_c=ldexp(f_c*f, 1);
     //g=g^2+c
     f.sqr();
     if (i+1!=period)
     {
-      f_c.re.add_double(1);
-      f.add(c);
+      f_c+=1.0;
+      f+=c;
     };
     double f_mag=f.getMag_double();
     double allmag=f_mag+
                   f_c.getMag_double()+
                   f_cc.getMag_double();
-    if (allmag>1e60)
+    if (allmag>f.sqrtlarge())
       return false;
   }
   return true;
@@ -1117,57 +1102,28 @@ bool MandelLoopEvaluator<BASE>::eval2(int period, MandelMath::complex<BASE> cons
                  f_c.getMag_double()+
                  f_zc.getMag_double()+
                  f_cc.getMag_double();
-    if (m_sum>MandelEvaluator<BASE>::LARGE_FLOAT2)
+    if (m_sum>f.sqrtlarge())
       return false;
 
     //f^2+c -> 2f fc+1 -> 2f fcc+2fc fc
-    //f_cc = 2 * (f_c^2 + f * f_cc)
-    s2.assign(f_c);
-    s2.sqr();
-    f_cc.mul(f);
-    f_cc.add(s2);
-    f_cc.lshift(1);
-
+    f_cc=ldexp(f_cc*f + sqr(f_c), 1);
     //f^2+c -> 2f fz -> 2fc fz+2f fzc
-    //f_zc = 2 * (f_z * f_c + f * f_zc);
-    s2.assign(f_c);
-    s2.mul(f_z);
-    f_zc.mul(f);
-    f_zc.add(s2);
-    f_zc.lshift(1);
-
+    f_zc=ldexp(f_zc*f + f_c*f_z, 1);
     //f^2+c -> 2f fz -> 2fz fz+2f fzz
-    //f_zz = 2 * (f_z^2 + f * f_zz)
-    s2.assign(f_z);
-    s2.sqr();
-    f_zz.mul(f);
-    f_zz.add(s2);
-    f_zz.lshift(1);
-
+    f_zz=ldexp(f_zz*f + sqr(f_z), 1);
     //f^2+c -> 2f fc+1
-    //f_c = 2 * f * f_c + 1
-    f_c.mul(f);
-    f_c.lshift(1);
-    f_c.re.add_double(1);
-
+    f_c=ldexp(f_c*f, 1) + 1.0;
     //f^2+c -> 2f fz
-    //f_z = 2 * f * f_z
-    f_z.mul(f);
-    f_z.lshift(1);
-    f_z_mag.mul(*f.getMag_tmp());
-    f_z_mag.lshift(2); //f_z_mag*=4*mag(f)
+    f_z=ldexp(f_z*f, 1);
+    f_z_mag=ldexp(f_z_mag*f.getMag(), 2);
 
-    //f = f^2 + c
-    f.sqr();
     if (minusZ && i+1==period)
     {
-      s2.assign(c);
-      s2.sub(z);
-      f.add(s2);
-      f_z.re.add_double(-1);
+      f=sqr(f) + (c-z); //f+=c-z instead of f:=f+c-z for better precision
+      f_z-=1.0;
     }
     else
-      f.add(c);
+      f=sqr(f) + c;
   }
   return true;
 }
@@ -1189,41 +1145,19 @@ bool MandelLoopEvaluator<BASE>::eval2_mag(int period, MandelMath::complex<BASE> 
                  f_zz.getMag_double()+
                  f_c.getMag_double()+
                  f_zc.getMag_double();
-    if (m_sum>MandelEvaluator<BASE>::LARGE_FLOAT2)
+    if (m_sum>f.sqrtlarge())
       return false;
 
     //f^2+c -> 2f fz -> 2fc fz+2f fzc
-    //f_zc = 2 * (f_z * f_c + f * f_zc);
-    s2.assign(f_c);
-    s2.mul(f_z);
-    f_zc.mul(f);
-    f_zc.add(s2);
-    f_zc.lshift(1);
-
+    f_zc=ldexp(f_zc*f + f_c*f_z, 1);
     //f^2+c -> 2f fz -> 2fz fz+2f fzz
-    //f_zz = 2 * (f_z^2 + f * f_zz)
-    s2.assign(f_z);
-    s2.sqr();
-    f_zz.mul(f);
-    f_zz.add(s2);
-    f_zz.lshift(1);
-
+    f_zz=ldexp(f_zz*f + sqr(f_z), 1);
     //f^2+c -> 2f fc+1
-    //f_c = 2 * f * f_c + 1
-    f_c.mul(f);
-    f_c.lshift(1);
-    f_c.re.add_double(1);
-
+    f_c=ldexp(f_c*f, 1) + 1.0;
     //f^2+c -> 2f fz
-    //f_z = 2 * f * f_z
-    f_z.mul(f);
-    f_z.lshift(1);
-    f_z_mag.mul(*f.getMag_tmp());
-    f_z_mag.lshift(2); //f_z_mag*=4*mag(f)
-
-    //f = f^2 + c
-    f.sqr();
-    f.add(c);
+    f_z=ldexp(f_z*f, 1);
+    f_z_mag=ldexp(f_z_mag*f.getMag(), 2);
+    f=sqr(f) + c;
   }
   return true;
 }
@@ -1243,30 +1177,21 @@ bool MandelLoopEvaluator<BASE>::eval_zz(int period, MandelMath::complex<BASE> co
     double m_sum=f.getMag_double()+
                  f_z.getMag_double()+
                  f_zz.getMag_double();
-    if (m_sum>MandelEvaluator<BASE>::LARGE_FLOAT2)
+    if (m_sum>f.sqrtlarge())
       return false;
     //f_zz:=2*(f_z*f_z + f*f_zz)
-    f_zz.mul(f);
-    s2.assign(f_z);
-    s2.sqr();
-    f_zz.add(s2);
-    f_zz.lshift(1);
+    f_zz=ldexp(f_zz*f + sqr(f_z), 1);
     //f_z:=2*f*f_z
-    f_z.mul(f);
-    f_z.lshift(1);
-    f_z_minmag.min(*f_z.getMag_tmp());
+    f_z=ldexp(f_z*f, 1);
+    f_z_minmag.min(f_z.getMag());
     //bigger than 3 is common
-    //f:=f^2+c
-    f.sqr();
     if (minusZ && i+1==period)
-    { //f+=c-r instead of f:=f+c-r for better precision
-      s2.assign(c);
-      s2.sub(z);
-      f.add(s2);
-      f_z.re.add_double(-1);
+    {
+      f=sqr(f) + (c-z); //f+=c-z instead of f:=f+c-z for better precision
+      f_z-=1.0;
     }
     else
-      f.add(c);
+      f=sqr(f) + c;
   }
   return true;
 }
@@ -1290,46 +1215,22 @@ bool MandelLoopEvaluator<BASE>::eval2zzc(int period, MandelMath::complex<BASE> c
                  f_zc.getMag_double()+
                  f_cc.getMag_double()+
                  f_zzc.getMag_double();
-    if (m_sum>MandelEvaluator<BASE>::LARGE_FLOAT2)
+    if (m_sum>f.sqrtlarge())
       return false;
     //f_zzc=d/dc 2*(f_z*f_z + f*f_zz)=2*(2*f_z*f_zc + f_c*f_zz+f*f_zzc)
-    f_zzc.mul(f);
-    s2.assign(f_c);
-    s2.mul(f_zz);
-    f_zzc.add(s2);
-    s2.assign(f_z);
-    s2.mul(f_zc);
-    s2.lshift(1);
-    f_zzc.add(s2);
-    f_zzc.lshift(1);
+    f_zzc=ldexp(f_zzc*f + f_c*f_zz + ldexp(f_z*f_zc, 1), 1);
     //f_cc=2 * (f_c^2 + f * f_cc)
-    f_cc.mul(f);
-    s2.assign(f_c);
-    s2.sqr();
-    f_cc.add(s2);
-    f_cc.lshift(1);
+    f_cc=ldexp(f_cc*f + sqr(f_c), 1);
     // f_zc = 2 * (f_z * f_c + f * f_zc);
-    f_zc.mul(f);
-    s2.assign(f_c);
-    s2.mul(f_z);
-    f_zc.add(s2);
-    f_zc.lshift(1);
+    f_zc=ldexp(f_zc*f + f_c*f_z, 1);
     //f_zz:=2*(f_z*f_z + f*f_zz)
-    f_zz.mul(f);
-    s2.assign(f_z);
-    s2.sqr();
-    f_zz.add(s2);
-    f_zz.lshift(1);
+    f_zz=ldexp(f_zz*f + sqr(f_z), 1);
     // f_c = 2 * f * f_c + 1;
-    f_c.mul(f);
-    f_c.lshift(1);
-    f_c.re.add_double(1);
+    f_c=ldexp(f_c*f, 1) + 1.0;
     //f_z:=2*f*f_z
-    f_z.mul(f);
-    f_z.lshift(1);
+    f_z=ldexp(f_z*f, 1);
     //f:=f^2+c
-    f.sqr();
-    f.add(c);
+    f=sqr(f) + c;
   }
   return true;
 }
@@ -1352,7 +1253,7 @@ bool MandelLoopEvaluator<BASE>::eval_multi(int period, MandelMath::complex<BASE>
     double m_sum=f.getMag_double()+
                  f_z.getMag_double()+
                  f_zz.getMag_double();
-    if (m_sum>MandelEvaluator<BASE>::LARGE_FLOAT2)
+    if (m_sum>f.sqrtlarge())
       return false;
     //f_zz:=2*(f_z*f_z + f*f_zz)
     f_zz.mul(f);
@@ -1363,7 +1264,7 @@ bool MandelLoopEvaluator<BASE>::eval_multi(int period, MandelMath::complex<BASE>
     //f_z:=2*f*f_z
     f_z.mul(f);
     f_z.lshift(1);
-    f_z_minmag.min(*f_z.getMag_tmp());
+    f_z_minmag.min(f_z.getMag());
     //f:=f^2+c
     f.sqr();
     f.add(c);
@@ -1450,7 +1351,7 @@ bool MandelLoopEvaluator<BASE>::eval_multi(int period, MandelMath::complex<BASE>
   //TODO: if f_z_err=0 & f_zz==0 then expected ~ eps^(1/3) but we just use infinity
   //f_z ~ 1+f_zz*deltaz -> deltaz=(f_z-1)/f_zz
   double expected=(std::abs(f_z_err)+c.re.eps2()/4)/f_zz_mag;
-  double expected_more=c.re.eps2()/f_z.getDist1_tmp()->toDouble();
+  double expected_more=c.re.eps2()/f_z.getDist1().toDouble();
   if (expected_more*expected_more>c.re.eps2())
     expected_more=std::sqrt(c.re.eps2());
   if (expected_more>expected/10+5*c.re.eps2())
@@ -1537,13 +1438,13 @@ bool MandelLoopEvaluator<BASE>::eval_near0(int period, MandelMath::complex<BASE>
   f_z.zero(1, 0); //are they even needed?
   f_zz.zero(0, 0);
   near0iter_1=1;
-  f_z_minmag.assign(*c.getMag_tmp());
+  f_z_minmag.assign(c.getMag());
   for (int i=0; i<period-1; i++)
   {
     double m_sum=f.getMag_double()+
                  f_z.getMag_double()+
                  f_zz.getMag_double();
-    if (m_sum>MandelEvaluator<BASE>::LARGE_FLOAT2)
+    if (m_sum>f.sqrtlarge())
       return false;
     //f_zz:=2*(f_z*f_z + f*f_zz)
     f_zz.mul(f);
@@ -1560,11 +1461,11 @@ bool MandelLoopEvaluator<BASE>::eval_near0(int period, MandelMath::complex<BASE>
 
     //if (i+2<=period)
     {
-      const MandelMath::number<BASE> *fmag=f.getMag_tmp();
-      if (!f_z_minmag.isle(*fmag)) //fmag<near0mag
+      MandelMath::number<BASE> const fmag=f.getMag();
+      if (!f_z_minmag.isle(fmag)) //fmag<near0mag
       {
         near0iter_1=i+2;
-        f_z_minmag.assign(*fmag);
+        f_z_minmag.assign(fmag);
       };
     };
   }
@@ -1597,7 +1498,7 @@ bool MandelLoopEvaluator<BASE>::eval_ext_mandMJ(double mandel, MandelMath::compl
     double allmag=f_mag+
                   f_c.getMag_double()+
                   f_cc.getMag_double();
-    if (allmag>1e130) //goes pretty high
+    if (allmag>f.sqrtlarge()) //goes pretty high
       return false;
   }
   return true;
@@ -1635,6 +1536,12 @@ MandelEvaluatorThread::MandelEvaluatorThread(MandelEvaluator<MandelMath::real642
 
 }
 
+MandelEvaluatorThread::MandelEvaluatorThread(MandelEvaluator<MandelMath::dd_heap> *owner):
+  QThread(nullptr), owner(owner)
+{
+
+}
+
 MandelEvaluatorThread::MandelEvaluatorThread(MandelEvaluator<MandelMath::number_any> *owner):
   QThread(nullptr), owner(owner)
 {
@@ -1666,7 +1573,6 @@ int MandelEvaluatorThread::syncLaguerre()
   return MandelMath::visit([](auto &owner) {
     if constexpr (!std::is_same_v<std::decay_t<decltype(owner)>, std::nullptr_t>)
     {
-      MandelMath::number<typename std::decay_t<decltype(*owner)>::BASE>::set_spad(owner->ntype, &owner->tmp);
       return owner->laguerre(owner->currentParams.laguerre.period, owner->currentParams.laguerre.c, &owner->laguerreData.r, owner->currentParams.laguerre.fastHoming);
     }
     else
@@ -1709,7 +1615,6 @@ MandelEvaluator<BASE>::MandelEvaluator(MandelMath::NumberType ntype, bool dontRu
   busyEpoch(0), thread(this),
   ntype(ntype),
   totalNewtonIterations(0),
-  tmp(ntype),
   currentParams(ntype),
   laguerreData(&laguerreStore, ntype),
   mandelData(&mandelDataStore, ntype),
@@ -1817,7 +1722,6 @@ void MandelEvaluator::simple_multi(MandelMath::multiprec *cr, MandelMath::multip
 template <class WORKER_MULTI>
 void MandelEvaluator<WORKER_MULTI>::syncMandelSplit()
 {
-  MandelMath::number<BASE>::set_spad(ntype, &tmp);
   //still called from paintOrbit()
   evaluateMandel();
   pointsComputed++;
@@ -1826,7 +1730,6 @@ void MandelEvaluator<WORKER_MULTI>::syncMandelSplit()
 template <class WORKER_MULTI>
 void MandelEvaluator<WORKER_MULTI>::syncJuliaSplit()
 {
-  MandelMath::number<BASE>::set_spad(ntype, &tmp);
   //still called from paintOrbit()
   evaluateJulia();
   pointsComputed++;
@@ -1850,7 +1753,6 @@ void MandelEvaluator::doCompute()
 template <typename BASE>
 void MandelEvaluator<BASE>::doMandelThreadedSplit(int epoch)
 {
-  MandelMath::number<BASE>::set_spad(ntype, &tmp);
   busyEpoch=epoch;
   timeThreaded.start();
   threaded_errorcode=0;
@@ -1891,7 +1793,6 @@ void MandelEvaluator<BASE>::doMandelThreadedSplit(int epoch)
 template <typename BASE>
 void MandelEvaluator<BASE>::doJuliaThreadedSplit(int epoch)
 {
-  MandelMath::number<BASE>::set_spad(ntype, &tmp);
   busyEpoch=epoch;
   timeThreaded.start();
   threaded_errorcode=0;
@@ -1932,7 +1833,6 @@ void MandelEvaluator<BASE>::doJuliaThreadedSplit(int epoch)
 template <typename BASE>
 void MandelEvaluator<BASE>::doLaguerreThreadedSplit(int epoch)
 {
-  MandelMath::number<BASE>::set_spad(ntype, &tmp);
   busyEpoch=epoch;
   timeThreaded.start();
   threaded_errorcode=0;
@@ -2049,20 +1949,22 @@ void MandelEvaluator<BASE>::Bulb::findBulbBase(int period2, MandelMath::complex<
     }
     double g_mag=loope->f.getMag_double();
     //we know multiplicity==2: first twice the newton's step, then solve for f'=0 using x:=x-f'/f''
-    double g_c_mag=loope->f_c.getMag_tmp()->toDouble();
+    MandelMath::number<BASE> const g_c_mag_n=loope->f_c.getMag();
+    double g_c_mag=g_c_mag_n.toDouble();
     double g_cc_mag;
     if (g_mag>c.re.eps2()*1000)
     { //xc=xc-2*g/g_c
       g_cc_mag=1;
-      loope->f_c.recip_prepared();
+      loope->f_c.recip_prepared(g_c_mag_n);
       loope->f.mul(loope->f_c);
       loope->f.lshift(1);
       res_xc.sub(loope->f);
     }
     else
     { //xc=xc-g_c/g_cc
-      g_cc_mag=loope->f_cc.getMag_tmp()->toDouble();
-      loope->f_cc.recip_prepared();
+      MandelMath::number<BASE> const g_cc_mag_n=loope->f_cc.getMag();
+      g_cc_mag=g_cc_mag_n.toDouble();
+      loope->f_cc.recip_prepared(g_cc_mag_n);
       loope->f_c.mul(loope->f_cc);
       res_xc.sub(loope->f_c);
     }
@@ -2485,7 +2387,7 @@ void MandelEvaluator<BASE>::Bulb::findBulbBase(int period2, MandelMath::complex<
     deltar.sqr();
     deltar.add(t2); //b^2-4ac
     deltar.sqrt();
-    if (deltar.mulreT_tmp(t1)->toDouble()<0)
+    if (deltar.mulreT(t1).toDouble()<0)
     {
       deltar.chs();
     };
@@ -2514,8 +2416,9 @@ void MandelEvaluator<BASE>::Bulb::findBulbBase(int period2, MandelMath::complex<
     deltar.assign(deltac); // fc/fz
     deltac.mul(loope->f_zz);
     deltac.rsub(loope->f_zc);
+    MandelMath::number<BASE> const deltac_mag=deltac.getMag();
     { //check fzc-fc/fz*fzz before .recip()
-      double mag=deltac.getMag_tmp()->toDouble();
+      double mag=deltac_mag.toDouble();
       if (mag<1e-8)
       {
         nop(); //if period is a multiple of real period, in first cycle we get f_zz~0, f_zc~0 -> deltac~infinity
@@ -2525,7 +2428,7 @@ void MandelEvaluator<BASE>::Bulb::findBulbBase(int period2, MandelMath::complex<
       else if (mag<0.1)
         nop();
     }
-    deltac.recip_prepared(); // 1/(fzc-fc/fz*fzz)
+    deltac.recip_prepared(deltac_mag); // 1/(fzc-fc/fz*fzz)
     t3.assign(loope->f_z);
     t3.sub(target_f_z);
     t3.re.add_double(1); //(fz-target_fz+1)
@@ -2816,14 +2719,14 @@ solve [0=0+d*C+e*R*C+f*C^2/2+g*R^3/6+h*R^2*C/2, -1=e*C+g*R^2/2+h*R*C, -124.79612
         //there has to be a better way to tell if this was a refinement, or a jump to previous bulb/atom
         //easy: 2nd time always quit
         t3.assign(loope->first_multi);
-        if (abs(t3.getMag1_tmp()->toDouble())>1e-2) //more like sqrt(fz_error)/multi
+        if (abs(t3.getMag1().toDouble())>1e-2) //more like sqrt(fz_error)/multi
         {
           res_rb.assign(prev_rb);
           //TODO: baseZC, baseCC are wrong as well
           break;
         };
         t3.pow_uint(loope->multi);
-        double fz1_error=t3.getDist1_tmp()->toDouble();
+        double fz1_error=t3.getDist1().toDouble();
         bool primary=did_reduce_period;
         if ((fz1_error>2.42*fz_error) != primary) //bulb p=22032 xc=-0.1744832996+i0.6619272216 mult=2 res_c=-0.1744832974710202+i0.6619272205853156 -> fz_error=2.48e-11,1.78e-11 fz1_error=2.5840570306057777e-11=1.0418,1.4504 fz_error
           nop(); //happens rarely, still tuning the constant   2.42 at c=-0.56221793769583428+I*0.6768911909908297 p=4680->1560
@@ -4087,7 +3990,7 @@ int MandelEvaluator<BASE>::laguerre(int period, MandelMath::complex<BASE> const 
       newt.laguX.mul(newt_tmp2); //(1/m-1/n)*(H-G^2/n)
       newt.laguX.sqrt();
       //normally we need to choose +- to maximize mag(G/n+-sqrt...) but that's numerically unstable
-      if (newt.laguX.mulreT_tmp(newt.laguG)->isl0())
+      if (newt.laguX.mulreT(newt.laguG).isl0())
       {
         newt.laguX.chs();
       };
@@ -4102,10 +4005,10 @@ int MandelEvaluator<BASE>::laguerre(int period, MandelMath::complex<BASE> const 
       //   if H=0: a=1/0
       //if H=0: a=1/G*m*(1 - i*sqrt(n/m-1))  m~n -> a=n/G;  m~300 -> a=-i/G*sqrt(n*300)
       //        a=1/G*m*n*(1/n - i*sqrt(1/m/n-1/n^2))
-      double X_mag=newt.laguX.getMag_tmp()->toDouble();
-      if (X_mag>=1e-60)
+      MandelMath::number<BASE> const X_mag=newt.laguX.getMag();
+      if (X_mag.toDouble()>=1e-60)
       {
-        newt.laguX.recip_prepared();
+        newt.laguX.recip_prepared(X_mag);
         lagu_valid=true;
       };
       //else
@@ -4256,7 +4159,7 @@ int MandelEvaluator<BASE>::periodCheck(int period/*must =eval.lookper_lastGuess*
   this->interior.fz.assign(newtres.fz_r);
   interior.fz.re.add_double(1);
   double fz_log=std::log(interior.fz.getMag_double())/2;
-  double ori_over1=interior.fz.getMag1_tmp()->toDouble(); //could use (1+r)^2+i^2-1=2*r+r^2+i^2
+  double ori_over1=interior.fz.getMag1().toDouble(); //could use (1+r)^2+i^2-1=2*r+r^2+i^2
   //double fz_mag=newtres.fz_r.getMag_double();
   if (ori_over1>0.01)//often we are at long root long period when correct is short/short (inner edge of a bulb) 0.002) //fz_mag>0 && fz_mag*fz_mag>25*currentWorker->eps2())
     return -1;
@@ -4389,8 +4292,8 @@ int MandelEvaluator<BASE>::periodCheck(int period/*must =eval.lookper_lastGuess*
       //f_mag could hardly be >4 since it's tested in Newton (as well as fz_mag, BTW)
       newtres.fz_r.mul(newt.f_r);
       newtres.fz_r.lshift(1);
-      eval_fz_mag.assign(*newtres.fz_r.getMag_tmp());
-      if (eval_fz_mag.toDouble()>LARGE_FLOAT2)
+      eval_fz_mag.assign(newtres.fz_r.getMag());
+      if (eval_fz_mag.toDouble()>eval_fz_mag.sqrtlarge())
       {
         dbgPoint();
         return -1; //so is it checked or not
@@ -4444,7 +4347,7 @@ int MandelEvaluator<BASE>::periodCheck(int period/*must =eval.lookper_lastGuess*
       };
       this->interior.fz.assign(newtres.fz_r);
       interior.fz.re.add_double(1);
-      double short_over1=interior.fz.getMag1_tmp()->toDouble();
+      double short_over1=interior.fz.getMag1().toDouble();
       //bool fz_r_mag_over1=;//bulb.bulbe.f_z.mag_cmp_1()>0);
       if (short_over1>0 && short_over1*short_over1>25*c.eps2())
       { //central surely repulsive
@@ -4561,7 +4464,7 @@ int MandelEvaluator<BASE>::periodCheck(int period/*must =eval.lookper_lastGuess*
       bulb.t3.add(loope.sumA);
       laguerre(period, c, &bulb.t3, true);
       newtres.fz_r.re.add_double(1);
-      double outer_over1=newtres.fz_r.getMag1_tmp()->toDouble();
+      double outer_over1=newtres.fz_r.getMag1().toDouble();
       bool big_enough1=outer_over1*outer_over1>25*c.eps2();
       bool big_enough2=outer_over1*outer_over1>newtres.accy_multiplier*c.eps2();
       if (big_enough1!=big_enough2)
@@ -4687,7 +4590,7 @@ int MandelEvaluator<BASE>::periodCheck(int period/*must =eval.lookper_lastGuess*
     newtres.fz_r.mul(&newt.f_r);
     newtres.fz_r.lshift(1);
     eval.fz_mag1.assign(newtres.fz_r.getMag1_tmp());
-    if (currentWorker->toDouble(eval.fz_mag1.ptr)>LARGE_FLOAT2)
+    if (currentWorker->toDouble(eval.fz_mag1.ptr)>eval.fz_mag1.sqrtlarge())
       return -1; //so is it checked or not
     {
       double re=fre*f_e_re-fim*f_e_im; //f_e=f_r*f_e
@@ -4810,7 +4713,7 @@ int MandelEvaluator<BASE>::estimateInterior(int period, MandelMath::complex<BASE
   interior.inte.mul(loope.f_z); //(fz-1)/(...)
   interior.inte.mul(newt.tmp2); //(fz-1)(|fz|^2-1)/(...)
 #endif
-  interior.inte_abs.assign(*interior.inte.getMag_tmp());
+  interior.inte_abs.assign(interior.inte.getMag());
   interior.inte_abs.sqrt();
   if (!newt.tmp2.isle0())
   {
@@ -4828,27 +4731,23 @@ void MandelEvaluator<BASE>::mandel_until_bailout()
     if (f_mag>1e8)
       return;
     //fc_c:=2*f*fc_c+1
-    mandelData.fc_c.mul(mandelData.f);
-    mandelData.fc_c.lshift(1);
-    mandelData.fc_c.re.add_double(1);
+    mandelData.fc_c=ldexp(mandelData.fc_c*mandelData.f, 1) + 1.0;
     double fc_c_mag=mandelData.fc_c.getMag_double();
-    if (fc_c_mag>LARGE_FLOAT2)
+    if (fc_c_mag>mandelData.fc_c.sqrtlarge())
     {
       mandelData.store->rstate=MandelPointStore::ResultState::stBoundary;
       return;
     };
     //fz_c_mag:=4*fz_c_mag*f.mag
-    mandelData.fz_c_mag.mul(*mandelData.f.getMag_tmp());
-    mandelData.fz_c_mag.lshift(2);
+    mandelData.fz_c_mag=ldexp(mandelData.fz_c_mag*mandelData.f.getMag(), 2);
     double fz_c_mag=mandelData.fz_c_mag.toDouble();
-    if (fz_c_mag>LARGE_FLOAT2)
+    if (fz_c_mag>mandelData.fz_c_mag.sqrtlarge())
     {
       mandelData.store->rstate=MandelPointStore::ResultState::stDiverge;
       return;
     };
     //f:=f^2+c
-    mandelData.f.sqr();
-    mandelData.f.add(currentParams.mandel.c);
+    mandelData.f=sqr(mandelData.f) + currentParams.mandel.c;
     mandelData.store->iter++;
   };
 }
@@ -4862,29 +4761,25 @@ void MandelEvaluator<BASE>::julia_until_bailout()
     if (f_mag>1e8)
       return;
     //fz_z:=2*f*fz_z
-    juliaData.fz_z.mul(juliaData.f);
-    juliaData.fz_z.lshift(1);
-    //juliaData.fz_z.re.add_double(1);
+    juliaData.fz_z=ldexp(juliaData.fz_z*juliaData.f, 1);
     double fz_z_mag=juliaData.fz_z.getMag_double();
-    if (fz_z_mag>LARGE_FLOAT2)
+    if (fz_z_mag>juliaData.fz_z.sqrtlarge())
     {
       juliaData.store->rstate=JuliaPointStore::ResultState::stBoundary;
       return;
     };
     //fz_c_mag:=4*fz_c_mag*f.mag
-    juliaData.fz_z_mag.mul(*juliaData.f.getMag_tmp());
-    juliaData.fz_z_mag.lshift(2);
+    MandelMath::number<BASE> const f_mag_n=juliaData.f.getMag();
+    juliaData.fz_z_mag=ldexp(juliaData.fz_z_mag*f_mag_n, 2);
     double fz_c_mag=juliaData.fz_z_mag.toDouble();
-    if (fz_c_mag>LARGE_FLOAT2)
+    if (fz_c_mag>juliaData.fz_z_mag.sqrtlarge())
     {
       juliaData.store->rstate=JuliaPointStore::ResultState::stDiverge;
       return;
     };
-    juliaData.since0fzm.mul(*juliaData.f.getMag_tmp());
-    juliaData.since0fzm.lshift(2);
+    juliaData.since0fzm=ldexp(juliaData.since0fzm*f_mag_n, 2);
     //f:=f^2+c
-    juliaData.f.sqr();
-    juliaData.f.add(currentParams.julia.c);
+    juliaData.f=sqr(juliaData.f) + currentParams.julia.c;
     juliaData.nearmr.tap(currentParams.julia, &newt.newtX);
     juliaData.store->iter++;
     if (juliaData.store->near0iter_1==juliaData.store->iter)
@@ -4935,15 +4830,14 @@ void MandelEvaluator<BASE>::evaluateMandel()
         mandelData.lookper_startf.assign(mandelData.f);
         mandelData.lookper_nearr.assign(mandelData.f);
         if (mandelData.store->iter<=1)
-          mandelData.lookper_nearr_dist.assign(*mandelData.f.getMag_tmp());
+          mandelData.lookper_nearr_dist.assign(mandelData.f.getMag());
         else
           mandelData.store->lookper_nearr_dist_touched=false;//currentWorker->assign(&currentData.lookper_nearr_dist, f.dist2_tmp(&c));
         mandelData.store->lookper_lastGuess=0;
         mandelData.lookper_totalFzmag.zero(1.0);
       };
     }
-    const MandelMath::number<BASE> *f_mag1=mandelData.f.getMag_tmp();
-    if (!f_mag1->isle(currentParams.mandel.bailout)) //exactly 4..not yet
+    if (!mandelData.f.getMag().isle(currentParams.mandel.bailout)) //exactly 4 -> not yet
     {
       mandelData.store->rstate=MandelPointStore::ResultState::stOutside;
       //theory says the relative error in estimate is less than 3/bailout for large bailout
@@ -5032,7 +4926,7 @@ void MandelEvaluator<BASE>::evaluateMandel()
       break;
     };
     double fc_c_mag=mandelData.fc_c.getMag_double();
-    if (fc_c_mag>1e57)
+    if (fc_c_mag>mandelData.fc_c.sqrtlarge())
     {
       mandelData.store->rstate=MandelPointStore::ResultState::stBoundary;
       mandelData.store->exterior_avoids=0;
@@ -5040,7 +4934,7 @@ void MandelEvaluator<BASE>::evaluateMandel()
       break;
     };
     double fz_c_mag=mandelData.fz_c_mag.toDouble();
-    if (fz_c_mag>1e60)
+    if (fz_c_mag>mandelData.fz_c_mag.sqrtlarge())
     {
       mandelData.store->rstate=MandelPointStore::ResultState::stDiverge;
       mandelData.store->exterior_avoids=0;
@@ -5049,56 +4943,47 @@ void MandelEvaluator<BASE>::evaluateMandel()
     };
     //TODO: similar to eval_until_bailout
     //fc_c:=2*f*fc_c+1
-    mandelData.fc_c.mul(mandelData.f);
-    mandelData.fc_c.lshift(1);
-    mandelData.fc_c.re.add_double(1);
+    mandelData.fc_c=ldexp(mandelData.fc_c*mandelData.f, 1) + 1.0;
     /* TODO: copy test here from above?
     fc_c_mag=currentWorker->toDouble(fc_c.getMagTmp());
-    if (fc_c_mag>LARGE_FLOAT2)
+    if (fc_c_mag>fc_c.sqrtlarge())
     {
       currentData.state=MandelPoint::State::stBoundary;
       break;
     };*/
-    //const MandelMath::number<BASE> *f_mag2=currentData.f.getMag_tmp(&tmp);
-    tmp.tmp2.assign(*mandelData.f.getMag_tmp());
-    tmp.tmp2.lshift(2);
     //f'=2*f'*f, f'_mag=4*f'_mag*f_mag
-    mandelData.fz_c_mag.mul(tmp.tmp2); //TODO: can use f_mag from above? would need storage, tmp can't survive this long
-    //currentData.fz_c_mag.lshift(2);
-    mandelData.sure_fz_mag.mul(tmp.tmp2); //TODO: can use f_mag from above? would need storage, tmp can't survive this long
-    //currentData.sure_fz_mag.lshift(2);
-    mandelData.lookper_totalFzmag.mul(tmp.tmp2);
-    //currentData.lookper_totalFzmag.lshift(2);
+    MandelMath::number<BASE> const f_mag4=ldexp(mandelData.f.getMag(), 2);
+    mandelData.fz_c_mag*=f_mag4;
+    mandelData.sure_fz_mag*=f_mag4;
+    mandelData.lookper_totalFzmag*=f_mag4;
     //f:=f^2+c
-    mandelData.f.sqr();
-    mandelData.f.add(currentParams.mandel.c);
-    //currentData.iter++;
+    mandelData.f=sqr(mandelData.f) + currentParams.mandel.c;
 
     //from here, iter should be iter+1
 
-    const MandelMath::number<BASE> *f_mag3=mandelData.f.getMag_tmp();
-    if (!mandelData.near0m.isle(*f_mag3)) //f_mag<near0m
+    MandelMath::number<BASE> const f_mag3=mandelData.f.getMag();
+    if (!mandelData.near0m.isle(f_mag3)) //f_mag<near0m
     {
       mandelData.store->near0iter_1=mandelData.store->iter+2;
-      mandelData.near0m.assign(*f_mag3);
+      mandelData.near0m.assign(f_mag3);
       mandelData.sure_fz_mag.zero(1);
     };
-    const MandelMath::number<BASE> *f_distfirst=mandelData.f.dist2_tmp(currentParams.mandel.first_z);
-    if (!mandelData.nearzm.isle(*f_distfirst))
+    MandelMath::number<BASE> const f_distfirst=mandelData.f.dist2(currentParams.mandel.first_z);
+    if (!mandelData.nearzm.isle(f_distfirst))
     {
       mandelData.store->nearziter_0=mandelData.store->iter+1;
-      mandelData.nearzm.assign(*f_distfirst);
+      mandelData.nearzm.assign(f_distfirst);
     };
 
     //lookper_nearr = "near(est) to lookper_startf"
-    const MandelMath::number<BASE> *lpdiff=mandelData.lookper_startf.dist2_tmp(mandelData.f);
+    MandelMath::number<BASE> const lpdiff=mandelData.lookper_startf.dist2(mandelData.f);
     int new_guess_now_=0; //0..not, 1..maybe, 2..exact match
-    switch (MandelMath::strong_ordering_cast(lpdiff->compare(mandelData.lookper_nearr_dist))) //|f-r|<best
+    switch (MandelMath::strong_ordering_cast(lpdiff.compare(mandelData.lookper_nearr_dist))) //|f-r|<best
     {
       case MandelMath::less:
       {
         mandelData.lookper_nearr.assign(mandelData.f);
-        mandelData.lookper_nearr_dist.assign(*lpdiff);
+        mandelData.lookper_nearr_dist.assign(lpdiff);
         mandelData.store->lookper_nearr_dist_touched=false;
         mandelData.store->lookper_prevGuess=mandelData.store->lookper_lastGuess;
         mandelData.store->lookper_lastGuess=(mandelData.store->iter+1-mandelData.store->lookper_startiter);
@@ -5117,7 +5002,7 @@ void MandelEvaluator<BASE>::evaluateMandel()
           mandelData.store->lookper_lastGuess=next_guess;
           new_guess_now_=2;
         }
-        else if (lpdiff->is0())
+        else if (lpdiff.is0())
         { //cycle from startf
           int next_guess=MandelMath::gcd(mandelData.store->iter+1-mandelData.store->lookper_startiter, mandelData.store->nearziter_0);
           if (next_guess>mandelData.store->lookper_lastGuess)
@@ -5130,7 +5015,7 @@ void MandelEvaluator<BASE>::evaluateMandel()
         else if (!mandelData.store->lookper_nearr_dist_touched) //we need to stop increasing lastGuess and restart search
         {                                                   //and also retest period once after new lookper_start
           mandelData.lookper_nearr.assign(mandelData.f);
-          mandelData.lookper_nearr_dist.assign(*lpdiff);
+          mandelData.lookper_nearr_dist.assign(lpdiff);
           mandelData.store->lookper_nearr_dist_touched=true;
           mandelData.store->lookper_prevGuess=mandelData.store->lookper_lastGuess;
           mandelData.store->lookper_lastGuess=(mandelData.store->iter+1-mandelData.store->lookper_startiter);
@@ -5323,20 +5208,13 @@ void MandelEvaluator<BASE>::evaluateJulia()
       //juliaData.nearmrm.assign(*newt.newtX.dist2_tmp(&currentParams.julia.first_z, &tmp));
       //juliaData.nearmrm.zero(0);
       //juliaData.nearmrm.assign(*currentParams.julia.first_z.getMag_tmp(&tmp));
-      juliaData.nearmrm.assign(*currentParams.julia.c.dist2_tmp(currentParams.julia.first_z));
-      /*const MandelMath::number<BASE> *distm=newt.newtX.dist2_tmp(&currentParams.julia.first_z, &tmp);
-      if (distm->isle(juliaData.nearmrm))
-      {
-        juliaData.nearmrm.assign(*distm);
-        juliaData.store->nearmriter=1;
-      };*/
+      juliaData.nearmrm.assign(currentParams.julia.c.dist2(currentParams.julia.first_z));
       juliaData.nearmr_f.assign(currentParams.julia.first_z);
       juliaData.nearmr_fz.assign(currentParams.julia.alpha);//zero(1, 0);
       juliaData.store->nearmriter=currentParams.julia.period; //ideally 0 but need to avoid discontinuity at r1
       juliaData.store->nearmr_difficult=false;
     };
-    const MandelMath::number<BASE> *f_mag1=juliaData.f.getMag_tmp();
-    if (!f_mag1->isle(currentParams.julia.bailout))
+    if (!juliaData.f.getMag().isle(currentParams.julia.bailout))
     {
       juliaData.store->rstate=JuliaPointStore::ResultState::stOutside;
       //theory says the relative error in estimate is less than 3/bailout for large bailout
@@ -5552,68 +5430,54 @@ void MandelEvaluator<BASE>::evaluateJulia()
         //juliaData.store->exterior_avoids=juliaData.store->exterior_avoids/exterior_avoids-1;
 #endif
       }
-      break;
+      break; // reached bailout, done
     };
     //fzz=2*(f*fzz+fz^2)
-    juliaData.fzz_z.mul(juliaData.f);
-    eval.fz_r.assign(juliaData.fz_z);
-    eval.fz_r.sqr();
-    juliaData.fzz_z.add(eval.fz_r);
-    juliaData.fzz_z.lshift(1);
+    eval.fz_r=sqr(juliaData.fz_z);
+    juliaData.fzz_z=ldexp(juliaData.fzz_z*juliaData.f + eval.fz_r, 1);
 
     double fz_z_mag1=juliaData.fz_z.getMag_double();
-    if (fz_z_mag1>1e57)
+    if (fz_z_mag1>juliaData.fz_z.sqrtlarge())
     {
       juliaData.store->rstate=JuliaPointStore::ResultState::stBoundary;
       juliaData.store->exterior.zero(0);
       break;
     };
     double fz_z_mag2=juliaData.fz_z_mag.toDouble();
-    if (fz_z_mag2>1e60)
+    if (fz_z_mag2>juliaData.fz_z_mag.sqrtlarge())
     {
       juliaData.store->rstate=JuliaPointStore::ResultState::stDiverge;
       juliaData.store->exterior.zero(0);
       break;
     };
     //fz_z:=2*f*fz_z
-    juliaData.fz_z.mul(juliaData.f);
-    juliaData.fz_z.lshift(1);
-    //juliaData.fz_z.re.add_double(1);
+    juliaData.fz_z=ldexp(juliaData.fz_z*juliaData.f, 1);
     /* TODO: copy test here from above?
     fc_c_mag=currentWorker->toDouble(fc_c.getMagTmp());
-    if (fc_c_mag>LARGE_FLOAT2)
+    if (fc_c_mag>fc_c.sqrtlarge())
     {
       currentData.state=MandelPoint::State::stBoundary;
       break;
     };*/
-    //const MandelMath::number<BASE> *f_mag2=currentData.f.getMag_tmp(&tmp);
-    tmp.tmp2.assign(*juliaData.f.getMag_tmp());
-    tmp.tmp2.lshift(2);
     //f'=2*f'*f, f'_mag=4*f'_mag*f_mag
-    juliaData.fz_z_mag.mul(tmp.tmp2);
-    juliaData.since0fzm.mul(tmp.tmp2);
+    MandelMath::number<BASE> const f_mag4=ldexp(juliaData.f.getMag(), 2);
+    juliaData.fz_z_mag*=f_mag4;
+    juliaData.since0fzm*=f_mag4;
     /*if (juliaData.biggest_fzm.isle(juliaData.fz_z_mag))
     {
       juliaData.biggest_fzm.assign(juliaData.fz_z_mag);
       juliaData.store->bigfzm_iter=juliaData.store->iter;
     }*/
-    //currentData.fz_c_mag.lshift(2);
-    juliaData.lookper_fz.mul(juliaData.f);
-    juliaData.lookper_fz.lshift(1);
-    //currentData.lookper_totalFzmag.lshift(2);
+    juliaData.lookper_fz=ldexp(juliaData.lookper_fz*juliaData.f, 1);
     //f:=f^2+c
-    juliaData.f.sqr();
-    juliaData.f.add(currentParams.julia.c);
-    //currentData.iter++;
+    juliaData.f=sqr(juliaData.f) + currentParams.julia.c;
 
     //from here, iter should be iter+1
 
     //after test for near0 juliaData.nearmr.tap(currentParams.julia, &newt.newtX, &tmp);
 
     //find iter where f'/f'' is biggest
-    bulb.t1.re.assign(*juliaData.fzz_z.getMag_tmp());
-    bulb.t1.re.recip();
-    bulb.t1.re.mul(juliaData.fz_z_mag);
+    bulb.t1.re=recip(juliaData.fzz_z.getMag())*juliaData.fz_z_mag;
     if (juliaData.bigfzfzzm.isle(bulb.t1.re))
     {
       juliaData.bigfzfzzm.assign(bulb.t1.re);
@@ -5621,26 +5485,21 @@ void MandelEvaluator<BASE>::evaluateJulia()
     };
 
     //find cumulative shrink factor S*=1+f_z^2/(f*f_zz)
-    bulb.t1.assign(juliaData.fzz_z);
-    bulb.t1.mul(juliaData.f);
-    bulb.t1.recip();
-    bulb.t1.mul(juliaData.fz_z);
-    bulb.t1.mul(juliaData.fz_z);
-    bulb.t1.re.add_double(1);
-    juliaData.shrinkfactor.mul(bulb.t1);
+    bulb.t1=recip(juliaData.fzz_z*juliaData.f)*sqr(juliaData.fz_z) + 1.0;
+    juliaData.shrinkfactor*=bulb.t1;
 
-    int need_reset_check=0; //1..check and reset; 2..reset
+    int need_reset_check=0; //1..check done or reset; 2..reset
     if (juliaData.store->near0iter_1==juliaData.store->iter+1)
     {
       need_reset_check=2; //TODO: finding nearciter_0 instead of near0iter_1 could make things easier
       juliaData.since0fzm.zero(1);
     };
 
-    const MandelMath::number<BASE> *f_mag3=juliaData.f.getMag_tmp();
-    if (!juliaData.near0m.isle(*f_mag3)) //f.mag<near0.mag
+    MandelMath::number<BASE> const f_mag3=juliaData.f.getMag();
+    if (!juliaData.near0m.isle(f_mag3)) //f.mag<near0.mag
     {
       juliaData.store->near0iter_1=juliaData.store->iter+2;
-      juliaData.near0m.assign(*f_mag3);
+      juliaData.near0m.assign(f_mag3);
       juliaData.near0fzm.assign(juliaData.fz_z_mag);
       juliaData.since0fzm.zero(1); //next iteration really
       //need_reset_check=2;
@@ -5652,11 +5511,11 @@ void MandelEvaluator<BASE>::evaluateJulia()
 
     juliaData.nearmr.tap(currentParams.julia, &newt.newtX);
 
-    const MandelMath::number<BASE> *f_distfirst=juliaData.f.dist2_tmp(currentParams.julia.first_z);
-    if (!juliaData.nearzm.isle(*f_distfirst))
+    MandelMath::number<BASE> const f_distfirst=juliaData.f.dist2(currentParams.julia.first_z);
+    if (!juliaData.nearzm.isle(f_distfirst))
     {
       juliaData.store->nearziter_0=juliaData.store->iter+1;
-      juliaData.nearzm.assign(*f_distfirst);
+      juliaData.nearzm.assign(f_distfirst);
     };
 
     if (need_reset_check==1)
@@ -5682,13 +5541,13 @@ void MandelEvaluator<BASE>::evaluateJulia()
     {
       bulb.t1.assign(juliaData.lookper_fz);
       bulb.t1.sub(currentParams.julia.alpha);
-      double safety=std::sqrt(bulb.t1.getMag_double())/-currentParams.julia.alpha.getMag1_tmp()->toDouble(); // |fz-alpha|/(1-|alpha|)
+      double safety=std::sqrt(bulb.t1.getMag_double())/-currentParams.julia.alpha.getMag1().toDouble(); // |fz-alpha|/(1-|alpha|)
       if (safety>1.0) //1.0 seems enough //0.5 seems enough
         need_reset_check=2;
     };
 
     if (need_reset_check==1)
-      {
+      { //done? how? this if() ends with break;
         juliaData.store->rstate=JuliaPointStore::ResultState::stPeriod2;
         loope.f.assign(juliaData.f);
         loope.f_z.assign(juliaData.fz_z);
@@ -5703,6 +5562,7 @@ void MandelEvaluator<BASE>::evaluateJulia()
            dbgPoint(); //need to advance juliaData.f,fz,fzz too
         if (!loope.eval_zz(need_iters, currentParams.julia.c, newt.newtX, false, false))
         {
+          juliaData.store->rstate=JuliaPointStore::ResultState::stPeriodBoundary;
           interior.inte.zero(0, 0);
           interior.inte_abs.zero(0);
         }
@@ -5795,6 +5655,7 @@ void MandelEvaluator<BASE>::evaluateJulia()
           MandelMath::complex<BASE> &root=interior.fz;
           root.assign(currentParams.julia.root);
           int didcycles=0;
+          // iterate f and r in parallel while... doing something... until w2 is small
           for (;didcycles<5*currentParams.julia.period;)
           {
             recipr.assign(root);
@@ -5835,12 +5696,21 @@ void MandelEvaluator<BASE>::evaluateJulia()
             //f:=f^2+c
             loope.f.sqr(&tmp);
             loope.f.add(&currentParams.c);*/
-            loope.eval_zz(1, currentParams.julia.c, newt.newtX, false, false);
-            //r:=r^2+c
+            // newt.newtX is ignored but eval_zz takes a reference
+            if (!loope.eval_zz(1, currentParams.julia.c, newt.newtX, false, false))
+            {
+              juliaData.store->rstate=JuliaPointStore::ResultState::stPeriodBoundary;
+              interior.inte.zero(0, 0);
+              interior.inte_abs.zero(0);
+              break;
+            }
+           // TODO!! ignores returned false //r:=r^2+c
             root.sqr();
             root.add(currentParams.julia.c);
             didcycles++;
           }
+          if (juliaData.store->rstate != JuliaPointStore::ResultState::stPeriod2)
+            break;
 #if 0
           //keep phi/phi'
 #elif 0
@@ -5962,7 +5832,7 @@ void MandelEvaluator<BASE>::evaluateJulia()
           bulb.t1.recip();
           bulb.t1.mul(interior.step_to_root);
           //bulb.t1.chs();
-          double weight=bulb.t1.getDist1_tmp()->toDouble();
+          double weight=bulb.t1.getDist1().toDouble();
           if (weight>1)
             weight=1;
           juliaData.store->interior.f1_re=bulb.t1.re.toDouble();
@@ -5999,7 +5869,7 @@ void MandelEvaluator<BASE>::evaluateJulia()
           //interior.inte.mul(&w2, &tmp);
 #endif
 
-          interior.inte_abs.assign(*interior.inte.getMag_tmp());
+          interior.inte_abs.assign(interior.inte.getMag());
           interior.inte_abs.sqrt();
 
           juliaData.store->interior.mixed=interior.inte_abs.toDouble();
@@ -6488,6 +6358,8 @@ MandelEvaluator<MandelMath::number_any>::ExtAngle::ExtAngle(MandelMath::NumberTy
       break;
     case MandelMath::NumberType::typeReal642:
       break;
+    case MandelMath::NumberType::typeDDHeap:
+      break;
   }
 }
 
@@ -6518,6 +6390,9 @@ MandelEvaluator<MandelMath::number_any>::ExtAngle::~ExtAngle()
     {
     } break;
     case MandelMath::NumberType::typeReal642:
+    {
+    } break;
+    case MandelMath::NumberType::typeDDHeap:
     {
     } break;
   }
@@ -6895,7 +6770,7 @@ z, fill ? by making each quadrant uniform
             target.assign(r);
             r.add(mandel?z:c);
             if (r.isl0()) way|=0x08;
-            if (r.ccw_tmp(target)->isl0()) way|=0x02;
+            if (r.ccw(target).isl0()) way|=0x02;
             double step=0;
             switch (way)
             {
@@ -6961,9 +6836,9 @@ z, fill ? by making each quadrant uniform
           //r_.recip(tmp);
           //r_.mul(&target, tmp);
           //if (r_.im.isl0()) way|=0x02;
-          if (r.ccw_tmp(target)->isl0()) way|=0x02;
+          if (r.ccw(target).isl0()) way|=0x02;
           target.sqrt();
-          if (target.mulreT_tmp(loope->f)->isl0())
+          if (target.mulreT(loope->f).isl0())
             target.chs();
           if (target.isl0()) way|=0x01; //.im<0 is not enough to tell -3 from +3
           /*static const int table[16]={
@@ -7073,7 +6948,7 @@ z, fill ? by making each quadrant uniform
       //the classical problem of choosing the right sqrt
       //officially should be the one closer in direction to f/f', i.e. lnx*f/f'/z = 1/A
       //1/sqrt() close to 1/A    means    sqrt() close to A
-      if (d2ldlz2.mulreT_tmp(dldlz)->isl0())
+      if (d2ldlz2.mulreT(dldlz).isl0())
         d2ldlz2.chs();
       x.assign(d2ldlz2);
       x.recip();
@@ -7173,6 +7048,13 @@ template class MandelEvaluator<MandelMath::real642>;
 template void ComputeMandelParams<MandelMath::real642>::assign_across<MandelMath::number_any>(const ComputeMandelParams<MandelMath::number_any> &src);
 template void ComputeLaguerreParams<MandelMath::real642>::assign_across<MandelMath::number_any>(const ComputeLaguerreParams<MandelMath::number_any> &src);
 template void ComputeJuliaParams<MandelMath::real642>::assign_across<MandelMath::number_any>(const ComputeJuliaParams<MandelMath::number_any> &src);
+template struct LaguerrePoint<MandelMath::dd_heap>;
+template struct MandelPoint<MandelMath::dd_heap>;
+template struct JuliaPoint<MandelMath::dd_heap>;
+template class MandelEvaluator<MandelMath::dd_heap>;
+template void ComputeMandelParams<MandelMath::dd_heap>::assign_across<MandelMath::number_any>(const ComputeMandelParams<MandelMath::number_any> &src);
+template void ComputeLaguerreParams<MandelMath::dd_heap>::assign_across<MandelMath::number_any>(const ComputeLaguerreParams<MandelMath::number_any> &src);
+template void ComputeJuliaParams<MandelMath::dd_heap>::assign_across<MandelMath::number_any>(const ComputeJuliaParams<MandelMath::number_any> &src);
 #endif
 template void ComputeMandelParams<MandelMath::number_any>::assign_across<MandelMath::number_any>(const ComputeMandelParams<MandelMath::number_any> &src);
 template void ComputeLaguerreParams<MandelMath::number_any>::assign_across<MandelMath::number_any>(const ComputeLaguerreParams<MandelMath::number_any> &src);

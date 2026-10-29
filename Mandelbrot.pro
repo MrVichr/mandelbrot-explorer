@@ -12,6 +12,10 @@ CONFIG += force_debug_info
 #QMAKE_CXXFLAGS_DEBUG += -O3
 #QMAKE_CFLAGS_DEBUG += -O3
 QMAKE_CXXFLAGS_DEBUG += -fconcepts-diagnostics-depth=9
+# double-double error-free transforms must not be fused into FMA
+QMAKE_CXXFLAGS += -ffp-contract=off -mfma
+# strtoflt128 / quadmath_snprintf for decimal <-> __float128
+LIBS += -lquadmath
 #QMAKE_CXXFLAGS_RELEASE += -O3
 #QMAKE_CXXFLAGS_RELEASE_WITH_DEBUGINFO += -O3
 #QMAKE_CFLAGS_RELEASE += -O3
@@ -52,5 +56,6 @@ HEADERS += \
   MandelModel.hpp \
   ShareableImageWrapper.hpp \
   atomic_update_rect.hpp \
+  dd_heap.hpp \
   double_double.hpp \
   multiprec.hpp

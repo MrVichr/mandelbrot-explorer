@@ -18,6 +18,7 @@ public:
   //Q_INVOKABLE void setBaseImage(const QImage &image);
   Q_INVOKABLE ShareableImageWrapper getBaseImage();
   Q_INVOKABLE ShareableImageWrapper getOverlayImage();
+  Q_INVOKABLE void copyToClipboard(const QString &text);
   //Q_INVOKABLE void setFgImage(QImage &image);
   void paint(QPainter *painter) override;
 

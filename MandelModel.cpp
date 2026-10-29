@@ -10,8 +10,7 @@
 #define CURRENT_STORE_DIRECT 0 //either both or none of store and numbers must be direct, can't mix
 #define UPDATE_CACHED_MOD 0 //works until precision doesn't allow
 
-MandelModel::MandelModel(): QObject(),
-  _extAngleZoom(0), pointStore(nullptr), precisionRecord(nullptr)
+MandelModel::MandelModel(): QObject()
 {
   unsigned int oldcw; //524319 = 0x8001F = mask all interrupts, 80bit precision
   MandelMath::fpu_fix_start(&oldcw);
@@ -74,16 +73,6 @@ MandelModel::MandelModel(): QObject(),
   assert(dd1.hi==0x20000010 && dd1.lo_==1);
   dd1.split(-0.00043541188577694845);
 
-  _selectedPaintStyle=paintStyleCls;//Kind;
-  _selectedPrecision=precisionDouble;
-  epoch=1;
-  imageWidth=0;
-  imageHeight=0;
-  //pointStore=nullptr;
-  nextGivenPointIndex=0;
-  effortBonus=0;
-  //threadCount=4;
-  _threadsWorking=0;
   QObject::connect(this, &MandelModel::selectedPrecisionChange,
                    this, &MandelModel::selectedPrecisionChanged);
   selectedPrecisionChanged();
@@ -320,7 +309,7 @@ ShareableViewInfo MandelModel::getViewInfo()
       precisionRecord->orbit.evaluator.currentParams.mandel.c,//result.c,
       precisionRecord->orbit.evaluator.mandelData.root,//result.root,
       false);
-  result.nth_fz_limit.assign(*precisionRecord->orbit.evaluator.loope.f_z.getMag_tmp());
+  result.nth_fz_limit.assign(precisionRecord->orbit.evaluator.loope.f_z.getMag());
 
   //TODO: why here? should be somewhere else
   precisionRecord->lagu_c.assign(precisionRecord->orbit.evaluator.currentParams.mandel.c);
@@ -329,19 +318,42 @@ ShareableViewInfo MandelModel::getViewInfo()
   return result;
 }
 
+// Number or decimal string; strings keep the full precision of the current type
+static void numberFromParam(MandelMath::number<MandelMath::number_any> &result, const QVariantMap &params, const QString &key)
+{
+  QVariant v=params.value(key);
+  if (!v.isValid())
+    result.zero(0);
+  else if (!result.fromString(v.toString()))
+  {
+    qWarning()<<"cannot parse"<<key<<v.toString();
+    result.zero(0);
+  }
+}
+
 ShareableViewInfo MandelModel::makeViewInfo(const QVariantMap &params)
 {
   ShareableViewInfo result(precisionRecord->ntype);
-  result.view.zero(params.value("viewRe", 0.0).toDouble(), params.value("viewIm", 0.0).toDouble());
+  numberFromParam(result.view.re, params, "viewRe");
+  numberFromParam(result.view.im, params, "viewIm");
   result.scale=params.value("viewZoom", 0.0).toDouble();
-  result.c.zero(params.value("cRe", 0.0).toDouble(), params.value("cIm", 0.0).toDouble());
+  numberFromParam(result.c.re, params, "cRe");
+  numberFromParam(result.c.im, params, "cIm");
   //have to be correct result.root.zero(0, 0);
   result.nth_fz=params.value("period", 1<<MAX_EFFORT).toInt();
-  precisionRecord->lagu_c.zero(params.value("cRe", 0.0).toDouble(), params.value("cIm", 0.0).toDouble());
+  precisionRecord->lagu_c.assign(result.c);
   precisionRecord->lagu_r.zero(0,0);
   result.max_root_effort=MAX_EFFORT;
 
   return result;
+}
+
+QString MandelModel::getViewJson()
+{
+  return "{\"viewRe\": \""+precisionRecord->position.center.re.toString()+
+         "\", \"viewIm\": \""+precisionRecord->position.center.im.toString()+
+         "\", \"viewZoom\": "+QString::number(precisionRecord->position.step_size, 'g', 17)+
+         ", \"caption\": \"\"}";
 }
 
 class PixelPositionTransformer
@@ -493,6 +505,17 @@ void MandelModel::setView_double(double c_re, double c_im, double scale)
   setView(c, scale);
 }
 
+void MandelModel::setView_str(const QString &c_re, const QString &c_im, double scale)
+{
+  MandelMath::complex<MandelMath::number_any> c(precisionRecord->orbit.evaluator.ntype);
+  if (!c.fromString(c_re, c_im))
+  {
+    qWarning()<<"cannot parse view"<<c_re<<c_im;
+    return;
+  }
+  setView(c, scale);
+}
+
 void MandelModel::setView(MandelMath::complex<MandelMath::number_any> const &c, double scale)
 {
   MandelMath::complex<MandelMath::number_any> old_c(precisionRecord->orbit.evaluator.ntype);
@@ -601,6 +624,9 @@ void MandelModel::setImageSize(int width, int height)
       case MandelMath::NumberType::typeReal642:
         new_points=MandelMath::number<MandelMath::real642>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, newLength*MandelPoint<MandelMath::number_any>::LEN);
         break;
+      case MandelMath::NumberType::typeDDHeap:
+        new_points=MandelMath::number<MandelMath::dd_heap>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, newLength*MandelPoint<MandelMath::number_any>::LEN);
+        break;
 #endif
     }
     MandelMath::complex<MandelMath::number_any> old_c(precisionRecord->position.center);//&precisionRecord->orbit.evaluator.tmp);
@@ -628,6 +654,9 @@ void MandelModel::setImageSize(int width, int height)
         break;
       case MandelMath::NumberType::typeReal642:
         delete[] (MandelMath::real642 *)precisionRecord->points;
+        break;
+      case MandelMath::NumberType::typeDDHeap:
+        delete[] (MandelMath::dd_real *)precisionRecord->points;
         break;
 #endif
     }
@@ -1897,6 +1926,13 @@ void MandelModel::selectedPrecisionChanged()
     pointCount=0;
   else
     pointCount=imageWidth*imageHeight;
+  {
+    QWriteLocker locker(&threading_mutex);
+    epoch=(epoch%2000000000)+1; //old workers stop taking work and stop writing points
+    for (int i=0; i<pointCount; i++)
+      if (pointStore[i].wstate==MandelPointStore::WorkState::stWorking)
+        pointStore[i].wstate=MandelPointStore::WorkState::stIdle;
+  }
   void *new_points;
   MandelMath::NumberType newPrecision;
 
@@ -1923,6 +1959,10 @@ void MandelModel::selectedPrecisionChanged()
     case precisionReal642:
       newPrecision=Type::typeReal642;
       new_points=MandelMath::number<MandelMath::real642>::convert_block(precisionRecord?precisionRecord->ntype:Type::typeEmpty, precisionRecord?precisionRecord->points:nullptr, pointCount*MandelPoint<MandelMath::real642>::LEN);
+      break;
+    case precisionDDHeap:
+      newPrecision=Type::typeDDHeap;
+      new_points=MandelMath::number<MandelMath::dd_heap>::convert_block(precisionRecord?precisionRecord->ntype:Type::typeEmpty, precisionRecord?precisionRecord->points:nullptr, pointCount*MandelPoint<MandelMath::dd_heap>::LEN);
       break;
 #endif
     default: goto lolwut;
@@ -2160,6 +2200,9 @@ MandelModel::PrecisionRecord::PrecisionRecord(MandelMath::NumberType ntype, Prec
   case MandelMath::NumberType::typeReal642:
     threads=new MandelEvaluator<MandelMath::real642> *[threadCount];
     break;
+  case MandelMath::NumberType::typeDDHeap:
+    threads=new MandelEvaluator<MandelMath::dd_heap> *[threadCount];
+    break;
 #endif
   }
   MandelMath::visit([](auto &threads, PrecisionRecord &self, MandelModel *doneReceiver, PrecisionRecord *source){
@@ -2209,7 +2252,8 @@ MandelModel::PrecisionRecord::~PrecisionRecord()
       {
           for (int t=threadCount-1; t>=0; t--)
           {
-              threads[t]->thread.wait(1000);
+              if (!threads[t]->thread.wait(1000))
+                  qDebug() << "Thread" << t << "did not finish in time";
               delete threads[t];
           }
           delete[] threads;
@@ -2236,6 +2280,9 @@ MandelModel::PrecisionRecord::~PrecisionRecord()
     break;
   case MandelMath::NumberType::typeReal642:
     delete[] (MandelMath::real642 *)points;
+    break;
+  case MandelMath::NumberType::typeDDHeap:
+    delete[] (MandelMath::dd_real *)points;
     break;
 #endif
   }

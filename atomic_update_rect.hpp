@@ -8,7 +8,7 @@
 class AtomicUpdateRect
 {
 protected:
-    int bleft, bright, btop, bbottom;
+    int bleft=0, bright=0, btop=0, bbottom=0;
     std::atomic<int> left, right, top, bottom; //left<=right top<=bottom
 public:
     AtomicUpdateRect();
@@ -24,7 +24,7 @@ public:
         bottom=bbottom-1;
     }
     void addPoint(int x, int y);
-    int fleft, fright, ftop, fbottom;
+    int fleft=0, fright=0, ftop=0, fbottom=0;
     void fetch(); //ideally would return QRect<int>
 };
 

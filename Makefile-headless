@@ -21,17 +21,33 @@
 #   make bless-images-lag    — Laguerre: images mode bless
 #   make check-images-lag    — Laguerre: images mode check
 #
+#   make check-all           — all fractals × modes × precisions; log in current/check-all.log
+#   make bless-all           — bless all fractals × modes × precisions
+#   make bench               — time a larger Mandelbrot view at double, dd and ddheap (3 runs each)
+#
+# PREC=double|float128|dd|qd|real642|ddheap selects the precision of the single-case
+# targets (default double); non-double outputs are tagged, e.g. Man_dd_...
+#
 # The python script also converts PPMs → PNG for human inspection (requires Pillow).
 #
 # Generated filenames are prefixed: Man_..., Jul_..., Lag_...
 #
 # Default view parameters used by the convenience targets below:
 # VIEW_ARGS := --cx -0.5 --cy 0.0 --scale 0.125 --width 40 --height 20 --title "Wide view"
-VIEW_ARGS     := --cx 0.286015601694831 --cy 0.011537485994235 --scale 1.818989403545856475830078125e-12 --width 40 --height 30 --title "Dense 4-spiral"
-JUL_VIEW_ARGS := --cx 0 --cy 0 --scale 0.125 --width 40 --height 20 --title "Main view"
-LAG_VIEW_ARGS := --cx 0 --cy 0 --scale 0.125 --width 40 --height 20 --title "Main view"
+# Coordinates are decimal strings parsed in the selected precision.  --c-re/--c-im are the
+# exact binary64 values of 0.3, -0.7067658320364081, ... that the references were made with.
+VIEW_ARGS     := --cx -1.39473141148726511 --cy 0.00450422164786152379 --scale 1.4210854715202003717422485351563e-14 --width 40 --height 30 --title "Circled mandel"
+JUL_VIEW_ARGS := --cx -0.0999140454331535 --cy 0.9084110242318008 --scale 1.7763568394002504646778106689453e-15 --width 40 --height 30 --title "Evaluate" --c-re 0.299999999999999988897769753748434595763683319091796875 --c-im 0.5 --period 4
+LAG_VIEW_ARGS := --cx -0.3625054588774519 --cy -0.0600809418829158 --scale 0.000000000931322574615478515625 --width 40 --height 30 --title "Evaluate" --c-re -0.706765832036408081506806411198340356349945068359375 --c-im 0.354032589741391789939228829098283313214778900146484375 --period 1632
+BENCH_ARGS    := --cx -1.39473141148726511 --cy 0.00450422164786152379 --scale 1.4210854715202003717422485351563e-14 --width 160 --height 120 --title "Bench"
+
+PREC       ?= double
+PRECISIONS := double float128 dd qd real642 ddheap
+SELF       := $(firstword $(MAKEFILE_LIST))
+
 
 CXX      := g++
+OPTFLAGS ?= -O3
 CXXFLAGS := -std=c++20 -fext-numeric-literals \
             -I. -Ifake_qt \
             -Wall -Wextra \
@@ -39,10 +55,12 @@ CXXFLAGS := -std=c++20 -fext-numeric-literals \
             -Wno-unused-variable \
             -Wno-unused-but-set-variable \
             -g \
-            -O3 \
+            $(OPTFLAGS) \
+            -ffp-contract=off \
+            -mfma \
             -MMD -MP
 
-LDFLAGS  := -lpthread
+LDFLAGS  := -lpthread -lquadmath
 
 # Source files (excludes Qt-specific main.cpp and MandelImageCombiner which
 # isn't needed for headless computation).
@@ -74,7 +92,8 @@ DEPS := $(OBJS_IN_DIR:.o=.d)
 .PHONY: all clean run \
         bless-text-man check-text-man bless-images-man check-images-man \
         bless-text-jul check-text-jul bless-images-jul check-images-jul \
-        bless-text-lag check-text-lag bless-images-lag check-images-lag
+        bless-text-lag check-text-lag bless-images-lag check-images-lag \
+        check-all bless-all bench
 
 all: $(TARGET)
 
@@ -95,7 +114,7 @@ clean:
 	rm -rf $(OBJDIR) $(TARGET)
 
 run: all
-	./$(TARGET) --mode text $(VIEW_ARGS)
+	./$(TARGET) --mode text --precision $(PREC) $(VIEW_ARGS)
 
 # ── Text mode ────────────────────────────────────────────────────────────────
 # current/<fractal-prefix><title>_text.json  — produced by each run
@@ -110,39 +129,63 @@ run: all
 
 # ── Mandelbrot ────────────────────────────────────────────────────────────────
 bless-text-man: all
-	python3 runner/check_images.py --fractal man --mode text --bless $(VIEW_ARGS)
+	python3 runner/check_images.py --fractal man --mode text --bless --precision $(PREC) $(VIEW_ARGS)
 
 check-text-man: all
-	python3 runner/check_images.py --fractal man --mode text $(VIEW_ARGS)
+	python3 runner/check_images.py --fractal man --mode text --precision $(PREC) $(VIEW_ARGS)
 
 bless-images-man: all
-	python3 runner/check_images.py --fractal man --mode images --bless $(VIEW_ARGS)
+	python3 runner/check_images.py --fractal man --mode images --bless --precision $(PREC) $(VIEW_ARGS)
 
 check-images-man: all
-	python3 runner/check_images.py --fractal man --mode images $(VIEW_ARGS)
+	python3 runner/check_images.py --fractal man --mode images --precision $(PREC) $(VIEW_ARGS)
 
 # ── Julia ─────────────────────────────────────────────────────────────────────
 bless-text-jul: all
-	python3 runner/check_images.py --fractal jul --mode text --bless $(JUL_VIEW_ARGS)
+	python3 runner/check_images.py --fractal jul --mode text --bless --precision $(PREC) $(JUL_VIEW_ARGS)
 
 check-text-jul: all
-	python3 runner/check_images.py --fractal jul --mode text $(JUL_VIEW_ARGS)
+	python3 runner/check_images.py --fractal jul --mode text --precision $(PREC) $(JUL_VIEW_ARGS)
 
 bless-images-jul: all
-	python3 runner/check_images.py --fractal jul --mode images --bless $(JUL_VIEW_ARGS)
+	python3 runner/check_images.py --fractal jul --mode images --bless --precision $(PREC) $(JUL_VIEW_ARGS)
 
 check-images-jul: all
-	python3 runner/check_images.py --fractal jul --mode images $(JUL_VIEW_ARGS)
+	python3 runner/check_images.py --fractal jul --mode images --precision $(PREC) $(JUL_VIEW_ARGS)
 
 # ── Laguerre ──────────────────────────────────────────────────────────────────
 bless-text-lag: all
-	python3 runner/check_images.py --fractal lag --mode text --bless $(LAG_VIEW_ARGS)
+	python3 runner/check_images.py --fractal lag --mode text --bless --precision $(PREC) $(LAG_VIEW_ARGS)
 
 check-text-lag: all
-	python3 runner/check_images.py --fractal lag --mode text $(LAG_VIEW_ARGS)
+	python3 runner/check_images.py --fractal lag --mode text --precision $(PREC) $(LAG_VIEW_ARGS)
 
 bless-images-lag: all
-	python3 runner/check_images.py --fractal lag --mode images --bless $(LAG_VIEW_ARGS)
+	python3 runner/check_images.py --fractal lag --mode images --bless --precision $(PREC) $(LAG_VIEW_ARGS)
 
 check-images-lag: all
-	python3 runner/check_images.py --fractal lag --mode images $(LAG_VIEW_ARGS)
+	python3 runner/check_images.py --fractal lag --mode images --precision $(PREC) $(LAG_VIEW_ARGS)
+
+# Each case prints one PASS/FAIL/SKIP line; full output goes to current/check-all.log.
+check-all: all
+	@mkdir -p current; : > current/check-all.log; failed=""; \
+	for p in $(PRECISIONS); do for f in man jul lag; do for m in text images; do \
+	  out=$$($(MAKE) -s --no-print-directory -f $(SELF) check-$$m-$$f PREC=$$p 2>&1); \
+	  echo "$$out" >> current/check-all.log; \
+	  res=$$(echo "$$out" | grep -o 'check: [A-Z]*' | tail -1 | cut -d' ' -f2); \
+	  [ -n "$$res" ] || res=ERROR; \
+	  printf '%-5s %-8s %s %s\n' "$$res" $$p $$f $$m; \
+	  [ "$$res" = PASS ] || failed="$$failed $$p/$$f/$$m"; \
+	done; done; done; \
+	if [ -n "$$failed" ]; then echo "check-all: FAIL:$$failed"; exit 1; else echo "check-all: PASS"; fi
+
+bless-all: all
+	@for p in $(PRECISIONS); do for f in man jul lag; do for m in text images; do \
+	  echo "bless $$p $$f $$m"; \
+	  $(MAKE) -s --no-print-directory -f $(SELF) bless-$$m-$$f PREC=$$p > /dev/null || exit 1; \
+	done; done; done
+
+bench: all
+	@for p in double dd ddheap; do for i in 1 2 3; do \
+	  ./$(TARGET) --fractal man --mode text --precision $$p $(BENCH_ARGS) 2>&1 >/dev/null | grep '^timing' | sed "s/^/$$p /"; \
+	done; done

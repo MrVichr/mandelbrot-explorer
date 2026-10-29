@@ -298,6 +298,7 @@ Window {
                             { text: "DDouble", prec: JuliaModel.EprecisionDDouble },
                             { text: "QDouble", prec: JuliaModel.EprecisionQDouble },
                             { text: "Real642", prec: JuliaModel.EprecisionReal642 },
+                            { text: "DDHeap", prec: JuliaModel.EprecisionDDHeap },
                         ]
                         MenuItem {
                             checkable: true
@@ -355,13 +356,31 @@ Window {
         property var dragging: null;
         property int drag_last_x;
         property int drag_last_y;
-        Keys.onPressed: { //never triggers
-            console.log(event);
-            if (event.key===Qt.Key_E)
-                mandelModel.paintOrbit(mandelImageCombiner.getOverlayImage(), mouse.x, mouse.y);
+        property real hover_x;
+        property real hover_y;
+        function findActiveMCR() {
+            for (let mcr of listOfMCR)
+                if (mcr.r.checked)
+                    return mcr;
+            return null;
+        }
+        // Shortcut instead of Keys: works regardless of which item has focus
+        Shortcut {
+            sequence: "E"
+            onActivated: { let a=mouseArea.findActiveMCR(); if (a) a.m.paintOrbit(a.c.getOverlayImage(), mouseArea.hover_x, mouseArea.hover_y); }
+        }
+        Shortcut {
+            sequence: "+"
+            onActivated: { let a=mouseArea.findActiveMCR(); if (a) a.m.zoom(mouseArea.width/2, mouseArea.height/2, +1); }
+        }
+        Shortcut {
+            sequence: "-"
+            onActivated: { let a=mouseArea.findActiveMCR(); if (a) a.m.zoom(mouseArea.width/2, mouseArea.height/2, -1); }
         }
         onPositionChanged: function(mouse)
         {
+            hover_x=mouse.x;
+            hover_y=mouse.y;
             if (dragging!=null)
             {
                 dragging.drag(mouse.x-drag_last_x, mouse.y-drag_last_y);
@@ -484,6 +503,15 @@ Window {
                 }
             }
             MenuItem {
+                text: "Copy view"
+                // JSON in the format of the presets below
+                onTriggered: {
+                    for (let {m, c, r} of listOfMCR)
+                        if (r.checked)
+                            c.copyToClipboard(m.getViewJson());
+                }
+            }
+            MenuItem {
                 text: "Freeze orbit (J)"
                 property bool shown: rbuttonViewJulia.checked
                 visible: shown
@@ -510,31 +538,32 @@ Window {
                     }
                     onObjectRemoved: function(index, object) {menuMandelPresets.removeItem(object);}
                     model: [
-                        {viewRe: -0.5, viewIm: 0, viewZoom: 1/128, caption: 'Main view'},
-                        {viewRe: -0.75, viewIm: 0, viewZoom: 1/134217728, caption: 'Zoom on the 1-2 joint'},
-                        {viewRe: -0.125, viewIm: 0.649519052836944556, viewZoom: 1/268435456, caption: 'Zoom on the 1-3 joint'},
-                        {viewRe: -1.401155524, viewIm: 0, viewZoom: 1/8589934592, caption: 'A 1536 atom on real axis'},
-                        {viewRe: -0.7458232657523781425, viewIm: 0.1659563046792491885, viewZoom: 1/1152921504606846976.0, caption: 'An extremely small 980 atom'},
-                        {viewRe: -0.16400146484, viewIm: 1.0978469849, viewZoom: 1/262144, caption: 'Detail of ray 2/9'},
-                        {viewRe: -0.54418945312, viewIm: 0.65454101562, viewZoom: 1/2048, caption: 'Detail of head of 2/5 bulb'},//  julia.c.re:=-0.53540039062,  julia.c.im:=-0.66320800781,//}
-                        {viewRe: -0.706765832036462260364, viewIm: 0.3540325897413834077558, viewZoom: 1/1125899906842624, caption: 'Just some zoom of a 408 atom'},
-                        {viewRe: -1.262303108533615159097935, viewIm: 0.383593549747416773254917, viewZoom: 1/70368744177664, caption: 'just a zoom'},
-                        {viewRe: -1.67440967369022279335495, viewIm: 4.716562790887584498e-5, viewZoom: 1/137438953472, caption: 'Embedded Julia set'},
-                        {viewRe: -0.7498572, viewIm: -0.0150818, viewZoom: 1/8388608, caption: 'Deep pools'},
-                        {viewRe: 0.2860166666955662541362, viewIm: 0.0115374014484412084383, viewZoom: 1/2305843009213693952, caption: 'Spiral'},
-                        {viewRe: 0.28601560169483100000, viewIm: 0.01153748599423500000, viewZoom: 1/17592186044416, caption: 'Dense 4-spiral'},
-                        {viewRe: -1.39473140503329, viewIm: 0.00450421402574, viewZoom: 1/17179869184, caption: 'Star'},
-                        {viewRe: -1.39473141148726511, viewIm: 0.00450422164786152379, viewZoom: 1/1125899906842624, caption: 'Circled mandel'},
-                        {viewRe: -1.94098287909277016167, viewIm: 0.00064812392023092638912, viewZoom: 1/2199023255552, caption: 'Minijulia'},
-                        {viewRe: -0.74364388703715904315, viewIm: 0.13182590420531251074, viewZoom: 1/8796093022208, caption: 'Wikipedia'},
-                        //where did this come from {viewRe: -0.7499999970459612, viewIm: 0.0000514981111337, viewZoom: 1/549755813888, caption: 'Bulb 30502/61005'},
-                        {viewRe: -0.7499999985575414, viewIm: 0.0000514972471137, viewZoom: 1/549755813888, caption: 'Bulb 30502/61005'},
-                        {viewRe: -1498800068/8589934592.0, viewIm: 5685911464/8589934592.0, viewZoom: 1/8589934592.0, caption: 'Trouble at 11016'},
-                        {viewRe: -0.5622179376996712, viewIm: 0.67689119098929496, viewZoom: 1/35184372088832.0, caption: 'Bad Newton'},
+                        {viewRe: "-0.5", viewIm: "0", viewZoom: 1/128, caption: 'Main view'},
+                        {viewRe: "-0.75", viewIm: "0", viewZoom: 1/134217728, caption: 'Zoom on the 1-2 joint'},
+                        {viewRe: "-0.125", viewIm: "0.649519052836944556", viewZoom: 1/268435456, caption: 'Zoom on the 1-3 joint'},
+                        {viewRe: "-1.401155524", viewIm: "0", viewZoom: 1/8589934592, caption: 'A 1536 atom on real axis'},
+                        {viewRe: "-0.7458232657523781425", viewIm: "0.1659563046792491885", viewZoom: 1/1152921504606846976.0, caption: 'An extremely small 980 atom'},
+                        {viewRe: "-0.16400146484", viewIm: "1.0978469849", viewZoom: 1/262144, caption: 'Detail of ray 2/9'},
+                        {viewRe: "-0.54418945312", viewIm: "0.65454101562", viewZoom: 1/2048, caption: 'Detail of head of 2/5 bulb'},//  julia.c.re:=-0.53540039062,  julia.c.im:=-0.66320800781,//}
+                        {viewRe: "-0.706765832036462260364", viewIm: "0.3540325897413834077558", viewZoom: 1/1125899906842624, caption: 'Just some zoom of a 408 atom'},
+                        {viewRe: "-1.262303108533615159097935", viewIm: "0.383593549747416773254917", viewZoom: 1/70368744177664, caption: 'just a zoom'},
+                        {viewRe: "-1.67440967369022279335495", viewIm: "4.716562790887584498e-5", viewZoom: 1/137438953472, caption: 'Embedded Julia set'},
+                        {viewRe: "-0.7498572", viewIm: "-0.0150818", viewZoom: 1/8388608, caption: 'Deep pools'},
+                        {viewRe: "0.2860166666955662541362", viewIm: "0.0115374014484412084383", viewZoom: 1/2305843009213693952, caption: 'Spiral'},
+                        {viewRe: "0.28601560169483100000", viewIm: "0.01153748599423500000", viewZoom: 1/17592186044416, caption: 'Dense 4-spiral'},
+                        {viewRe: "-1.39473140503329", viewIm: "0.00450421402574", viewZoom: 1/17179869184, caption: 'Star'},
+                        {viewRe: "-1.39473141148726511", viewIm: "0.00450422164786152379", viewZoom: 1/1125899906842624, caption: 'Circled mandel'},
+                        {viewRe: "-1.94098287909277016167", viewIm: "0.00064812392023092638912", viewZoom: 1/2199023255552, caption: 'Minijulia'},
+                        {viewRe: "-0.74364388703715904315", viewIm: "0.13182590420531251074", viewZoom: 1/8796093022208, caption: 'Wikipedia'},
+                        //where did this come from {viewRe: "-0.7499999970459612", viewIm: "0.0000514981111337", viewZoom: 1/549755813888, caption: 'Bulb 30502/61005'},
+                        {viewRe: "-0.7499999985575414", viewIm: "0.0000514972471137", viewZoom: 1/549755813888, caption: 'Bulb 30502/61005'},
+                        {viewRe: "-0.1744832922704517841339111328125", viewIm: "0.661927212961018085479736328125", viewZoom: 1/8589934592.0, caption: 'Trouble at 11016'}, // -1498800068/2^33, 5685911464/2^33
+                        {viewRe: "-0.5622179376996712", viewIm: "0.67689119098929496", viewZoom: 1/35184372088832.0, caption: 'Bad Newton'},
+                        {viewRe: "-1.39473140405954614332029173340288", viewIm: "0.004504213285590670870495166866476211", viewZoom: 1.7347234759768071e-18, caption: "dd zoom"},
                     ]
                     MenuItem {
                         text: modelData.caption
-                        onTriggered: mandelModel.setView_double(modelData.viewRe, modelData.viewIm, modelData.viewZoom);
+                        onTriggered: mandelModel.setView_str(modelData.viewRe, modelData.viewIm, modelData.viewZoom);
                     }
                 }
             }
@@ -552,15 +581,40 @@ Window {
                     }
                     onObjectRemoved: function(index, object) {menuJuliaPresets.removeItem(object);}
                     model: [
-                        {viewRe:  0,                  viewIm: 0,                  viewZoom: 1/128, cRe: 0, cIm: 0, period: 1, caption: 'Main view'},
-                        {viewRe:  0.00439453125,      viewIm: 0.0252380371093750, viewZoom: 1/65536.0, cRe: -0.5289001464843750, cIm: 0.6682891845703125, period: 14, caption: 'curl'},
-                        {viewRe: -0.7342796903103590, viewIm: 0.1835422439035028, viewZoom: 1/4294967296.0, cRe: -0.7342796875163913, cIm: 0.1835422653239220, period: 1156, caption: 'Noisy zoom'},
+                        {viewRe: "0",                  viewIm: "0",                  viewZoom: 1/128, cRe: "0", cIm: "0", period: 1, caption: 'Main view'},
+                        {viewRe: "0.00439453125",      viewIm: "0.0252380371093750", viewZoom: 1/65536.0, cRe: "-0.5289001464843750", cIm: "0.6682891845703125", period: 14, caption: 'curl'},
+                        {viewRe: "-0.7342796903103590", viewIm: "0.1835422439035028", viewZoom: 1/4294967296.0, cRe: "-0.7342796875163913", cIm: "0.1835422653239220", period: 1156, caption: 'Noisy zoom'},
+                        {viewRe: "-0.0999140454331535", viewIm: "0.9084110242318008", viewZoom: 1/9007199254740992.0, cRe: "0.3", cIm: "0.5", period: 4, caption: 'Evaluate'},
                     ]
                     MenuItem {
                         text: modelData.caption
                         visible: true
                         checkable: false
                         onTriggered: juliaModel.setParams(mandelModel.makeViewInfo(modelData));
+                    }
+                }
+            }
+            ScrollMenu {
+                id: menuLaguPresets
+                title: "Presets (L)..."
+                property bool menuShown: rbuttonViewLagu.checked
+                // Controls 2 menus default to a fixed width; widen to fit the longest caption
+                property real widestItem: 0
+                width: Math.max(implicitWidth, widestItem+leftPadding+rightPadding)
+                Instantiator {
+                    onObjectAdded: function(index, object) {
+                        menuLaguPresets.insertItem(index, object);
+                        menuLaguPresets.widestItem=Math.max(menuLaguPresets.widestItem, object.implicitWidth);
+                    }
+                    onObjectRemoved: function(index, object) {menuLaguPresets.removeItem(object);}
+                    model: [
+                        {viewRe: "0", viewIm: "0", viewZoom: 1/128, cRe: "-1",                  cIm: "0",                  period: 2,    caption: 'Basilica (period 2)'},
+                        {viewRe: "0", viewIm: "0", viewZoom: 1/128, cRe: "-0.1225611668766536", cIm: "0.7448617666197442", period: 3,    caption: 'Rabbit (period 3)'},
+                        {viewRe: "-0.3625054588774519", viewIm: "-0.0600809418829158", viewZoom: 1/17179869184.0, cRe: "-0.7067658320364081", cIm: "0.3540325897413918", period: 1632, caption: '408 atom (period 1632)'},
+                    ]
+                    MenuItem {
+                        text: modelData.caption
+                        onTriggered: laguerreModel.setParams(mandelModel.makeViewInfo(modelData));
                     }
                 }
             }

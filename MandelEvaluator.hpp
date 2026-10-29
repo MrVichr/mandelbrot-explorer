@@ -30,7 +30,7 @@ struct LaguerrePointStore
   std::atomic<State> state;
   double firstM;
   double firstStep_re, firstStep_im;
-  NewtonNaiveChoice naiveChoice;
+  NewtonNaiveChoice naiveChoice=nc03;
   int iter;
   LaguerrePointStore();
   void assign(const LaguerrePointStore *src);
@@ -77,21 +77,21 @@ struct MandelPointStore
   std::atomic<WorkState> wstate;
   enum ResultState { stUnknown, stOutside, stOutAngle, stBoundary, stMisiur, stDiverge, stPeriod2, stPeriod3, stMaxIter };
   ResultState rstate;
-  bool has_fc_r;
-  int lookper_startiter, lookper_prevGuess, lookper_lastGuess;
-  bool lookper_nearr_dist_touched; //check if equal but only once; in theory should only happen at dist=0
-  int near0iter_1; //actual+1
-  int nearziter_0;
-  int period;
-  int surehand;
-  int iter, newton_iter;
-  double exterior_hits, exterior_avoids; //upper and lower bound
+  bool has_fc_r=false;
+  int lookper_startiter=0, lookper_prevGuess=0, lookper_lastGuess=0;
+  bool lookper_nearr_dist_touched=false; //check if equal but only once; in theory should only happen at dist=0
+  int near0iter_1=0; //actual+1
+  int nearziter_0=0;
+  int period=0;
+  int surehand=0;
+  int iter, newton_iter=0;
+  double exterior_hits=0, exterior_avoids=0; //upper and lower bound
   struct
   {
     double hits;
     double hits_re, hits_im;
     void zero() {hits=-1; hits_re=0; hits_im=0; }
-  } interior;
+  } interior{};
 
   MandelPointStore();
   void assign(const MandelPointStore *src);
@@ -168,15 +168,15 @@ struct JuliaPointStore
 {
   enum WorkState { stIdle, stWorking, stDone };
   std::atomic<WorkState> wstate;
-  enum ResultState { stUnknown, stOutside, stOutAngle, stBoundary, stMisiur, stDiverge, stPeriod2, stPeriod3, stMaxIter };
+  enum ResultState { stUnknown, stOutside, stOutAngle, stBoundary, stMisiur, stDiverge, stPeriod2, stPeriodBoundary, stMaxIter };
   ResultState rstate;
   //bool has_fc_r;
-  int lookper_startiter;//, lookper_prevGuess, lookper_lastGuess;
+  int lookper_startiter=0;//, lookper_prevGuess, lookper_lastGuess;
   //bool lookper_nearr_dist_touched; //check if equal but only once; in theory should only happen at dist=0
-  int near0iter_1; //actual+1
-  int nearziter_0;
-  int bigfzfzziter;
-  int nearmriter;
+  int near0iter_1=0; //actual+1
+  int nearziter_0=0;
+  int bigfzfzziter=0;
+  int nearmriter=0;
   bool nearmr_difficult;
   //int period;
   //int surehand;
@@ -189,7 +189,7 @@ struct JuliaPointStore
     double condi_mixed, condi_empty;
     double blend_mixed, blend_empty;
     void zero(double x) {verify_mixed=x; verify_empty=x; none_mixed=x; none_empty=x; always_mixed=x; always_empty=x; condi_mixed=x; condi_empty=x; blend_mixed=x; blend_empty=x; }
-  } exterior;
+  } exterior{};
   struct
   {
     double mixed, full;
@@ -201,7 +201,7 @@ struct JuliaPointStore
     int first_under_1;
     int cycles_until_root;
     void zero() {mixed=-1; full=-1; mixed_re=0; mixed_im=0; phi_re=0; phi_im=0; phi1_re=0; phi1_im=0; phi_re=0; phi2_im=0; f1_re=0; f1_im=0; first_under_1=0; cycles_until_root=0; }
-  } interior;
+  } interior{};
 
   JuliaPointStore();
   void assign(const JuliaPointStore *src);
@@ -272,17 +272,14 @@ struct JuliaPoint
 class ShareableViewInfo: public QObject
 {
   Q_OBJECT
-protected:
-  int refcount_unused;
-  MandelMath::number<MandelMath::number_any>::Scratchpad *spad;
 public:
   //static constexpr int LEN=5;
-    ShareableViewInfo(): spad(nullptr), view(), c(), nth_fz_limit() { } //Qt uses this and operator= instead of copy constructor :-/
+    ShareableViewInfo(): view(), c(), nth_fz_limit() { } //Qt uses this and operator= instead of copy constructor :-/
   /*template <typename BASE>
   ShareableViewInfo(): c(new MandelMath::number<BASE>(), new MandelMath::number<BASE>()),
                        root(new MandelMath::number<BASE>(), new MandelMath::number<BASE>()),
                        nth_fz_limit(new MandelMath::number<BASE>()), scale(1), period(0), nth_fz(0) { }*/
-  ShareableViewInfo(MandelMath::NumberType ntype): spad(nullptr), view(ntype), c(ntype), nth_fz_limit(ntype), scale(1), nth_fz(0), max_root_effort(3)
+  ShareableViewInfo(MandelMath::NumberType ntype): view(ntype), c(ntype), nth_fz_limit(ntype)
     { }
   ShareableViewInfo(ShareableViewInfo &src);
   ShareableViewInfo(const ShareableViewInfo &src);
@@ -293,9 +290,9 @@ public:
   MandelMath::complex<MandelMath::number_any> view;
   MandelMath::complex<MandelMath::number_any> c;
   MandelMath::number<MandelMath::number_any> nth_fz_limit;
-  double scale;
-  int nth_fz;
-  int max_root_effort;
+  double scale=1;
+  int nth_fz=0;
+  int max_root_effort=3;
 };
 Q_DECLARE_METATYPE(ShareableViewInfo);
 
@@ -435,6 +432,7 @@ protected:
                MandelEvaluator<MandelMath::dd_real> *,
                MandelEvaluator<MandelMath::dq_real> *,
                MandelEvaluator<MandelMath::real642> *,
+               MandelEvaluator<MandelMath::dd_heap> *,
                MandelEvaluator<MandelMath::number_any> *> owner;
   //MandelEvaluator<MandelMath::number_any> *owner_;
 public:
@@ -443,6 +441,7 @@ public:
   MandelEvaluatorThread(MandelEvaluator<MandelMath::dd_real> *owner);
   MandelEvaluatorThread(MandelEvaluator<MandelMath::dq_real> *owner);
   MandelEvaluatorThread(MandelEvaluator<MandelMath::real642> *owner);
+  MandelEvaluatorThread(MandelEvaluator<MandelMath::dd_heap> *owner);
   MandelEvaluatorThread(MandelEvaluator<MandelMath::number_any> *owner);
   void syncMandel();
   void syncJulia();
@@ -463,7 +462,6 @@ class MandelEvaluator //templates cannot be Q_OBJECT (or QThread) and cannot rec
 protected:
   //MandelMath::worker_multi::Allocator self_allocator;
 public:
-  constexpr static double LARGE_FLOAT2=1e60;
   constexpr static double MAGIC_MIN_SHRINK=1.5;
   constexpr static int MAX_PERIOD=8000;
   using BASE=_BASE;
@@ -473,7 +471,7 @@ public:
     iiw_currentParams=28,
     iiwLaguerrePoint=100,
   };*/
-  int threaded_errorcode;
+  int threaded_errorcode=0;
   int busyEpoch;
   MandelEvaluatorThread thread;
   //WORKER_MULTI *currentWorker;
@@ -492,8 +490,7 @@ public:
   qint64 timeInvokePostTotal;
   qint64 timeInvokeSwitchTotal;
 
-  typename MandelMath::number<BASE>::Scratchpad tmp;
-  //from here on, layout is different with BASE -> ntype before tmp
+  //from here on, layout is different with BASE
   MandelEvaluator(MandelMath::NumberType ntype, bool dontRun);
   virtual ~MandelEvaluator(); //must be virtual, or would have to typecast in delete threads[i]
   void startRunning();
@@ -549,16 +546,16 @@ public:
     MandelMath::complex<BASE> nth_fz;
     MandelMath::complex<BASE> first_guess_lagu;
     MandelMath::complex<BASE> first_guess_newt;
-    double first_fejer_re, first_fejer_im;
-    double first_naive1_re, first_naive1_im, first_naive2_re, first_naive2_im, first_naive_re, first_naive_im;
-    NewtonNaiveChoice naiveChoice;
-    double first_neumaier1_re, first_neumaier1_im; //circle enclosing 1 but not 2 roots (approx)
-    double first_neumaier2_re, first_neumaier2_im;   //circle enclosing 2 but not 3 roots (approx) (never valid without  f''')
-    double ostrowski_r1c, ostrowski_r1x, ostrowski_r2c;
+    double first_fejer_re=0, first_fejer_im=0;
+    double first_naive1_re=0, first_naive1_im=0, first_naive2_re=0, first_naive2_im=0, first_naive_re=0, first_naive_im=0;
+    NewtonNaiveChoice naiveChoice=nc03;
+    double first_neumaier1_re=0, first_neumaier1_im=0; //circle enclosing 1 but not 2 roots (approx)
+    double first_neumaier2_re=0, first_neumaier2_im=0;   //circle enclosing 2 but not 3 roots (approx) (never valid without  f''')
+    double ostrowski_r1c=0, ostrowski_r1x=0, ostrowski_r2c=0;
     //double first_lagum_re, first_lagum_im;
-    double first_lagu1_re, first_lagu1_im, first_lagu1o_re, first_lagu1o_im;
-    double firstMu_re, firstMu_im, firstMum_re, firstMum_im;
-    double accy_tostop, accy_multiplier, accy_noise; //in units of eps2()
+    double first_lagu1_re=0, first_lagu1_im=0, first_lagu1o_re=0, first_lagu1o_im=0;
+    double firstMu_re=0, firstMu_im=0, firstMum_re=0, firstMum_im=0;
+    double accy_tostop=0, accy_multiplier=0, accy_noise=0; //in units of eps2()
     NewtRes(MandelMath::NumberType ntype);
   } newtres;
 protected:

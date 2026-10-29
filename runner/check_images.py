@@ -19,12 +19,17 @@ Options
     --mode text|images       Which artefacts to produce / compare (required)
     --bless                  Run with --bless so artefacts go to blessed/
     --runner PATH            Path to mandel_runner binary (default: ./mandel_runner)
-    --cx FLOAT               Centre real part              (default: -0.5)
-    --cy FLOAT               Centre imaginary part         (default: 0.0)
+    --cx NUM                 Centre real part              (default: -0.5)
+    --cy NUM                 Centre imaginary part         (default: 0.0)
     --scale FLOAT            Scale                         (default: 0.125)
     --width INT              Image width in pixels         (default: 40)
     --height INT             Image height in pixels        (default: 20)
     --title STR              Label for the run             (default: Wide view)
+    --c-re NUM               Julia/Laguerre c, real part   (default: runner's)
+    --c-im NUM               Julia/Laguerre c, imag part   (default: runner's)
+    --period INT             Julia/Laguerre period         (default: runner's)
+    --precision NAME         double|float128|dd|qd|real642|ddheap (default: double);
+                             non-double outputs are tagged, e.g. Man_dd_...
 
 Exit codes
 ----------
@@ -81,6 +86,14 @@ def sanitize_title(title: str) -> str:
     return "".join(c if c.isalnum() else "_" for c in title)
 
 
+def file_prefix(args) -> str:
+    """Mirror the C++ file_prefix: fractal prefix plus precision tag."""
+    prefix = FRACTAL_PREFIX[args.fractal]
+    if args.precision != "double":
+        prefix += f"{args.precision}_"
+    return prefix
+
+
 def ppm_to_png(ppm_path: Path, png_path: Path) -> None:
     """Convert a PPM file to PNG using Pillow.  Skips if Pillow unavailable."""
     if not HAS_PILLOW:
@@ -100,7 +113,14 @@ def run_runner(runner: Path, args, mode: str, bless: bool) -> int:
         "--width",  str(args.width),
         "--height", str(args.height),
         "--title",  args.title,
+        "--precision", args.precision,
     ]
+    if args.c_re is not None:
+        cmd += ["--c-re", str(args.c_re)]
+    if args.c_im is not None:
+        cmd += ["--c-im", str(args.c_im)]
+    if args.period is not None:
+        cmd += ["--period", str(args.period)]
     if bless:
         cmd.append("--bless")
     print("Running:", " ".join(cmd))
@@ -118,7 +138,7 @@ def bless_text(runner: Path, args) -> int:
     if rc != 0:
         print(f"ERROR: mandel_runner exited with code {rc}", file=sys.stderr)
         return 2
-    prefix = FRACTAL_PREFIX[args.fractal]
+    prefix = file_prefix(args)
     stem = sanitize_title(args.title)
     blessed_json = BLESSED_DIR / f"{prefix}{stem}_text.json"
     if blessed_json.exists():
@@ -143,7 +163,7 @@ def check_text(runner: Path, args) -> int:
         print(f"ERROR: mandel_runner exited with code {rc}", file=sys.stderr)
         return 2
 
-    prefix = FRACTAL_PREFIX[args.fractal]
+    prefix = file_prefix(args)
     stem        = sanitize_title(args.title)
     current_json = CURRENT_DIR / f"{prefix}{stem}_text.json"
     blessed_json = BLESSED_DIR / f"{prefix}{stem}_text.json"
@@ -178,7 +198,7 @@ def bless_images(runner: Path, args) -> int:
         return 2
 
     blessed = 0
-    prefix = FRACTAL_PREFIX[args.fractal]
+    prefix = file_prefix(args)
     stem = sanitize_title(args.title)
     for name in STYLE_NAMES[args.fractal]:
         ppm = BLESSED_DIR / f"{prefix}{stem}_{name}.ppm"
@@ -213,7 +233,7 @@ def check_images(runner: Path, args) -> int:
         return 2
 
     # Convert produced PPMs to PNG for easy inspection.
-    prefix = FRACTAL_PREFIX[args.fractal]
+    prefix = file_prefix(args)
     stem = sanitize_title(args.title)
     for name in STYLE_NAMES[args.fractal]:
         ppm = CURRENT_DIR / f"{prefix}{stem}_{name}.ppm"
@@ -268,12 +288,18 @@ def main() -> int:
                         help="Record current output as the blessed reference")
     parser.add_argument("--runner", default=str(HERE.parent / "mandel_runner"),
                         help="Path to mandel_runner binary")
-    parser.add_argument("--cx",     type=float, default=-0.5)
-    parser.add_argument("--cy",     type=float, default=0.0)
+    # NUM values stay strings: the runner parses them in the selected precision
+    parser.add_argument("--cx",     default="-0.5")
+    parser.add_argument("--cy",     default="0.0")
     parser.add_argument("--scale",  type=float, default=0.125)
     parser.add_argument("--width",  type=int,   default=80)
     parser.add_argument("--height", type=int,   default=60)
     parser.add_argument("--title",  default="XWide view")
+    parser.add_argument("--c-re",   dest="c_re", default=None)
+    parser.add_argument("--c-im",   dest="c_im", default=None)
+    parser.add_argument("--period", type=int, default=None)
+    parser.add_argument("--precision", default="double",
+                        choices=["double", "float128", "dd", "qd", "real642", "ddheap"])
     args = parser.parse_args()
 
     runner = Path(args.runner)

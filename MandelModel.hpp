@@ -30,6 +30,7 @@ public:
                       void *new_points, MandelPointStore *new_store, int new_width, int new_height, const MandelMath::complex<MandelMath::number_any> *new_c,
                       int inlog, int new_step_log);
   Q_INVOKABLE void setView_double(double c_re, double c_im, double scale);
+  Q_INVOKABLE void setView_str(const QString &c_re, const QString &c_im, double scale); // decimal strings, full precision
   void setView(MandelMath::complex<MandelMath::number_any> const &c, double scale);
   Q_INVOKABLE void drag(double delta_x, double delta_y);
   Q_INVOKABLE void zoom(double x, double y, int inlog);
@@ -48,6 +49,7 @@ public:
   ShareableViewInfo getViewInfo();
   Q_PROPERTY(ShareableViewInfo viewInfo READ getViewInfo CONSTANT)// WRITE setViewInfo NOTIFY viewInfoChanged)
   Q_INVOKABLE ShareableViewInfo makeViewInfo(const QVariantMap &params);
+  Q_INVOKABLE QString getViewJson(); // current view in the format of the QML presets
 
   enum paintStyle
   {
@@ -61,11 +63,11 @@ public:
     paintStyleFC=7
   };
   Q_ENUM(paintStyle);
-  paintStyle _selectedPaintStyle;
+  paintStyle _selectedPaintStyle=paintStyleCls;
   Q_PROPERTY(paintStyle selectedPaintStyle READ getselectedPaintStyle WRITE setselectedPaintStyle NOTIFY selectedPaintStyleChanged)
   paintStyle getselectedPaintStyle() { return _selectedPaintStyle; }
   void setselectedPaintStyle(paintStyle ps) { _selectedPaintStyle=ps; invalidateMainImage(); }
-  int _threadsWorking;
+  int _threadsWorking=0;
   Q_PROPERTY(int threadsWorking READ getThreadsWorking CONSTANT)
   int getThreadsWorking() { return _threadsWorking; }
   Q_PROPERTY(int threadsMax READ getThreadCount CONSTANT)
@@ -78,16 +80,17 @@ public:
     precisionFloat128=1,
     precisionDDouble=2,
     precisionQDouble=3,
-    precisionReal642=4
+    precisionReal642=4,
+    precisionDDHeap=5
 #endif
   };
   Q_ENUM(precision);
-  precision _selectedPrecision;
+  precision _selectedPrecision=precisionDouble;
   Q_PROPERTY(precision selectedPrecision READ getselectedPrecision WRITE setselectedPrecision NOTIFY selectedPrecisionChange)
   precision getselectedPrecision() { return _selectedPrecision; }
   void setselectedPrecision(precision ps) { _selectedPrecision=ps; emit selectedPrecisionChange(); }
 
-  int _extAngleZoom;
+  int _extAngleZoom=0;
   Q_PROPERTY(int extAngleZoom READ getextAngleZoom WRITE setextAngleZoom NOTIFY extAngleZoomChange)
   int getextAngleZoom() { return _extAngleZoom; }
   void setextAngleZoom(int zoom) { _extAngleZoom=zoom; invalidateMainImage(); }
@@ -117,15 +120,15 @@ signals:
 protected:
   //MandelMath::worker_multi::Allocator<MandelMath::worker_multi> *storeAllocator;
   //MandelMath::worker_multi *storeWorker; //pointStore
-  MandelPointStore *pointStore;
+  MandelPointStore *pointStore=nullptr;
 
   //constexpr static int MAX_ZOOM_IN_DOUBLE=55;//53;
   //MandelMath::number_store::DbgType currentMath;
-  int epoch;
-  int imageWidth;
-  int imageHeight;
-  int nextGivenPointIndex;
-  int effortBonus;
+  int epoch=1;
+  int imageWidth=0;
+  int imageHeight=0;
+  int nextGivenPointIndex=0;
+  int effortBonus=0;
   //constexpr static int MAX_EFFORT=17;//131072 iters;
   static constexpr int MAX_EFFORT=22;//
   QElapsedTimer timerWriteToImage;
@@ -136,8 +139,8 @@ protected:
     MandelMath::complex<MandelMath::number_any> center;
     int step_log;
     double step_size; //TODO: should use special methods on number to add, mul and div by 2^-step_log
-    int cached_center_re_mod; //(center/step) mod 32768
-    int cached_center_im_mod;
+    int cached_center_re_mod=0; //(center/step) mod 32768
+    int cached_center_im_mod=0;
     Position(MandelMath::NumberType ntype, const Position *source);
     ~Position();
     //void assign(Position *src);
@@ -158,15 +161,15 @@ protected:
     //-> evaluator.currentData MandelPoint pointData;
     struct Bulb
     {
-      bool valid_unused;
+      bool valid_unused=false;
       MandelMath::complex<MandelMath::number_any> cb_unused;
       MandelMath::complex<MandelMath::number_any> rb_unused;
       MandelMath::complex<MandelMath::number_any> xc_unused;
       MandelMath::complex<MandelMath::number_any> baseZC_unused;
       MandelMath::complex<MandelMath::number_any> baseCC_unused;
       MandelMath::complex<MandelMath::number_any> baseFz;
-      int foundMult_;
-      bool is_card_unused;
+      int foundMult_=0;
+      bool is_card_unused=false;
       Bulb(MandelMath::NumberType ntype);
       ~Bulb();
       constexpr static int LEN=12;
@@ -189,19 +192,20 @@ protected:
     MandelMath::complex<MandelMath::number_any> lagu_c; //TODO: create struct Params and move there, like LaguerreModel
     MandelMath::complex<MandelMath::number_any> lagu_r; //same
     //MandelMath::number<MandelMath::number_any> tmp_place;
-    void *points; //array<double|float128|...>[width*height]
+    void *points=nullptr; //array<double|float128|...>[width*height]
     int threadCount;
     std::variant<std::nullptr_t,
                  MandelEvaluator<double> **,
                  MandelEvaluator<__float128> **,
                  MandelEvaluator<MandelMath::dd_real> **,
                  MandelEvaluator<MandelMath::dq_real> **,
-                 MandelEvaluator<MandelMath::real642> **> threads;
+                 MandelEvaluator<MandelMath::real642> **,
+                 MandelEvaluator<MandelMath::dd_heap> **> threads;
     PrecisionRecord(MandelMath::NumberType ntype, PrecisionRecord *source, MandelModel *doneReceiver);
     ~PrecisionRecord();
     //constexpr static int LEN=ShareableViewInfo::LEN+MandelPoint_<MandelMath::number_a *>::LEN+Position::LEN+Orbit::LEN+5  +6;
       //setViewDouble=2 setView=2 updateCachedDepth=2 -> +6
-  } *precisionRecord;
+  } *precisionRecord=nullptr;
 };
 
 #endif // MANDELMODEL_H

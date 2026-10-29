@@ -1,5 +1,9 @@
 #include "double_double.hpp"
+#include <cctype>
+#include <clocale>
 #include <cmath>
+#include <string>
+#include <quadmath.h>
 
 void __nop()
 {
@@ -97,287 +101,11 @@ void fpu_fix_end(unsigned int *old_cw) {
 #endif
 }
 
-#define _QD_SPLITTER 134217729.0               // = 2^27 + 1
-#define _QD_SPLIT_THRESH 6.69692879491417e+299 // = 2^996
-
-/*********** Basic Functions ************/
-/* Computes fl(a+b) and err(a+b).  Assumes |a| >= |b|. */
-inline void dd_real::quick_two_sum(double a, double b)
-{
-  hi = a + b;
-  lo_ = b + (a - hi);
-}
-
 /* Computes fl(a-b) and err(a-b).  Assumes |a| >= |b| */
 inline double quick_two_diff(double a, double b, double &err) {
   double s = a - b;
   err = (a - s) - b;
   return s;
-}
-
-/* Computes fl(a+b) and err(a+b).  */
-inline void dd_real::two_sum(double a, double b)
-{
-  hi = a + b;
-  double bb = hi - a;
-  lo_ = (a - (hi - bb)) + (b - bb);
-}
-
-/* Computes fl(a-b) and err(a-b).  */
-inline double two_diff(double a, double b, double &err) {
-  double s = a - b;
-  double bb = s - a;
-  err = (a - (s - bb)) - (b + bb);
-  return s;
-}
-
-/* Computes high word and lo word of a */
-/*inline*/ void dd_real::split(double a)
-{
-  double temp;
-  if (a > _QD_SPLIT_THRESH || a < -_QD_SPLIT_THRESH) {
-    a *= 3.7252902984619140625e-09;  // 2^-28
-    temp = _QD_SPLITTER * a;
-    hi = temp - (temp - a);
-    lo_ = a - hi;
-    hi *= 268435456.0;          // 2^28
-    lo_ *= 268435456.0;          // 2^28
-  } else {
-    temp = _QD_SPLITTER * a; //a=a1*2^27+a2*1  temp=a1*2^54+(a1+a2)*2^27 +(a2)*1
-    hi = temp - (temp - a);  //temp-a=a1*2^54+a2*2^27    temp-(temp-a)=a1*2^27
-    lo_ = a - hi;
-  }
-}
-
-/* Computes fl(a*b) and err(a*b). */
-inline void dd_real::two_prod(double a, double b)
-{
-  dd_real aa;
-  dd_real bb;
-  hi = a * b;
-  aa.split(a);
-  bb.split(b);
-  lo_ = ((aa.hi * bb.hi - hi) + aa.hi * bb.lo_ + aa.lo_ * bb.hi) + aa.lo_ * bb.lo_;
-}
-
-/* Computes fl(a*a) and err(a*a).  Faster than the above method. */
-inline void dd_real::two_sqr(double a)
-{
-  dd_real aa;
-  hi = a * a;
-  aa.split(a);
-  lo_ = ((aa.hi * aa.hi - hi) + 2.0 * aa.hi * aa.lo_) + aa.lo_ * aa.lo_;
-}
-
-//hack if you don't want to mess with FPU control word... but is a nightmare
-#define MAKE_DOUBLE( tmp, val ) ( tmp=(val), *(volatile double *)&tmp )
-
-double dd_real::eps2() const
-{
-  return 6.07717e-64; // 2^-(2*(53+52)) rounded up
-}
-
-double dd_real::eps234() const
-{
-  return 3.87e-48; // eps2^(3/4)
-}
-
-dd_real &dd_real::lshift(int exp)
-{
-  //lolwut "On many implementations, std::ldexp is less efficient than multiplication or division
-  //        by a power of two using arithmetic operators"
-  //should I just adjust exponent in *(int *)&hi or what
-  hi=ldexp(hi, exp);
-  lo_=ldexp(lo_, exp);
-  return *this;
-}
-
-dd_real &dd_real::add_double(double h2)
-{
-  dd_real se;
-  se.two_sum(hi, h2);
-  se.lo_ += lo_;
-  quick_two_sum(se.hi, se.lo_);
-  return *this;
-}
-
-dd_real &dd_real::mul_double(double h2)
-{
-  dd_real p;
-  p.two_prod(hi, h2);
-  p.lo_ += lo_*h2;
-  quick_two_sum(p.hi, p.lo_);
-  return *this;
-}
-
-dd_real &dd_real::add(dd_real const &other)
-{
-//dqfun.f90#dqadd is the same as dd_inline.h#dd_real::sloppy_add
-  dd_real se;
-
-  se.two_sum(hi, other.hi);
-  se.lo_ += (lo_ + other.lo_);
-  quick_two_sum(se.hi, se.lo_);
-
-//1998 inline.h#operator +(const doubledouble& x is the same as dd_inline.h#dd_real::ieee_add
-/*
-  dd_real s;
-  dd_real t;
-
-  s.two_sum(hi, h2);
-  t.two_sum(lo, l2);
-  s.lo += t.hi;
-  s.quick_two_sum(s.hi, s.lo);
-  s.lo += t.lo;
-  quick_two_sum(s.hi, s.lo);
-*/
-  return *this;
-}
-
-dd_real &dd_real::sub(dd_real const &other)
-{
-  //dqfun.f90#dqadd is the same as dd_inline.h#dd_real::sloppy_add
-  dd_real se;
-
-  se.two_sum(hi, -other.hi);
-  se.lo_ += (lo_ - other.lo_);
-  quick_two_sum(se.hi, se.lo_);
-  return *this;
-}
-
-dd_real &dd_real::mul(dd_real const &other)
-{
-  dd_real p;
-
-  p.two_prod(hi, other.hi);
-  p.lo_ += (hi * other.lo_ + lo_ * other.hi);
-  quick_two_sum(p.hi, p.lo_);
-/*
-  double hx, tx, hy, ty, C, c;
-  double th, tl;
-  C = MAKE_DOUBLE(th, double_double_split*hi);
-  hx = MAKE_DOUBLE(tl, C-hi);
-  c = MAKE_DOUBLE(th, double_double_split*h2);
-  hx = MAKE_DOUBLE(tl, C-hx);
-  tx = MAKE_DOUBLE(th, hi-hx);
-  hy = MAKE_DOUBLE(tl, c-h2);
-  C = MAKE_DOUBLE(th, hi*h2);
-  hy = MAKE_DOUBLE(tl, c-hy);
-  ty = MAKE_DOUBLE(th, h2-hy);
-  c = MAKE_DOUBLE(tl, ((((hx*hy-C)+hx*ty)+tx*hy)+tx*ty)+(hi*l2+lo*h2));
-
-  hi = MAKE_DOUBLE(th, C+c);
-  hx = MAKE_DOUBLE(th, C-hi);
-  lo = MAKE_DOUBLE(tl, c+hx);
-*/
-  return *this;
-}
-
-dd_real &dd_real::sqr()
-{
-  dd_real p;
-  dd_real s;
-  p.two_sqr(hi);
-  p.lo_ += 2.0 * hi * lo_;
-  p.lo_ += lo_ * lo_;
-  quick_two_sum(p.hi, p.lo_);
-  return *this;
-}
-
-double dd_real::radixfloor() const
-{
-  int ilog1=std::ilogb(hi);
-  return ldexp(1, ilog1);
-}
-
-dd_real &dd_real::recip()
-{
-#if 1 //sloppy_div
-  double s1, s2;
-  double q1, q2;
-  dd_real r;
-
-  q1 = 1 / hi;  /* approximate quotient */
-
-  /* compute  this - q1 * dd */
-  r.hi=hi;
-  r.lo_=lo_;
-  r.mul_double(q1);
-  s1 = two_diff(1, r.hi, s2);
-  s2 -= r.lo_;
-  s2 += 0;
-
-  /* get next approximation */
-  q2 = (s1 + s2) / hi;
-
-  /* renormalize */
-  quick_two_sum(q1, q2);
-#else //accurate_div
-  double q1, q2, q3;
-  dd_real r, tmp;
-
-  q1 = 1 / hi;  /* approximate quotient */
-
-  r.hi=hi;
-  r.lo=lo;
-  r.mul(q1, 0);
-  r.chs();
-  r.add(1, 0); // [1,0] - q1 * self;
-
-  q2 = r.hi / hi;
-  tmp.hi=hi;
-  tmp.lo=lo;
-  tmp.mul(q2, 0);
-  r.add(-tmp.hi, -tmp.lo); //  r -= (q2 * self);
-
-  q3 = r.hi / hi;
-
-  quick_two_sum(q1, q2);
-  add(q3, 0);
-#endif
-  return *this;
-}
-
-dd_real &dd_real::sqrt()
-{
-  /* Strategy:  Use Karp's trick:  if x is an approximation
-     to 1/sqrt(a), then
-
-        sqrt(a) = a*x + [a - (a*x)^2] * x / 2   (approx)
-
-     The approximation is accurate to twice the accuracy of x.
-     Also, the multiplication (a*x) and [-]*x can be done with
-     only half the precision.
-  */
-
-  /*if (hi<0) {
-    //dbgPoint();
-    hi=0;
-    lo_=0;
-    return *this;
-  };*/
-
-  if (hi<=0)
-  {
-    hi=0;
-    lo_=0;
-    return *this;
-  };
-
-
-  double x = 1.0 / std::sqrt(hi);
-  double ax = hi * x;
-  dd_real result;
-  result.hi=ax;
-  result.lo_=0;
-  result.sqr();
-  result.chs();
-  add(result);
-  hi*=(x*0.5);
-  lo_=0;
-  add_double(ax);
-  //return dd_real::add(ax, (a - dd_real::sqr(ax)).x[0] * (x * 0.5));
-  return *this;
 }
 
 dd_real &dd_real::round()
@@ -485,88 +213,77 @@ dd_real &dd_real::add_pi(double x)
   return *this;
 }
 
-std::strong_ordering dd_real::compare(dd_real const &other) const
+// libquadmath follows LC_NUMERIC, which Qt sets from the environment (e.g. ',')
+static char locale_decimal_point()
 {
-  if (hi<other.hi)
-    return std::strong_ordering::less;//-1;
-  else if (hi>other.hi)
-    return std::strong_ordering::greater;
-  else if (lo_<other.lo_)
-    return std::strong_ordering::less;
-  else if (lo_>other.lo_)
-    return std::strong_ordering::greater;
-  else
-    return std::strong_ordering::equal;
+  char const *dp=std::localeconv()->decimal_point;
+  return (dp && dp[0] && !dp[1])?dp[0]:'.';
 }
 
-/*int dd_real::compare(double other_h, double other_l) const
+bool float128_fromString(char const *str, __float128 &result)
 {
-  if (hi<other_h)
-    return -1;
-  else if (hi>other_h)
-    return +1;
-  else if (lo_<other_l)
-    return -1;
-  else if (lo_>other_l)
-    return +1;
-  else
-    return 0;
-}*/
-
-bool dd_real::isequal(dd_real const &other) const
-{
-  return (hi==other.hi) && (lo_==other.lo_);
+  std::string s(str);
+  char dp=locale_decimal_point();
+  if (dp!='.')
+    for (char &c: s)
+      if (c=='.')
+        c=dp;
+  char *end;
+  result=strtoflt128(s.c_str(), &end);
+  if (end==s.c_str())
+    return false;
+  while (std::isspace((unsigned char)*end))
+    end++;
+  return *end==0;
 }
 
-bool dd_real::is0() const
+QString float128_toString(__float128 x, int prec)
 {
-  return hi==0;
+  char buf[80];
+  quadmath_snprintf(buf, sizeof(buf), "%.*Qg", prec, x);
+  char dp=locale_decimal_point();
+  if (dp!='.')
+    for (char *c=buf; *c; c++)
+      if (*c==dp)
+        *c='.';
+  return QString(buf);
 }
 
-bool dd_real::isle(dd_real const &other) const
+QString float128_toString(__float128 x)
 {
-  if (hi!=other.hi)
-    return hi<other.hi;
-  return lo_<=other.lo_;
-}
-
-bool dd_real::isle0() const
-{
-  return hi<=0;
-}
-
-bool dd_real::isl0() const
-{
-  return hi<0;
-}
-
-bool dd_real::isl1() const
-{
-  return hi<1;
-}
-
-dd_real &dd_real::min(dd_real const &other)
-{
-  if (!isle(other))
+  QString result;
+  for (int prec=33; prec<=36; prec++) // 36 digits always round-trip a binary128
   {
-    assign(other);
-  };
-  return *this;
+    result=float128_toString(x, prec);
+    __float128 back;
+    if (float128_fromString(result.toUtf8().constData(), back) && back==x)
+      break;
+  }
+  return result;
+}
+
+bool dd_real::fromString(char const *str)
+{
+  __float128 q;
+  if (!float128_fromString(str, q))
+    return false;
+  hi=(double)q;
+  lo_=(double)(q-hi);
+  return true;
 }
 
 QString dd_real::toString() const
 {
-  return QString("dd(%1,%2)").arg(hi, 0, 'f', 16).arg(lo_, 0, 'g', 16);
-}
-
-int dd_real::toRound() const
-{
-  return std::floor(hi+0.5)+std::floor(lo_+0.5);
-}
-
-double dd_real::toDouble() const
-{
-  return hi;
+  __float128 q=(__float128)hi+lo_; // exact for a normalized dd (<=107 bits)
+  QString result;
+  for (int prec=31; prec<=36; prec++)
+  {
+    result=float128_toString(q, prec);
+    dd_real back;
+    if (back.fromString(result.toUtf8().constData()) && back.hi==hi && back.lo_==lo_)
+      break;
+  }
+  return result;
 }
 
 

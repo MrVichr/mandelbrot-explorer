@@ -11,22 +11,10 @@
 
 #define UPDATE_CACHED_MOD 0 //works until precision doesn't allow
 
-JuliaModel::JuliaModel(): QObject(),
-  _extAngleZoom(0), _selectedEdePatchAlgo(ext_de_patch_algo::EedepaBlend), _selectedExteriorColoring(exterior_coloring::EextcolRainbow),
-  pointStore(nullptr), precisionRecord(nullptr)
+JuliaModel::JuliaModel(): QObject()
 {
   unsigned int oldcw; //524319 = 0x8001F = mask all interrupts, 80bit precision
   MandelMath::fpu_fix_start(&oldcw);
-  _selectedPaintStyle=paintStyleCls;//Kind;
-  _selectedPrecision=EprecisionDouble;
-  epoch=1;
-  imageWidth=0;
-  imageHeight=0;
-  //pointStore=nullptr;
-  nextGivenPointIndex=0;
-  effortBonus=0;
-  //threadCount=4;
-  _threadsWorking=0;
   QObject::connect(this, &JuliaModel::selectedPrecisionChange,
                    this, &JuliaModel::selectedPrecisionChanged);
   selectedPrecisionChanged();
@@ -170,8 +158,8 @@ QString JuliaModel::getTextInfoGen()
         default: fc_fz=" fz="+data->fz_z.toString();
       }
       break;
-    case JuliaPointStore::ResultState::stPeriod3:
-      state="Per3";
+    case JuliaPointStore::ResultState::stPeriodBoundary:
+      state="PerB";
       switch (_selectedPaintStyle)
       {
         case paintStylePhi: fc_fz=" fi="+QString::number(data_store->interior.phi_re)+"+i*"+QString::number(data_store->interior.phi_im); break;
@@ -269,7 +257,7 @@ QString JuliaModel::getTextInfoSpec()
                     " near-r="+QString::number(data_store->nearmriter)+(data_store->nearmr_difficult?" !!":"");
         //  +" mult="+QString::number(std::round(p/(2*M_PI)))+"/"+QString::number(precisionRecord->orbit.bulb.foundMult_);
     } break;
-    case JuliaPointStore::ResultState::stPeriod3:
+    case JuliaPointStore::ResultState::stPeriodBoundary:
     {
       //double p=std::atan2((precisionRecord->orbit.bulb.baseFz_.im.toDouble()),
       //                     precisionRecord->orbit.bulb.baseFz_.re.toDouble())*precisionRecord->orbit.bulb.foundMult_;
@@ -373,7 +361,7 @@ void JuliaModel::recomputeRoot(int max_effort)
   // |(1+-sqrt(1-4*c/e^2))|/2=|z1|[e],|z2|[e]
   // worst case |z|=(1+sqrt(1+4*|c|))/2 so everything above (and some below) flies even farther
   //evaluator.currentParams.juliaBailout=MandelMath::sqr_double(1+std::sqrt(1+4*std::sqrt(evaluator.currentParams.c.getMag_double())))/4;
-  evaluator.currentParams.julia.bailout.assign(*evaluator.currentParams.julia.c.getMag_tmp());
+  evaluator.currentParams.julia.bailout.assign(evaluator.currentParams.julia.c.getMag());
   evaluator.currentParams.julia.bailout.sqrt();
   evaluator.currentParams.julia.bailout.lshift(2);
   evaluator.currentParams.julia.bailout.add_double(1);
@@ -430,6 +418,17 @@ void JuliaModel::setParams(ShareableViewInfo viewInfo)
 
     startNewEpoch();
   }
+}
+
+QString JuliaModel::getViewJson()
+{
+  return "{\"viewRe\": \""+precisionRecord->position.center.re.toString()+
+         "\", \"viewIm\": \""+precisionRecord->position.center.im.toString()+
+         "\", \"viewZoom\": "+QString::number(precisionRecord->position.step_size, 'g', 17)+
+         ", \"cRe\": \""+precisionRecord->params.c.re.toString()+
+         "\", \"cIm\": \""+precisionRecord->params.c.im.toString()+
+         "\", \"period\": "+QString::number(precisionRecord->params.period)+
+         ", \"caption\": \"\"}";
 }
 
 class PixelPositionTransformer
@@ -676,6 +675,9 @@ void JuliaModel::setImageSize(int width, int height)
       case MandelMath::NumberType::typeReal642:
         new_points=MandelMath::number<MandelMath::real642>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, newLength*JuliaPoint<MandelMath::number_any>::LEN);
         break;
+      case MandelMath::NumberType::typeDDHeap:
+        new_points=MandelMath::number<MandelMath::dd_heap>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, newLength*JuliaPoint<MandelMath::number_any>::LEN);
+        break;
 #endif
     }
     MandelMath::complex<MandelMath::number_any> old_c(precisionRecord->position.center);
@@ -703,6 +705,9 @@ void JuliaModel::setImageSize(int width, int height)
         break;
       case MandelMath::NumberType::typeReal642:
         delete[] (MandelMath::real642 *)precisionRecord->points;
+        break;
+      case MandelMath::NumberType::typeDDHeap:
+        delete[] (MandelMath::dd_real *)precisionRecord->points;
         break;
 #endif
     }
@@ -879,7 +884,6 @@ void JuliaModel::paintOrbit(ShareableImageWrapper image, int x, int y)
       painter.drawEllipse(x-exterior, y-exterior, 2*exterior, 2*exterior);
     } break;
     case JuliaPointStore::ResultState::stPeriod2:
-    case JuliaPointStore::ResultState::stPeriod3:
     { //interior distance estimate
       int interior;
       painter.setBrush(Qt::BrushStyle::NoBrush);
@@ -936,6 +940,10 @@ void JuliaModel::paintOrbit(ShareableImageWrapper image, int x, int y)
         painter.drawEllipse(+x+inte_x-2, y-inte_y-2, 5, 5);
       }
     } break;
+    case JuliaPointStore::ResultState::stPeriodBoundary:
+    {
+      // nothing to show
+    } break;
     default: ;
   }
 
@@ -978,7 +986,7 @@ void JuliaModel::paintOrbit(ShareableImageWrapper image, int x, int y)
 
       if (MandelMath::enum_is_one_of<JuliaPointStore::ResultState,
                           JuliaPointStore::ResultState::stPeriod2,
-                          JuliaPointStore::ResultState::stPeriod3,
+                          JuliaPointStore::ResultState::stPeriodBoundary,
                           JuliaPointStore::ResultState::stUnknown,
                           JuliaPointStore::ResultState::stMaxIter>(resultStoreOrbit->rstate) &&
           evaluator.juliaData.store->iter<precisionRecord->params.period+resultStoreOrbit->near0iter_1)
@@ -1088,7 +1096,7 @@ void JuliaModel::paintOrbit(ShareableImageWrapper image, int x, int y)
   }
 
   if ((evaluator.juliaData.store->rstate==JuliaPointStore::ResultState::stPeriod2) ||
-      (evaluator.juliaData.store->rstate==JuliaPointStore::ResultState::stPeriod3))
+      (evaluator.juliaData.store->rstate==JuliaPointStore::ResultState::stPeriodBoundary))
   {
     int circ_x, circ_y;
     painter.setPen(QColor(0, 0xff, 0xff)); //paint root
@@ -1250,7 +1258,7 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
             } break;
             case JuliaPointStore::ResultState::stBoundary:
             {
-              image.image->setPixel(x, y, 0xff00ff00);
+              image.image->setPixel(x, y, 0xff00ff80);//0xff00ff00);
             } break;
             case JuliaPointStore::ResultState::stMisiur:
             {
@@ -1261,7 +1269,6 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
               image.image->setPixel(x, y, 0xffffc000);
             } break;
             case JuliaPointStore::ResultState::stPeriod2:
-            case JuliaPointStore::ResultState::stPeriod3:
             {
               /*int r;
               switch (data->period)
@@ -1283,6 +1290,12 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
               double iterx=std::log(wtiStore->iter+1);
               int r=(iterx-floor(iterx))*256;
               image.image->setPixel(x, y, 0xff000000+(r<<16));
+            } break;
+            case JuliaPointStore::ResultState::stPeriodBoundary:
+            {
+              double iterx=std::log(wtiStore->iter+1);
+              int r=(iterx-floor(iterx))*128;
+              image.image->setPixel(x, y, 0xff80ff00+(r<<16));
             } break;
             case JuliaPointStore::ResultState::stMaxIter:
             {
@@ -1367,7 +1380,7 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
               image.image->setPixel(x, y, 0xffffffff);
             } break;
             case JuliaPointStore::ResultState::stPeriod2:
-            case JuliaPointStore::ResultState::stPeriod3:
+            case JuliaPointStore::ResultState::stPeriodBoundary:
             {
               //ok but shouldn't use raw iter int index=periodToIndex(wtiStore->iter % wtiStore->period);
               //ok int index=periodToIndex(wtiStore->nearziter_0 % wtiStore->period); fails with c around -1+0i : all chunks at phase=0
@@ -1392,7 +1405,10 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
                   default: r=0xe0;
                 }*/
                 //image.image->setPixel(x, y, 0xffffc0c0);
-                image.image->setPixel(x, y, 0xff000000+r*0x010101);
+                if (wtiStore->rstate == JuliaPointStore::ResultState::stPeriodBoundary)
+                  image.image->setPixel(x, y, 0xff000000+r*0x010100);
+                else
+                  image.image->setPixel(x, y, 0xff000000+r*0x010101);
               }
             } break;
             case JuliaPointStore::ResultState::stMaxIter:
@@ -1495,7 +1511,7 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
               image.image->setPixel(x, y, 0xff308030);
             } break;
             case JuliaPointStore::ResultState::stPeriod2:
-            case JuliaPointStore::ResultState::stPeriod3:
+            case JuliaPointStore::ResultState::stPeriodBoundary:
             {
               int index;
               if (precisionRecord->params.period<=0)
@@ -1503,7 +1519,10 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
               else
                 index=wtiStore->near0iter_1 % precisionRecord->params.period;//also ok?
               int r=0x80 | MandelMath::ReverseBits<7,1>(index);
-              image.image->setPixel(x, y, 0xff000000+r*0x010101);
+              if (wtiStore->rstate == JuliaPointStore::ResultState::stPeriodBoundary)
+                image.image->setPixel(x, y, 0xff00ff00+r*0x010001);
+              else
+                image.image->setPixel(x, y, 0xff000000+r*0x010101);
               /*
               precisionRecord->wtiPoint.readFrom(precisionRecord->points, (y*imageWidth+x)*JuliaPoint<MandelMath::number_any>::LEN);
               double re=precisionRecord->wtiPoint.fz_r.re.toDouble();
@@ -1587,7 +1606,7 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
               image.image->setPixel(x, y, 0xff308030);
             } break;
             case JuliaPointStore::ResultState::stPeriod2:
-            case JuliaPointStore::ResultState::stPeriod3:
+            case JuliaPointStore::ResultState::stPeriodBoundary:
             {
               int index;
               if (precisionRecord->params.period<=0)
@@ -1595,7 +1614,10 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
               else
                 index=wtiStore->nearziter_0 % precisionRecord->params.period;//also ok?
               int r=0x80 | MandelMath::ReverseBits<7,1>(index);
-              image.image->setPixel(x, y, 0xff000000+r*0x010101);
+              if (wtiStore->rstate == JuliaPointStore::ResultState::stPeriodBoundary)
+                image.image->setPixel(x, y, 0xff00ff00+r*0x010001);
+              else
+                image.image->setPixel(x, y, 0xff000000+r*0x010101);
               /*
               precisionRecord->wtiPoint.readFrom(precisionRecord->points, (y*imageWidth+x)*JuliaPoint<MandelMath::number_any>::LEN);
               double re=precisionRecord->wtiPoint.fz_r.re.toDouble();
@@ -1653,7 +1675,6 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
               image.image->setPixel(x, y, 0xff308030);
             } break;
             case JuliaPointStore::ResultState::stPeriod2:
-            case JuliaPointStore::ResultState::stPeriod3:
             {
               int ti=30;
               if (wtiStore->interior.mixed<=0)
@@ -1680,6 +1701,10 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
                 image.image->setPixel(x, y, 0xffffffff);
               else
                 image.image->setPixel(x, y, 0xff000000+(r<<16)+(g<<8)+(b));
+            } break;
+            case JuliaPointStore::ResultState::stPeriodBoundary:
+            {
+              image.image->setPixel(x, y, 0xff80ff80);
             } break;
             case JuliaPointStore::ResultState::stMaxIter:
             {
@@ -1733,7 +1758,7 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
               image.image->setPixel(x, y, 0xff008000);
             } break;
             case JuliaPointStore::ResultState::stPeriod2:
-            case JuliaPointStore::ResultState::stPeriod3:
+            case JuliaPointStore::ResultState::stPeriodBoundary:
             {
               /*int ti=data->newton_iter; //very noisy, maybe show <=10, >10, >30, 49
               int r;
@@ -1751,7 +1776,10 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
                 ti=wtiStore->near0iter_1;
               else
                 ti=wtiStore->near0iter_1;// % precisionRecord->params.period;
-              image.image->setPixel(x, y, qRgb(0x80+MandelMath::ReverseBits<7,1>(ti), 0, 0));
+              if (wtiStore->rstate == JuliaPointStore::ResultState::stPeriodBoundary)
+                image.image->setPixel(x, y, qRgb(0x80+MandelMath::ReverseBits<7,1>(ti), 0xFF, 0));
+              else
+                image.image->setPixel(x, y, qRgb(0x80+MandelMath::ReverseBits<7,1>(ti), 0, 0));
               /*if (ti>0)
               {
                 int tj=0;
@@ -1824,7 +1852,7 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
               image.image->setPixel(x, y, 0xff008000);
             } break;
             case JuliaPointStore::ResultState::stPeriod2:
-            case JuliaPointStore::ResultState::stPeriod3:
+            case JuliaPointStore::ResultState::stPeriodBoundary:
             {
               /*int ti=data->newton_iter; //very noisy, maybe show <=10, >10, >30, 49
               int r;
@@ -1842,7 +1870,10 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
                 ti=wtiStore->nearziter_0;
               else
                 ti=wtiStore->nearziter_0 % precisionRecord->params.period;
-              image.image->setPixel(x, y, 0xff800000+(MandelMath::ReverseBits<7,1>(ti)<<16));
+              if (wtiStore->rstate == JuliaPointStore::ResultState::stPeriodBoundary)
+                image.image->setPixel(x, y, 0xff80ff00+(MandelMath::ReverseBits<7,1>(ti)<<16));
+              else
+                image.image->setPixel(x, y, 0xff800000+(MandelMath::ReverseBits<7,1>(ti)<<16));
               /*if (ti>0)
               {
                 int tj=0;
@@ -1898,7 +1929,6 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
               image.image->setPixel(x, y, 0xff308030);
             } break;
             case JuliaPointStore::ResultState::stPeriod2:
-            case JuliaPointStore::ResultState::stPeriod3:
             {
               precisionRecord->wtiPoint.readFrom(precisionRecord->points, (y*imageWidth+x)*JuliaPoint<MandelMath::number_any>::LEN);
               //double re=precisionRecord->wtiPoint.fz_r.re.toDouble();
@@ -1930,6 +1960,10 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
               if (mag<0.2)
                 r=128;
               image.image->setPixel(x, y, 0xff000000+(r<<16)+(g<<8)+(b));
+            } break;
+            case JuliaPointStore::ResultState::stPeriodBoundary:
+            {
+              image.image->setPixel(x, y, 0xffffff80);
             } break;
             case JuliaPointStore::ResultState::stMaxIter:
             {
@@ -1963,7 +1997,7 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
               image.image->setPixel(x, y, 0xff308030);
             } break;
             case JuliaPointStore::ResultState::stPeriod2:
-            case JuliaPointStore::ResultState::stPeriod3:
+            case JuliaPointStore::ResultState::stPeriodBoundary:
             {
               precisionRecord->wtiPoint.readFrom(precisionRecord->points, (y*imageWidth+x)*JuliaPoint<MandelMath::number_any>::LEN);
               //int index=wtiStore->interior.first_under_1;
@@ -1972,6 +2006,8 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
               int g=0x80 | MandelMath::ReverseBits<7,1>(index);
               int b=0;
               int r=0;
+              if (wtiStore->rstate == JuliaPointStore::ResultState::stPeriodBoundary)
+                b=0xff;
               image.image->setPixel(x, y, 0xff000000+(r<<16)+(g<<8)+(b));
             } break;
             case JuliaPointStore::ResultState::stMaxIter:
@@ -2015,7 +2051,7 @@ int JuliaModel::writeToImage(ShareableImageWrapper image)
               image.image->setPixel(x, y, 0xff308030);
             } break;
             case JuliaPointStore::ResultState::stPeriod2:
-            case JuliaPointStore::ResultState::stPeriod3:
+            case JuliaPointStore::ResultState::stPeriodBoundary:
             {
               //precisionRecord->wtiPoint.readFrom(precisionRecord->points, (y*imageWidth+x)*JuliaPoint<MandelMath::number_any>::LEN);
               //int index=wtiStore->interior.first_under_1;
@@ -2289,6 +2325,13 @@ void JuliaModel::selectedPrecisionChanged()
     pointCount=0;
   else
     pointCount=imageWidth*imageHeight;
+  {
+    QWriteLocker locker(&threading_mutex);
+    epoch=(epoch%2000000000)+1; //old workers stop taking work and stop writing points
+    for (int i=0; i<pointCount; i++)
+      if (pointStore[i].wstate==JuliaPointStore::WorkState::stWorking)
+        pointStore[i].wstate=JuliaPointStore::WorkState::stIdle;
+  }
   void *new_points;
   MandelMath::NumberType newPrecision;
   switch (_selectedPrecision)
@@ -2314,6 +2357,10 @@ void JuliaModel::selectedPrecisionChanged()
     case EprecisionReal642:
       newPrecision=Type::typeReal642;
       new_points=MandelMath::number<MandelMath::real642>::convert_block(precisionRecord?precisionRecord->ntype:Type::typeEmpty, precisionRecord?precisionRecord->points:nullptr, pointCount*JuliaPoint<MandelMath::real642>::LEN);
+      break;
+    case EprecisionDDHeap:
+      newPrecision=Type::typeDDHeap;
+      new_points=MandelMath::number<MandelMath::dd_heap>::convert_block(precisionRecord?precisionRecord->ntype:Type::typeEmpty, precisionRecord?precisionRecord->points:nullptr, pointCount*JuliaPoint<MandelMath::dd_heap>::LEN);
       break;
 #endif
     default: goto lolwut;
@@ -2555,6 +2602,9 @@ JuliaModel::PrecisionRecord::PrecisionRecord(MandelMath::NumberType ntype, Preci
     case MandelMath::NumberType::typeReal642:
       threads=new MandelEvaluator<MandelMath::real642> *[threadCount];
       break;
+    case MandelMath::NumberType::typeDDHeap:
+      threads=new MandelEvaluator<MandelMath::dd_heap> *[threadCount];
+      break;
 #endif
   }
   MandelMath::visit([](auto &threads, PrecisionRecord &self, JuliaModel *doneReceiver, PrecisionRecord *source){
@@ -2603,7 +2653,8 @@ JuliaModel::PrecisionRecord::~PrecisionRecord()
       {
         for (int t=threadCount-1; t>=0; t--)
         {
-          threads[t]->thread.wait(1000);
+          if (!threads[t]->thread.wait(1000))
+              qDebug() << "Thread" << t << "did not finish in time";
           delete threads[t];
         }
         delete[] threads;
@@ -2630,6 +2681,9 @@ JuliaModel::PrecisionRecord::~PrecisionRecord()
       break;
   case MandelMath::NumberType::typeReal642:
       delete[] (MandelMath::real642 *)points;
+      break;
+  case MandelMath::NumberType::typeDDHeap:
+      delete[] (MandelMath::dd_real *)points;
       break;
 #endif
   }

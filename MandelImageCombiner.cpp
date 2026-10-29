@@ -1,5 +1,12 @@
 #include "MandelImageCombiner.hpp"
+#include <QClipboard>
+#include <QGuiApplication>
 #include <QPainter>
+
+void MandelImageCombiner::copyToClipboard(const QString &text)
+{
+  QGuiApplication::clipboard()->setText(text);
+}
 
 MandelImageCombiner::MandelImageCombiner(QQuickItem *parent):
   QQuickPaintedItem(parent)

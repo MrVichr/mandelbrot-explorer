@@ -57,7 +57,7 @@ public:
         switch (_type) {
             case Type::String: return std::get<QString>(_val);
             case Type::Int:    return QString::number(std::get<int>(_val));
-            case Type::Double: return QString::number(std::get<double>(_val));
+            case Type::Double: return QString::number(std::get<double>(_val), 'g', 17);
             case Type::Bool:   return std::get<bool>(_val) ? QString("true") : QString("false");
             default: return {};
         }

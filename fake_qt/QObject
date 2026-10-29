@@ -141,8 +141,21 @@ public:
     virtual ~QObject()
     {
         std::lock_guard<std::mutex> lk(fakeConnMutex());
-        fakeThreadAffinity().erase(static_cast<const void*>(this));
-        fakePendingTasks().erase(static_cast<const void*>(this));
+        const void *self = static_cast<const void*>(this);
+        fakeThreadAffinity().erase(self);
+        fakePendingTasks().erase(self);
+        // Real Qt disconnects a destroyed object both as sender and as receiver.
+        auto &reg = fakeConnRegistry();
+        for (auto it = reg.begin(); it != reg.end(); )
+        {
+            if (it->first.first == self)
+                it = reg.erase(it);
+            else
+            {
+                std::erase_if(it->second, [self](const FakeConnEntry &e) { return e.receiver == self; });
+                ++it;
+            }
+        }
     }
 
     QObject *parent() const { return nullptr; }
