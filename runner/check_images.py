@@ -28,7 +28,7 @@ Options
     --c-re NUM               Julia/Laguerre c, real part   (default: runner's)
     --c-im NUM               Julia/Laguerre c, imag part   (default: runner's)
     --period INT             Julia/Laguerre period         (default: runner's)
-    --precision NAME         double|float128|dd|qd|real642|ddheap (default: double);
+    --precision NAME         double|float128|dd|qd|real642|ddheap|de|dde (default: double);
                              non-double outputs are tagged, e.g. Man_dd_...
 
 Exit codes
@@ -299,7 +299,7 @@ def main() -> int:
     parser.add_argument("--c-im",   dest="c_im", default=None)
     parser.add_argument("--period", type=int, default=None)
     parser.add_argument("--precision", default="double",
-                        choices=["double", "float128", "dd", "qd", "real642", "ddheap"])
+                        choices=["double", "float128", "dd", "qd", "real642", "ddheap", "de", "dde"])
     args = parser.parse_args()
 
     runner = Path(args.runner)

@@ -433,6 +433,8 @@ protected:
                MandelEvaluator<MandelMath::dq_real> *,
                MandelEvaluator<MandelMath::real642> *,
                MandelEvaluator<MandelMath::dd_heap> *,
+               MandelEvaluator<MandelMath::de_real> *,
+               MandelEvaluator<MandelMath::dde_real> *,
                MandelEvaluator<MandelMath::number_any> *> owner;
   //MandelEvaluator<MandelMath::number_any> *owner_;
 public:
@@ -442,6 +444,8 @@ public:
   MandelEvaluatorThread(MandelEvaluator<MandelMath::dq_real> *owner);
   MandelEvaluatorThread(MandelEvaluator<MandelMath::real642> *owner);
   MandelEvaluatorThread(MandelEvaluator<MandelMath::dd_heap> *owner);
+  MandelEvaluatorThread(MandelEvaluator<MandelMath::de_real> *owner);
+  MandelEvaluatorThread(MandelEvaluator<MandelMath::dde_real> *owner);
   MandelEvaluatorThread(MandelEvaluator<MandelMath::number_any> *owner);
   void syncMandel();
   void syncJulia();

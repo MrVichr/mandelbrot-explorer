@@ -12,8 +12,10 @@
 #include <compare>
 #include <QString>
 #include <cassert>
+#include <quadmath.h>
 
 #include "double_double.hpp"
+#include "double_exp.hpp"
 #include "dd_heap.hpp"
 //#include "multiprec.hpp"
 
@@ -77,7 +79,15 @@ auto visit(auto callable, std::variant<Options...> &vari, auto &...params)
     if (index==6) return callable((NthTypeOf<6, Options...> &)vari, params...);
   if constexpr (sizeof...(Options)>7)
     if (index==7) return callable((NthTypeOf<7, Options...> &)vari, params...);
-  static_assert(sizeof...(Options)<=8, "extend visit");
+  if constexpr (sizeof...(Options)>8)
+    if (index==8) return callable((NthTypeOf<8, Options...> &)vari, params...);
+  if constexpr (sizeof...(Options)>9)
+    if (index==9) return callable((NthTypeOf<9, Options...> &)vari, params...);
+  if constexpr (sizeof...(Options)>10)
+    if (index==10) return callable((NthTypeOf<10, Options...> &)vari, params...);
+  if constexpr (sizeof...(Options)>11)
+    if (index==11) return callable((NthTypeOf<11, Options...> &)vari, params...);
+  static_assert(sizeof...(Options)<=12, "extend visit");
   using RT=decltype(callable((NthTypeOf<0, Options...> &)vari, params...));
   [[unlikely]]
   if constexpr (std::is_same_v<RT, std::strong_ordering>)
@@ -108,7 +118,15 @@ auto visit(auto callable, std::variant<Options...> const &vari, auto &...params)
     if (index==6) return callable((NthTypeOf<6, Options...> &)vari, params...);
   if constexpr (sizeof...(Options)>7)
     if (index==7) return callable((NthTypeOf<7, Options...> &)vari, params...);
-  static_assert(sizeof...(Options)<=8, "extend visit");
+  if constexpr (sizeof...(Options)>8)
+    if (index==8) return callable((NthTypeOf<8, Options...> const &)vari, params...);
+  if constexpr (sizeof...(Options)>9)
+    if (index==9) return callable((NthTypeOf<9, Options...> const &)vari, params...);
+  if constexpr (sizeof...(Options)>10)
+    if (index==10) return callable((NthTypeOf<10, Options...> const &)vari, params...);
+  if constexpr (sizeof...(Options)>11)
+    if (index==11) return callable((NthTypeOf<11, Options...> const &)vari, params...);
+  static_assert(sizeof...(Options)<=12, "extend visit");
   using RT=decltype(callable((NthTypeOf<0, Options...> &)vari, params...));
   [[unlikely]]
   if constexpr (std::is_same_v<RT, std::strong_ordering>)
@@ -137,6 +155,8 @@ enum NumberType { typeEmpty
             , typeQDouble
             , typeReal642
             , typeDDHeap
+            , typeDExp
+            , typeDDExp
 #endif
           };
 
@@ -162,6 +182,8 @@ template <> struct NumberTypeFromBase<dd_real> { static constexpr NumberType nty
 template <> struct NumberTypeFromBase<dq_real> { static constexpr NumberType ntype=typeQDouble; };
 template <> struct NumberTypeFromBase<real642> { static constexpr NumberType ntype=typeReal642; };
 template <> struct NumberTypeFromBase<dd_heap> { static constexpr NumberType ntype=typeDDHeap; };
+template <> struct NumberTypeFromBase<de_real> { static constexpr NumberType ntype=typeDExp; };
+template <> struct NumberTypeFromBase<dde_real> { static constexpr NumberType ntype=typeDDExp; };
 #endif
 
 extern int CreatedInstancesOfNumber;
@@ -172,7 +194,8 @@ class number;
 template<typename BASE>
 class complex;
 
-using number_any=std::variant<std::monostate, number<double>, number<__float128>, number<dd_real>, number<dq_real>, number<real642>, number<dd_heap>>;
+using number_any=std::variant<std::monostate, number<double>, number<__float128>, number<dd_real>, number<dq_real>, number<real642>, number<dd_heap>,
+                              number<de_real>, number<dde_real>>;
 
 template<typename T>
 concept IMandelNumber = requires(T a, T b)
@@ -185,7 +208,7 @@ concept IMandelNumber = requires(T a, T b)
 
   { a.eps2() } -> std::same_as<double>;
   requires std::same_as<decltype ( &T::eps234 ), double(T::*)() const>;
-  requires std::same_as<decltype ( &T::sqrtlarge ), double(T::*)() const>;
+  requires std::same_as<decltype ( &T::isTooLarge ), bool(T::*)() const>;
 
   //requires std::same_as<decltype ( &T::zero ), T &(T::*)(double val)>;
   requires std::same_as<decltype ( static_cast<T &(T::*)(double x)>(&T::zero) ), T &(T::*)(double)>;
@@ -255,18 +278,20 @@ inline double sqr_double(double x) //no one ever needed this function before yea
   return x*x;
 }
 
-// s*2^n by adjusting the exponent bits; memcpy keeps it valid under strict aliasing once inlined
+// s*2^n by adjusting the exponent bits while s and the result are normal; memcpy keeps it valid under strict aliasing once inlined
 inline void lshift_float128(__float128 &s, int n)
 {
-  if (s != 0) //don't play with 0's exponent or you get NaN
+  constexpr size_t top=sizeof(s)-sizeof(uint16_t); // sign+exponent word, little-endian
+  uint16_t signexp;
+  std::memcpy(&signexp, (char *)&s+top, sizeof(signexp));
+  int e=signexp & 0x7FFF;
+  if (e==0 || e==0x7FFF || n<=-e || n>=0x7FFF-e) [[unlikely]] // 0, subnormal, inf, NaN, or the result is not normal
   {
-    constexpr size_t top=sizeof(s)-sizeof(uint16_t); // sign+exponent word, little-endian
-    uint16_t exponent;
-    std::memcpy(&exponent, (char *)&s+top, sizeof(exponent));
-    exponent+=n;
-    //TODO: should check for overflow/underflow but unlikely to happen
-    std::memcpy((char *)&s+top, &exponent, sizeof(exponent));
+    s=scalbnq(s, n);
+    return;
   }
+  signexp+=n;
+  std::memcpy((char *)&s+top, &signexp, sizeof(signexp));
 }
 
 // Type-specific operations on the raw store of number<BASE>; one specialisation per concrete BASE.
@@ -278,7 +303,9 @@ struct number_traits<double>
 {
   static double eps2() { return 1.232596e-32; } // 2^-(2*53) rounded up
   static double eps234() { return 1.17e-24; } // eps2^(3/4)
-  static double sqrtlarge() { return 1.915e153; } // sqrt(DBL_MAX)/7
+  static constexpr double large=1.915e153; // sqrt(DBL_MAX)/7
+  static bool isTooLarge(double s) { return s>large; }
+  static bool isMagTooLarge(double re, double im) { return isTooLarge(re*re+im*im); }
   static void zero(double &s, double v) { s=v; }
   static void chs(double &s) { s=-s; }
   static void lshift(double &s, int n) { s=ldexp2(s, n); }
@@ -343,56 +370,18 @@ struct number_traits<double>
 template<>
 struct number_traits<__float128>
 {
-  static constexpr __float128 M_PIq=3.141592653589793238462643383279502884197Q;
+  static constexpr __float128 pi=3.141592653589793238462643383279502884197Q; // not M_PIq: <quadmath.h> defines that as a macro
   static double eps2() { return 9.27302e-69; } // 2^-(2*113) rounded up
   static double eps234() { return 9.45e-52; } // eps2^(3/4)
-  static double sqrtlarge() { return 1e300; } // sqrt(FLT128_MAX)/7 does not fit; limits are compared in double
+  static constexpr __float128 large=1.558e2465Q; // could be sqrt(FLT128_MAX)/7 now; untested, and would change the references
+  static bool isTooLarge(__float128 s) { return s>large; }
+  static bool isMagTooLarge(__float128 re, __float128 im) { return isTooLarge(re*re+im*im); }
   static void zero(__float128 &s, double v) { s=v; }
   static void chs(__float128 &s) { s=-s; }
   static void lshift(__float128 &s, int n) { lshift_float128(s, n); }
-  static void round(__float128 &s)
-  {
-    __float128 remainder=s;
-    s=0;
-    for (;;)
-    {
-      double some=std::round((double)remainder);
-      if (some==0)
-        break;
-      s+=some;
-      remainder-=some;
-    }
-  }
-  static void frac(__float128 &s)
-  {
-    if (s<0)
-    {
-      double some=std::ceil((double)s);
-      while (some)
-      {
-        s -= some;
-        some=std::ceil((double)s);
-      }
-    }
-    else
-    {
-      double some=std::floor((double)s);
-      while (some)
-      {
-        s -= some;
-        some=std::floor((double)s);
-      }
-    }
-  }
-  static void mod1(__float128 &s)
-  {
-    double some=std::floor((double)s);
-    while (some)
-    {
-      s -= some;
-      some=std::floor((double)s);
-    }
-  }
+  static void round(__float128 &s) { s=roundq(s); }
+  static void frac(__float128 &s) { s -= truncq(s); }
+  static void mod1(__float128 &s) { s -= floorq(s); }
   static void add_double(__float128 &s, double x) { s += x; }
   static void mul_double(__float128 &s, double x) { s *= x; }
   static void add(__float128 &s, __float128 o) { s += o; }
@@ -400,10 +389,17 @@ struct number_traits<__float128>
   static void rsub(__float128 &s, __float128 o) { s = o-s; }
   static void mul(__float128 &s, __float128 o) { s *= o; }
   static void sqr(__float128 &s) { s *= s; }
-  static double radixfloor(__float128 s) { return radixfloor2((double)s); }
+  static double radixfloor(__float128 s) { return ldexp2(1.0, ilogbq(s)); }
   static void recip(__float128 &s) { s = __float128(1.0)/s; }
-  static void sqrt(__float128 &s)
+  static void sqrt(__float128 &s) { s=sqrtq(s); }
+  // ~2.7x faster than sqrtq but 1 ulp off in ~1/8 of cases
+  static void sqrt_old(__float128 &s)
   {
+    if (!(s>0x1p-900Q && s<0x1p1000Q)) [[unlikely]] // the double seed and residuals below must stay normal doubles
+    {
+      s=sqrtq(s);
+      return;
+    }
     double x=1.0/std::sqrt((double)s);
     __float128 ax=x*(double)s;
     double tmp=s - ax*ax;
@@ -414,22 +410,51 @@ struct number_traits<__float128>
     tmp2=tmp*x/2;
     s = ax + tmp2;
   }
+  // ~2.2x faster than sqrtq; can misround only within ~2^-44 ulp of a midpoint (x has 53 bits)
+  static void sqrt_new(__float128 &s)
+  {
+    if (!(s>0x1p-900Q && s<0x1p1000Q)) [[unlikely]] // the residuals below must stay normal doubles
+    {
+      s=sqrtq(s);
+      return;
+    }
+    double sd=(double)s;
+    double x=1.0/std::sqrt(sd);
+    double p=x*sd;
+    __float128 r0=s - (__float128)p*p;              // exact: p*p has 106 bits and s~p*p
+    double d=double(r0)*x/2;
+    __float128 r1=r0 - (__float128)(2*p)*d - d*d;   // s-(p+d)^2; only d*d is rounded
+    double d2=double(r1)*x/2;
+    __float128 w=d + (__float128)d2;
+    __float128 err=(__float128)d2 - (w - d);        // exact since |d|>=|d2|
+    if (err!=0) // round w to odd so p+w cannot hit a false tie
+    {
+      unsigned __int128 u;
+      std::memcpy(&u, &w, sizeof(u));
+      if ((u & 1)==0)
+      {
+        if ((err<0)==(w<0)) u++; else u--;
+        std::memcpy(&w, &u, sizeof(u));
+      }
+    }
+    s=p + w;
+  }
   static bool reduce_angle(__float128 &s)
   {
-    if (s<-M_PIq)
+    if (s<-pi)
     {
-      s+=2*M_PIq;
+      s+=2*pi;
       return true;
     }
-    else if (s>=M_PIq)
+    else if (s>=pi)
     {
-      s-=2*M_PIq;
+      s-=2*pi;
       return true;
     }
     else
       return false;
   }
-  static void add_pi(__float128 &s, double x) { s+=x*M_PIq; }
+  static void add_pi(__float128 &s, double x) { s+=x*pi; }
   static std::strong_ordering compare(__float128 a, __float128 b)
   {
     if (a == b)
@@ -458,7 +483,8 @@ struct number_traits<dd_real>
 {
   static double eps2() { return 6.07717e-64; } // 2^-(2*(53+52)) rounded up
   static double eps234() { return 3.87e-48; } // eps2^(3/4)
-  static double sqrtlarge() { return 1.915e153; } // sqrt(DBL_MAX)/7
+  static bool isTooLarge(dd_real const &s) { return number_traits<double>::isTooLarge(s.hi); }
+  static bool isMagTooLarge(dd_real const &re, dd_real const &im) { return number_traits<double>::isMagTooLarge(re.hi, im.hi); }
   static void zero(dd_real &s, double v) { s.zero(v); }
   static void chs(dd_real &s) { s.chs(); }
   static void lshift(dd_real &s, int n) { s.lshift(n); }
@@ -503,7 +529,8 @@ struct number_traits<real642>
 {
   static double eps2() { return 1.232596e-32; } // 2^-(2*53) rounded up
   static double eps234() { return 1.17e-24; } // eps2^(3/4)
-  static double sqrtlarge() { return 1.915e153; } // sqrt(DBL_MAX)/7, limited by val1
+  static bool isTooLarge(real642 const &s) { return number_traits<double>::isTooLarge(s.val1); } // limited by val1
+  static bool isMagTooLarge(real642 const &re, real642 const &im) { return number_traits<double>::isMagTooLarge(re.val1, im.val1); }
   static void zero(real642 &s, double v) { s.val1=v; s.val2=v; }
   static void chs(real642 &s) { s.val1=-s.val1; s.val2=-s.val2; }
   static void lshift(real642 &s, int n)
@@ -513,52 +540,18 @@ struct number_traits<real642>
   }
   static void round(real642 &s)
   {
-    s.val1=std::round(s.val1);
-    __float128 remainder=s.val2;
-    s.val2=0;
-    for (;;)
-    {
-      double some=std::round((double)remainder);
-      if (some==0)
-        break;
-      s.val2+=some;
-      remainder-=some;
-    }
+    number_traits<double>::round(s.val1);
+    number_traits<__float128>::round(s.val2);
   }
   static void frac(real642 &s)
   {
-    if (s.val1<0)
-      s.val1 -= std::ceil(s.val1);
-    else
-      s.val1 -= std::floor(s.val1);
-    if (s.val2<0)
-    {
-      double some=std::ceil((double)s.val2);
-      while (some)
-      {
-        s.val2 -= some;
-        some=std::ceil((double)s.val2);
-      }
-    }
-    else
-    {
-      double some=std::floor((double)s.val2);
-      while (some)
-      {
-        s.val2 -= some;
-        some=std::floor((double)s.val2);
-      }
-    }
+    number_traits<double>::frac(s.val1);
+    number_traits<__float128>::frac(s.val2);
   }
   static void mod1(real642 &s)
   {
-    s.val1 -= std::floor(s.val1);
-    double some=std::floor((double)s.val2);
-    while (some)
-    {
-      s.val2 -= some;
-      some=std::floor((double)s.val2);
-    }
+    number_traits<double>::mod1(s.val1);
+    number_traits<__float128>::mod1(s.val2);
   }
   static void add_double(real642 &s, double x) { s.val1 += x; s.val2 += x; }
   static void mul_double(real642 &s, double x) { s.val1 *= x; s.val2 *= x; }
@@ -572,10 +565,7 @@ struct number_traits<real642>
   static void sqrt(real642 &s)
   {
     s.val1 = std::sqrt(s.val1);
-    double x=1/std::sqrt((double)s.val2);
-    __float128 ax=x*(double)s.val2;
-    ax += double(s.val2 - ax*ax)*x/2;
-    s.val2 = ax + double(s.val2 - ax*ax)*x/2;
+    number_traits<__float128>::sqrt(s.val2);
   }
   static bool reduce_angle(real642 &s)
   {
@@ -628,7 +618,8 @@ struct number_traits<dd_heap>
   using D=number_traits<dd_real>;
   static double eps2() { return D::eps2(); }
   static double eps234() { return D::eps234(); }
-  static double sqrtlarge() { return D::sqrtlarge(); }
+  static bool isTooLarge(dd_heap const &s) { return D::isTooLarge(s.value()); }
+  static bool isMagTooLarge(dd_heap const &re, dd_heap const &im) { return D::isMagTooLarge(re.value(), im.value()); }
   static void zero(dd_heap &s, double v) { D::zero(s.value(), v); }
   static void chs(dd_heap &s) { D::chs(s.value()); }
   static void lshift(dd_heap &s, int n) { D::lshift(s.value(), n); }
@@ -660,6 +651,61 @@ struct number_traits<dd_heap>
   static int toRound(dd_heap const &s) { return D::toRound(s.value()); }
   static double toDouble(dd_heap const &s) { return D::toDouble(s.value()); }
   static dd_real *convert_block(NumberType old_type, const void *old_data, int count) { return D::convert_block(old_type, old_data, count); }
+};
+
+// Forwards to the dd_real-style member functions of T.
+template<typename T>
+struct number_traits_members
+{
+  static void zero(T &s, double v) { s.zero(v); }
+  static void chs(T &s) { s.chs(); }
+  static void lshift(T &s, int n) { s.lshift(n); }
+  static void round(T &s) { s.round(); }
+  static void frac(T &s) { s.frac(); }
+  static void mod1(T &s) { s.mod1(); }
+  static void add_double(T &s, double x) { s.add_double(x); }
+  static void mul_double(T &s, double x) { s.mul_double(x); }
+  static void add(T &s, T const &o) { s.add(o); }
+  static void sub(T &s, T const &o) { s.sub(o); }
+  static void rsub(T &s, T const &o) { s.rsub(o); }
+  static void mul(T &s, T const &o) { s.mul(o); }
+  static void sqr(T &s) { s.sqr(); }
+  static double radixfloor(T const &s) { return s.radixfloor(); }
+  static void recip(T &s) { s.recip(); }
+  static void sqrt(T &s) { s.sqrt(); }
+  static bool reduce_angle(T &s) { return s.reduce_angle(); }
+  static void add_pi(T &s, double x) { s.add_pi(x); }
+  static std::strong_ordering compare(T const &a, T const &b) { return a.compare(b); }
+  static bool isequal(T const &a, T const &b) { return a.isequal(b); }
+  static bool is0(T const &s) { return s.is0(); }
+  static bool isle(T const &a, T const &b) { return a.isle(b); }
+  static bool isle0(T const &s) { return s.isle0(); }
+  static bool isl0(T const &s) { return s.isl0(); }
+  static bool isl1(T const &s) { return s.isl1(); }
+  static void min(T &s, T const &o) { s.min(o); }
+  static QString toString(T const &s) { return s.toString(); }
+  static bool fromString(T &s, char const *str) { return s.fromString(str); }
+  static int toRound(T const &s) { return s.toRound(); }
+  static double toDouble(T const &s) { return s.toDouble(); }
+  static bool isTooLarge(T const &s) { return s.isTooLarge(); }
+  static bool isMagTooLarge(T const &re, T const &im) { return T::isMagTooLarge(re, im); }
+};
+
+// eps are those of double / dd_real; isTooLarge uses the wide exponent range.
+template<>
+struct number_traits<de_real>: number_traits_members<de_real>
+{
+  static double eps2() { return number_traits<double>::eps2(); }
+  static double eps234() { return number_traits<double>::eps234(); }
+  static de_real *convert_block(NumberType old_type, const void *old_data, int count);
+};
+
+template<>
+struct number_traits<dde_real>: number_traits_members<dde_real>
+{
+  static double eps2() { return number_traits<dd_real>::eps2(); }
+  static double eps234() { return number_traits<dd_real>::eps234(); }
+  static dde_real *convert_block(NumberType old_type, const void *old_data, int count);
 };
 
 // Element type of point arrays and convert_block; differs from BASE only for heap-backed types.
@@ -704,7 +750,7 @@ class number: public number_operators<number<BASE>>
   public:
   double eps2() const { return traits::eps2(); }
   double eps234() const { return traits::eps234(); }
-  double sqrtlarge() const { return traits::sqrtlarge(); } // limit for squared magnitudes so that one more squaring cannot overflow
+  bool isTooLarge() const { return traits::isTooLarge(store); } // for squared magnitudes: one more squaring could overflow
   number(): store() { }
   number(NumberType): store() { } // for the same constructor calls as number<number_any>
   void swap(number &other) noexcept
@@ -761,6 +807,8 @@ static_assert(std::is_trivially_copyable_v<number<__float128>>);
 static_assert(std::is_trivially_copyable_v<number<dd_real>>);
 static_assert(std::is_trivially_copyable_v<number<dq_real>>);
 static_assert(std::is_trivially_copyable_v<number<real642>>);
+static_assert(std::is_trivially_copyable_v<number<de_real>>);
+static_assert(std::is_trivially_copyable_v<number<dde_real>>);
 
 // Runtime-selected precision; all members are out-of-line in MandelMath_var.cpp.
 template<>
@@ -773,7 +821,7 @@ class number<number_any>: public number_operators<number<number_any>>
   public:
   double eps2() const;
   double eps234() const;
-  double sqrtlarge() const;
+  bool isTooLarge() const;
   number(): store() { } //for ShareableViewInfo
   number(const number &x) noexcept: store(x.store) { }
   number(number &&x) noexcept: store() { x.swap(*this); };
@@ -832,7 +880,7 @@ public:
   number<BASE> im;
   double eps2() const { return re.eps2(); }
   double eps234() const { return re.eps234(); }
-  double sqrtlarge() const { return re.sqrtlarge(); }
+  bool isTooLarge() const; // getMag().isTooLarge()
   complex(): re(), im() { }
   complex(NumberType ntype): re(ntype), im(ntype) { } // ntype selects variant for number_any; no-op for concrete types
   complex(complex const &src) = default; // no implicit move: a moved-from complex<number_any> must keep its value
@@ -889,7 +937,7 @@ public:
   bool isl0() const; //was isNegative() im<0 || im==0 && re<0
   std::strong_ordering mag_cmp_1() const; //(mag() <=> 1) -> -1,0,+1, better return (double)(mag()-1)
   QString toString() const;
-  bool fromString(QString const &re_str, QString const &im_str) { return re.fromString(re_str) & im.fromString(im_str); }
+  bool fromString(QString const &re_str, QString const &im_str) { bool re_ok=re.fromString(re_str); bool im_ok=im.fromString(im_str); return re_ok && im_ok; }
 
   complex &operator+=(complex const &b) { return add(b); }
   complex &operator-=(complex const &b) { return sub(b); }
@@ -917,6 +965,8 @@ static_assert(sizeof(number<__float128>)==16);
 static_assert(sizeof(number<dd_real>)==16);
 static_assert(sizeof(number<dq_real>)==8*2);
 static_assert(sizeof(number<real642>)==8+8+16);
+static_assert(sizeof(number<de_real>)==16);
+static_assert(sizeof(number<dde_real>)==24);
 static_assert(sizeof(number_any)==16+32);
 static_assert(std::is_trivially_copyable_v<complex<double>>);
 static_assert(std::is_trivially_copyable_v<complex<dd_real>>);
@@ -1224,6 +1274,15 @@ void complex<BASE>::arctan2(number<BASE> *result) const
     result->zero(std::atan2(-0, 1));
   else
     result->zero(std::atan2(im.toDouble(), re.toDouble()));
+}
+
+template<typename BASE>
+bool complex<BASE>::isTooLarge() const
+{
+  if constexpr (std::is_same_v<BASE, number_any>)
+    return getMag().isTooLarge();
+  else
+    return number<BASE>::traits::isMagTooLarge(re.store, im.store);
 }
 
 template<typename BASE>

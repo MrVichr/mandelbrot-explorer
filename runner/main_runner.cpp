@@ -23,7 +23,7 @@
 //   --c-re <num>           Julia/Laguerre parameter c, real part
 //   --c-im <num>           Julia/Laguerre parameter c, imaginary part
 //   --period <int>         Julia/Laguerre period
-//   --precision double|float128|dd|qd|real642|ddheap (default double)
+//   --precision double|float128|dd|qd|real642|ddheap|de|dde (default double)
 //   --mode text|images                              (default text)
 //   --bless                Write to ./blessed/ instead of ./current/
 //   --point                Evaluate only the point (--cx, --cy) and print the result;
@@ -163,8 +163,8 @@ static constexpr int LAG_CLS_IDX  = 0;
 // ── Run options shared by the compute functions ──────────────────────────────
 
 // Same order as the models' precision enums.
-static const char *const PRECISION_NAMES[] = { "double", "float128", "dd", "qd", "real642", "ddheap" };
-static constexpr int N_PRECISIONS = 6;
+static const char *const PRECISION_NAMES[] = { "double", "float128", "dd", "qd", "real642", "ddheap", "de", "dde" };
+static constexpr int N_PRECISIONS = 8;
 
 static int    g_precision = 0;
 static const char *g_cx = "-0.5";
@@ -306,6 +306,10 @@ static bool compute_mandelbrot(MandelModelInspector &model, MainQThread &mainThr
 {
     auto t0 = Clock::now();
     select_precision(model, mainThread);
+    // Use ExterAngle during evaluation so exterior-angle data is populated.  Set it before
+    // setImageSize/setView_str start an epoch: after a precision change the workers are
+    // already running and could finish the image without angles before startRunning().
+    model.setselectedPaintStyle(MandelModel::paintStyleExterAngle);
     // IMPORTANT: setImageSize before setView_str (see AGENTS.md).
     model.setImageSize(W, H);
     model.setView_str(g_cx, g_cy, scale);
@@ -313,8 +317,6 @@ static bool compute_mandelbrot(MandelModelInspector &model, MainQThread &mainThr
     ShareableImageWrapper wrapper(&image);
     if (!g_point)
         model.paintOrbit(wrapper, W/2, H/2); // paintOrbit must work
-    // Use ExterAngle during evaluation so exterior-angle data is populated.
-    model.setselectedPaintStyle(MandelModel::paintStyleExterAngle);
     double setup_ms = ms_since(t0);
     t0 = Clock::now();
     model.startRunning();
@@ -346,6 +348,8 @@ static bool compute_julia(JuliaModelInspector &model, MainQThread &mainThread,
 {
     auto t0 = Clock::now();
     select_precision(model, mainThread);
+    // Before any epoch starts; see compute_mandelbrot.
+    model.setselectedPaintStyle(JuliaModel::paintStyleExterAngle);
     model.setImageSize(W, H);
     model.setView_str(g_cx, g_cy, scale);
     QImage image;
@@ -355,7 +359,6 @@ static bool compute_julia(JuliaModelInspector &model, MainQThread &mainThread,
     MandelModel mandel;
     ShareableViewInfo viewInfo=make_view_info(mandel, mainThread, W, H, scale, "Main view");
     model.setParams(viewInfo);
-    model.setselectedPaintStyle(JuliaModel::paintStyleExterAngle);
     double setup_ms = ms_since(t0);
     t0 = Clock::now();
     model.startRunning();
@@ -852,7 +855,7 @@ static void print_usage(const char *prog)
         "  --c-re <num>     Julia/Laguerre c, real   (default 0.3 / -0.7067658320364081)\n"
         "  --c-im <num>     Julia/Laguerre c, imag   (default 0.5 / 0.3540325897413918)\n"
         "  --period <int>   Julia/Laguerre period    (default 4 / 1632)\n"
-        "  --precision double|float128|dd|qd|real642|ddheap (default double)\n"
+        "  --precision double|float128|dd|qd|real642|ddheap|de|dde (default double)\n"
         "  --mode text|images                        (default text)\n"
         "  --bless          Write to ./blessed/ instead of ./current/\n"
         "  --point          Only evaluate the point (--cx, --cy) and print the result\n"

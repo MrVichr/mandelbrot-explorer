@@ -1,7 +1,12 @@
 #!/bin/sh
 
+# use Clang:
+# make -f Makefile-headless CXX=clang++-18
+
 if [ "$1" = "run" ]; then
   cd build-gui
+  # GCC: qmake6 ../Mandelbrot.pro
+  # Clang: qmake6 -spec linux-clang -early QMAKE_CC=clang-18 QMAKE_CXX=clang++-18 QMAKE_LINK=clang++-18 ../Mandelbrot.pro
   make -j$(nproc)
   if [ $? -ne 0 ]; then
     echo "Failed to build GUI"

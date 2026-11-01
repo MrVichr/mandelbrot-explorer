@@ -299,6 +299,8 @@ Window {
                             { text: "QDouble", prec: JuliaModel.EprecisionQDouble },
                             { text: "Real642", prec: JuliaModel.EprecisionReal642 },
                             { text: "DDHeap", prec: JuliaModel.EprecisionDDHeap },
+                            { text: "DoubleExp", prec: JuliaModel.EprecisionDExp },
+                            { text: "DDoubleExp", prec: JuliaModel.EprecisionDDExp },
                         ]
                         MenuItem {
                             checkable: true
@@ -560,6 +562,7 @@ Window {
                         {viewRe: "-0.1744832922704517841339111328125", viewIm: "0.661927212961018085479736328125", viewZoom: 1/8589934592.0, caption: 'Trouble at 11016'}, // -1498800068/2^33, 5685911464/2^33
                         {viewRe: "-0.5622179376996712", viewIm: "0.67689119098929496", viewZoom: 1/35184372088832.0, caption: 'Bad Newton'},
                         {viewRe: "-1.39473140405954614332029173340288", viewIm: "0.004504213285590670870495166866476211", viewZoom: 1.7347234759768071e-18, caption: "dd zoom"},
+                        {viewRe: "-1.739257812500001110223024625154915", viewIm: "-4.3333423748712806693759503708160865e-34", viewZoom: 2.4074124304840448e-35, caption: "f128 zoom"},
                     ]
                     MenuItem {
                         text: modelData.caption

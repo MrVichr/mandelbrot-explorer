@@ -1065,11 +1065,7 @@ bool MandelLoopEvaluator<BASE>::evalg(int period, MandelMath::complex<BASE> cons
       f_c+=1.0;
       f+=c;
     };
-    double f_mag=f.getMag_double();
-    double allmag=f_mag+
-                  f_c.getMag_double()+
-                  f_cc.getMag_double();
-    if (allmag>f.sqrtlarge())
+    if (f.isTooLarge() || f_c.isTooLarge() || f_cc.isTooLarge())
       return false;
   }
   return true;
@@ -1096,13 +1092,8 @@ bool MandelLoopEvaluator<BASE>::eval2(int period, MandelMath::complex<BASE> cons
   };
   for (int i=0; i<period; i++)
   {
-    double m_sum=f.getMag_double()+
-                 f_z.getMag_double()+
-                 f_zz.getMag_double()+
-                 f_c.getMag_double()+
-                 f_zc.getMag_double()+
-                 f_cc.getMag_double();
-    if (m_sum>f.sqrtlarge())
+    if (f.isTooLarge() || f_z.isTooLarge() || f_zz.isTooLarge() ||
+        f_c.isTooLarge() || f_zc.isTooLarge() || f_cc.isTooLarge())
       return false;
 
     //f^2+c -> 2f fc+1 -> 2f fcc+2fc fc
@@ -1139,13 +1130,8 @@ bool MandelLoopEvaluator<BASE>::eval2_mag(int period, MandelMath::complex<BASE> 
   f_z_mag.zero(1);
   for (int i=0; i<period; i++)
   {
-    double m_sum=f.getMag_double()+
-                 //f_z.getMag_double()+
-                 f_z_mag.toDouble()+
-                 f_zz.getMag_double()+
-                 f_c.getMag_double()+
-                 f_zc.getMag_double();
-    if (m_sum>f.sqrtlarge())
+    if (f.isTooLarge() || f_z_mag.isTooLarge() || f_zz.isTooLarge() ||
+        f_c.isTooLarge() || f_zc.isTooLarge())
       return false;
 
     //f^2+c -> 2f fz -> 2fc fz+2f fzc
@@ -1174,10 +1160,7 @@ bool MandelLoopEvaluator<BASE>::eval_zz(int period, MandelMath::complex<BASE> co
   };
   for (int i=0; i<period; i++)
   {
-    double m_sum=f.getMag_double()+
-                 f_z.getMag_double()+
-                 f_zz.getMag_double();
-    if (m_sum>f.sqrtlarge())
+    if (f.isTooLarge() || f_z.isTooLarge() || f_zz.isTooLarge())
       return false;
     //f_zz:=2*(f_z*f_z + f*f_zz)
     f_zz=ldexp(f_zz*f + sqr(f_z), 1);
@@ -1208,14 +1191,8 @@ bool MandelLoopEvaluator<BASE>::eval2zzc(int period, MandelMath::complex<BASE> c
   f_zzc.zero(0, 0);
   for (int i=0; i<period; i++)
   {
-    double m_sum=f.getMag_double()+
-                 f_z.getMag_double()+
-                 f_zz.getMag_double()+
-                 f_c.getMag_double()+
-                 f_zc.getMag_double()+
-                 f_cc.getMag_double()+
-                 f_zzc.getMag_double();
-    if (m_sum>f.sqrtlarge())
+    if (f.isTooLarge() || f_z.isTooLarge() || f_zz.isTooLarge() || f_c.isTooLarge() ||
+        f_zc.isTooLarge() || f_cc.isTooLarge() || f_zzc.isTooLarge())
       return false;
     //f_zzc=d/dc 2*(f_z*f_z + f*f_zz)=2*(2*f_z*f_zc + f_c*f_zz+f*f_zzc)
     f_zzc=ldexp(f_zzc*f + f_c*f_zz + ldexp(f_z*f_zc, 1), 1);
@@ -1250,10 +1227,7 @@ bool MandelLoopEvaluator<BASE>::eval_multi(int period, MandelMath::complex<BASE>
   int sumA_cnt=0;
   for (int i=0; i<period; i++)
   {
-    double m_sum=f.getMag_double()+
-                 f_z.getMag_double()+
-                 f_zz.getMag_double();
-    if (m_sum>f.sqrtlarge())
+    if (f.isTooLarge() || f_z.isTooLarge() || f_zz.isTooLarge())
       return false;
     //f_zz:=2*(f_z*f_z + f*f_zz)
     f_zz.mul(f);
@@ -1441,10 +1415,7 @@ bool MandelLoopEvaluator<BASE>::eval_near0(int period, MandelMath::complex<BASE>
   f_z_minmag.assign(c.getMag());
   for (int i=0; i<period-1; i++)
   {
-    double m_sum=f.getMag_double()+
-                 f_z.getMag_double()+
-                 f_zz.getMag_double();
-    if (m_sum>f.sqrtlarge())
+    if (f.isTooLarge() || f_z.isTooLarge() || f_zz.isTooLarge())
       return false;
     //f_zz:=2*(f_z*f_z + f*f_zz)
     f_zz.mul(f);
@@ -1494,11 +1465,7 @@ bool MandelLoopEvaluator<BASE>::eval_ext_mandMJ(double mandel, MandelMath::compl
     //g=g^2+c
     f.sqr();
     f.add(c);
-    double f_mag=f.getMag_double();
-    double allmag=f_mag+
-                  f_c.getMag_double()+
-                  f_cc.getMag_double();
-    if (allmag>f.sqrtlarge()) //goes pretty high
+    if (f.isTooLarge() || f_c.isTooLarge() || f_cc.isTooLarge()) //goes pretty high
       return false;
   }
   return true;
@@ -1537,6 +1504,18 @@ MandelEvaluatorThread::MandelEvaluatorThread(MandelEvaluator<MandelMath::real642
 }
 
 MandelEvaluatorThread::MandelEvaluatorThread(MandelEvaluator<MandelMath::dd_heap> *owner):
+  QThread(nullptr), owner(owner)
+{
+
+}
+
+MandelEvaluatorThread::MandelEvaluatorThread(MandelEvaluator<MandelMath::de_real> *owner):
+  QThread(nullptr), owner(owner)
+{
+
+}
+
+MandelEvaluatorThread::MandelEvaluatorThread(MandelEvaluator<MandelMath::dde_real> *owner):
   QThread(nullptr), owner(owner)
 {
 
@@ -4293,7 +4272,7 @@ int MandelEvaluator<BASE>::periodCheck(int period/*must =eval.lookper_lastGuess*
       newtres.fz_r.mul(newt.f_r);
       newtres.fz_r.lshift(1);
       eval_fz_mag.assign(newtres.fz_r.getMag());
-      if (eval_fz_mag.toDouble()>eval_fz_mag.sqrtlarge())
+      if (eval_fz_mag.isTooLarge())
       {
         dbgPoint();
         return -1; //so is it checked or not
@@ -4590,7 +4569,7 @@ int MandelEvaluator<BASE>::periodCheck(int period/*must =eval.lookper_lastGuess*
     newtres.fz_r.mul(&newt.f_r);
     newtres.fz_r.lshift(1);
     eval.fz_mag1.assign(newtres.fz_r.getMag1_tmp());
-    if (currentWorker->toDouble(eval.fz_mag1.ptr)>eval.fz_mag1.sqrtlarge())
+    if (eval.fz_mag1.isTooLarge())
       return -1; //so is it checked or not
     {
       double re=fre*f_e_re-fim*f_e_im; //f_e=f_r*f_e
@@ -4732,16 +4711,14 @@ void MandelEvaluator<BASE>::mandel_until_bailout()
       return;
     //fc_c:=2*f*fc_c+1
     mandelData.fc_c=ldexp(mandelData.fc_c*mandelData.f, 1) + 1.0;
-    double fc_c_mag=mandelData.fc_c.getMag_double();
-    if (fc_c_mag>mandelData.fc_c.sqrtlarge())
+    if (mandelData.fc_c.isTooLarge())
     {
       mandelData.store->rstate=MandelPointStore::ResultState::stBoundary;
       return;
     };
     //fz_c_mag:=4*fz_c_mag*f.mag
     mandelData.fz_c_mag=ldexp(mandelData.fz_c_mag*mandelData.f.getMag(), 2);
-    double fz_c_mag=mandelData.fz_c_mag.toDouble();
-    if (fz_c_mag>mandelData.fz_c_mag.sqrtlarge())
+    if (mandelData.fz_c_mag.isTooLarge())
     {
       mandelData.store->rstate=MandelPointStore::ResultState::stDiverge;
       return;
@@ -4762,8 +4739,7 @@ void MandelEvaluator<BASE>::julia_until_bailout()
       return;
     //fz_z:=2*f*fz_z
     juliaData.fz_z=ldexp(juliaData.fz_z*juliaData.f, 1);
-    double fz_z_mag=juliaData.fz_z.getMag_double();
-    if (fz_z_mag>juliaData.fz_z.sqrtlarge())
+    if (juliaData.fz_z.isTooLarge())
     {
       juliaData.store->rstate=JuliaPointStore::ResultState::stBoundary;
       return;
@@ -4771,8 +4747,7 @@ void MandelEvaluator<BASE>::julia_until_bailout()
     //fz_c_mag:=4*fz_c_mag*f.mag
     MandelMath::number<BASE> const f_mag_n=juliaData.f.getMag();
     juliaData.fz_z_mag=ldexp(juliaData.fz_z_mag*f_mag_n, 2);
-    double fz_c_mag=juliaData.fz_z_mag.toDouble();
-    if (fz_c_mag>juliaData.fz_z_mag.sqrtlarge())
+    if (juliaData.fz_z_mag.isTooLarge())
     {
       juliaData.store->rstate=JuliaPointStore::ResultState::stDiverge;
       return;
@@ -4925,16 +4900,14 @@ void MandelEvaluator<BASE>::evaluateMandel()
         mandelData.store->period=1;
       break;
     };
-    double fc_c_mag=mandelData.fc_c.getMag_double();
-    if (fc_c_mag>mandelData.fc_c.sqrtlarge())
+    if (mandelData.fc_c.isTooLarge())
     {
       mandelData.store->rstate=MandelPointStore::ResultState::stBoundary;
       mandelData.store->exterior_avoids=0;
       mandelData.store->exterior_hits=0;
       break;
     };
-    double fz_c_mag=mandelData.fz_c_mag.toDouble();
-    if (fz_c_mag>mandelData.fz_c_mag.sqrtlarge())
+    if (mandelData.fz_c_mag.isTooLarge())
     {
       mandelData.store->rstate=MandelPointStore::ResultState::stDiverge;
       mandelData.store->exterior_avoids=0;
@@ -4945,8 +4918,7 @@ void MandelEvaluator<BASE>::evaluateMandel()
     //fc_c:=2*f*fc_c+1
     mandelData.fc_c=ldexp(mandelData.fc_c*mandelData.f, 1) + 1.0;
     /* TODO: copy test here from above?
-    fc_c_mag=currentWorker->toDouble(fc_c.getMagTmp());
-    if (fc_c_mag>fc_c.sqrtlarge())
+    if (fc_c.isTooLarge())
     {
       currentData.state=MandelPoint::State::stBoundary;
       break;
@@ -5436,15 +5408,13 @@ void MandelEvaluator<BASE>::evaluateJulia()
     eval.fz_r=sqr(juliaData.fz_z);
     juliaData.fzz_z=ldexp(juliaData.fzz_z*juliaData.f + eval.fz_r, 1);
 
-    double fz_z_mag1=juliaData.fz_z.getMag_double();
-    if (fz_z_mag1>juliaData.fz_z.sqrtlarge())
+    if (juliaData.fz_z.isTooLarge())
     {
       juliaData.store->rstate=JuliaPointStore::ResultState::stBoundary;
       juliaData.store->exterior.zero(0);
       break;
     };
-    double fz_z_mag2=juliaData.fz_z_mag.toDouble();
-    if (fz_z_mag2>juliaData.fz_z_mag.sqrtlarge())
+    if (juliaData.fz_z_mag.isTooLarge())
     {
       juliaData.store->rstate=JuliaPointStore::ResultState::stDiverge;
       juliaData.store->exterior.zero(0);
@@ -5453,8 +5423,7 @@ void MandelEvaluator<BASE>::evaluateJulia()
     //fz_z:=2*f*fz_z
     juliaData.fz_z=ldexp(juliaData.fz_z*juliaData.f, 1);
     /* TODO: copy test here from above?
-    fc_c_mag=currentWorker->toDouble(fc_c.getMagTmp());
-    if (fc_c_mag>fc_c.sqrtlarge())
+    if (fc_c.isTooLarge())
     {
       currentData.state=MandelPoint::State::stBoundary;
       break;
@@ -5753,6 +5722,7 @@ void MandelEvaluator<BASE>::evaluateJulia()
           //for first_z in juliaRoot's pool, we want d.e.=1/jas^2
           //more precisely, d.e.[r0]=(1/jas-2*r0)   d.e.[r1]=(1/jas)*(1/jas-2*r0)
           double phiabs=phi.getMag_double();
+          (void)phiabs;
           //otherwise, scale by one more juliaAlpha. Don't ask why, it's complicated
           //if ((juliaData.store->iter+1)%juliaPeriod !=0)
           //  phiabs*=currentParams.juliaAlpha.getMag_double();
@@ -6360,6 +6330,10 @@ MandelEvaluator<MandelMath::number_any>::ExtAngle::ExtAngle(MandelMath::NumberTy
       break;
     case MandelMath::NumberType::typeDDHeap:
       break;
+    case MandelMath::NumberType::typeDExp:
+      break;
+    case MandelMath::NumberType::typeDDExp:
+      break;
   }
 }
 
@@ -6393,6 +6367,12 @@ MandelEvaluator<MandelMath::number_any>::ExtAngle::~ExtAngle()
     {
     } break;
     case MandelMath::NumberType::typeDDHeap:
+    {
+    } break;
+    case MandelMath::NumberType::typeDExp:
+    {
+    } break;
+    case MandelMath::NumberType::typeDDExp:
     {
     } break;
   }
@@ -7055,6 +7035,20 @@ template class MandelEvaluator<MandelMath::dd_heap>;
 template void ComputeMandelParams<MandelMath::dd_heap>::assign_across<MandelMath::number_any>(const ComputeMandelParams<MandelMath::number_any> &src);
 template void ComputeLaguerreParams<MandelMath::dd_heap>::assign_across<MandelMath::number_any>(const ComputeLaguerreParams<MandelMath::number_any> &src);
 template void ComputeJuliaParams<MandelMath::dd_heap>::assign_across<MandelMath::number_any>(const ComputeJuliaParams<MandelMath::number_any> &src);
+template struct LaguerrePoint<MandelMath::de_real>;
+template struct MandelPoint<MandelMath::de_real>;
+template struct JuliaPoint<MandelMath::de_real>;
+template class MandelEvaluator<MandelMath::de_real>;
+template void ComputeMandelParams<MandelMath::de_real>::assign_across<MandelMath::number_any>(const ComputeMandelParams<MandelMath::number_any> &src);
+template void ComputeLaguerreParams<MandelMath::de_real>::assign_across<MandelMath::number_any>(const ComputeLaguerreParams<MandelMath::number_any> &src);
+template void ComputeJuliaParams<MandelMath::de_real>::assign_across<MandelMath::number_any>(const ComputeJuliaParams<MandelMath::number_any> &src);
+template struct LaguerrePoint<MandelMath::dde_real>;
+template struct MandelPoint<MandelMath::dde_real>;
+template struct JuliaPoint<MandelMath::dde_real>;
+template class MandelEvaluator<MandelMath::dde_real>;
+template void ComputeMandelParams<MandelMath::dde_real>::assign_across<MandelMath::number_any>(const ComputeMandelParams<MandelMath::number_any> &src);
+template void ComputeLaguerreParams<MandelMath::dde_real>::assign_across<MandelMath::number_any>(const ComputeLaguerreParams<MandelMath::number_any> &src);
+template void ComputeJuliaParams<MandelMath::dde_real>::assign_across<MandelMath::number_any>(const ComputeJuliaParams<MandelMath::number_any> &src);
 #endif
 template void ComputeMandelParams<MandelMath::number_any>::assign_across<MandelMath::number_any>(const ComputeMandelParams<MandelMath::number_any> &src);
 template void ComputeLaguerreParams<MandelMath::number_any>::assign_across<MandelMath::number_any>(const ComputeLaguerreParams<MandelMath::number_any> &src);

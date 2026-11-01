@@ -35,6 +35,10 @@ make -j$(nproc)
 ./Mandelbrot
 ```
 
+Clang: `qmake6 -spec linux-clang -early QMAKE_CC=clang-18 QMAKE_CXX=clang++-18 QMAKE_LINK=clang++-18 ../Mandelbrot.pro`
+(`-early`, otherwise the spec probes the unversioned `clang++`).  The distro's
+GCC-built Qt links fine (both use libstdc++).  Results are bit-identical to GCC.
+
 ### Headless (`mandel_runner`)
 
 The hand-written headless build lives in **`Makefile-headless`** (not
@@ -46,19 +50,23 @@ make -f Makefile-headless check-text-man    # also -jul / -lag
 make -f Makefile-headless check-images-man  # bless-* targets record references
 make -f Makefile-headless check-all         # every fractal x mode x precision
 make -f Makefile-headless bless-all         # record all references
-make -f Makefile-headless bench             # timing of a larger Mandelbrot view (double, dd, ddheap)
+make -f Makefile-headless bench             # timing of a larger Mandelbrot view (double, dd, ddheap, de, dde)
 ```
 
-`CXX` defaults to `g++-11`; override with `CXX=g++` where that is not
-installed.  `check-*` targets exit 0 with `PASS` or `SKIP` (no blessed copy
-yet) and non-zero on `FAIL`.  Single-case targets take `PREC=double|float128|dd|qd|real642|ddheap`.
+// TODO: are these details really useful?
+`CXX` defaults to `g++`; `CXX=clang++-18` also works (detected via `--version`:
+drops `-fext-numeric-literals`, adds GCC's include dir for `quadmath.h`); when
+switching compilers, `make clean` or pass a separate `OBJDIR=` / `TARGET=`.
+`check-*` targets exit 0 with `PASS` or `SKIP` (no blessed copy
+yet) and non-zero on `FAIL`.  Single-case targets take `PREC=double|float128|dd|qd|real642|ddheap|de|dde`.
 `check-all` prints one line per case, full log in `current/check-all.log`;
 Mandelbrot float128/real642 cases take minutes (soft-float).
 
 Both builds use `-ffp-contract=off` so the compiler cannot fuse `a*b+c` into
 FMA; the double-double error-free transforms (`two_prod`, `two_sum`) and
 bit-exact regression checks depend on that.  Explicit `std::fma` is unaffected:
-both builds also pass `-mfma`, which defines `FP_FAST_FMA` and makes
+both builds also pass `-mfma`, which defines `__FMA__` (GCC also `FP_FAST_FMA`;
+clang does not, so `double_double.hpp` also checks `__FMA__`) and makes
 `two_prod`/`two_sqr` use `std::fma` (one instruction), and `mul_double`/`mul`/`sqr`
 use the FMA algorithms of Joldes, Muller, Popescu 2017 ("Tight and rigorous
 error bounds for basic building blocks of double-word arithmetic":
@@ -73,7 +81,7 @@ Pieces of the headless build:
 |---|---|
 | `fake_qt/` | Stub Qt headers. `QThread` is real (`std::thread` + task queue, `postTask`, `setCurrentThread` for the main thread) — **do not revert to stubs**. `QObject` has real signal/slot dispatch with thread affinity (same thread → direct call, cross-thread → `postTask`); `~QObject` removes all connections where it is sender or receiver (as real Qt does — without it, switching precision was a use-after-free). `QReadWriteLock` = `std::shared_mutex`, `QImage` = `std::vector<QRgb>`, `QElapsedTimer` = `std::chrono`. |
 | `runner/moc_signals.cpp` | Signal bodies for `MandelEvaluatorThread`, `MandelModel`, `JuliaModel`, `LaguerreModel`. |
-| `runner/main_runner.cpp` | Headless driver. Options: `--fractal man\|jul\|lag`, `--mode text\|images`, `--cx`, `--cy`, `--scale`, `--width`, `--height`, `--title`, `--bless`, `--precision double\|float128\|dd\|qd\|real642\|ddheap`, `--c-re`, `--c-im`, `--period` (Julia/Laguerre), `--point`. `--cx/--cy/--c-re/--c-im` are decimal strings parsed in the selected precision (Makefile-headless passes Julia/Laguerre c as exact binary64 expansions so the references stay valid). `--point` evaluates only (`--cx`, `--cy`) as a 1x1 image at scale 2^-300 (so the centre is not rounded to the pixel grid), skips `paintOrbit`, and prints the pixel's store and point values; launch config "Headless: single point" debugs it. Text mode writes per-pixel JSON; images mode writes one PPM per paint style. Output names carry a precision tag (e.g. `Man_dd_...`) except for double. Prints `timing:` to stderr. The precision-change slot is queued, so the runner calls `processEvents()` right after `setselectedPrecision`. |
+| `runner/main_runner.cpp` | Headless driver. Options: `--fractal man\|jul\|lag`, `--mode text\|images`, `--cx`, `--cy`, `--scale`, `--width`, `--height`, `--title`, `--bless`, `--precision double\|float128\|dd\|qd\|real642\|ddheap\|de\|dde`, `--c-re`, `--c-im`, `--period` (Julia/Laguerre), `--point`. `--cx/--cy/--c-re/--c-im` are decimal strings parsed in the selected precision (Makefile-headless passes Julia/Laguerre c as exact binary64 expansions so the references stay valid). `--point` evaluates only (`--cx`, `--cy`) as a 1x1 image at scale 2^-300 (so the centre is not rounded to the pixel grid), skips `paintOrbit`, and prints the pixel's store and point values; launch config "Headless: single point" debugs it. Text mode writes per-pixel JSON; images mode writes one PPM per paint style. Output names carry a precision tag (e.g. `Man_dd_...`) except for double. Prints `timing:` to stderr. The precision-change slot is queued, so the runner calls `processEvents()` right after `setselectedPrecision`. |
 | `runner/check_images.py` | Regression wrapper: runs `mandel_runner`, compares `current/` against `blessed/`, reports `PASS` / `FAIL` / `SKIP` (no blessed copy yet). See its docstring for usage. |
 
 `blessed/` and `current/` are git-ignored, local only.
@@ -92,8 +100,9 @@ i.e. ~268M no-op iterations when the height is still 0.
 |---|---|
 | `MandelModel.cpp/hpp`, `JuliaModel.cpp/hpp`, `LaguerreModel.cpp/hpp` | Top-level models: image store, worker threads, view position, epoch counter, paint styles |
 | `MandelEvaluator.cpp/hpp` | Per-thread worker: `MandelEvaluatorThread` (QThread subclass) + `MandelEvaluator<BASE>` (`evaluateMandel`, `evaluateJulia`, `mandel_until_bailout`, `julia_until_bailout`, `MandelLoopEvaluator`, `Bulb`, `LaguerreStep`) |
-| `MandelMath.hpp` / `MandelMath_var.cpp` | Number types: `number<BASE>` for `double`, `__float128`, `dd_real`, `dq_real`, `real642`, `dd_heap`, and `number_any` (variant wrapper); `complex<BASE>`; `number_traits<BASE>` |
+| `MandelMath.hpp` / `MandelMath_var.cpp` | Number types: `number<BASE>` for `double`, `__float128`, `dd_real`, `dq_real`, `real642`, `dd_heap`, `de_real`, `dde_real`, and `number_any` (variant wrapper); `complex<BASE>`; `number_traits<BASE>` |
 | `dd_heap.hpp` | `dd_heap`: dd_real kept on the heap with a per-thread free list; the template for future heap-backed types |
+| `double_exp.cpp/hpp` | `de_real` / `dde_real`: double / double-double mantissa (1<=\|m\|<2) with an `int32_t` exponent |
 | `double_double.cpp/hpp`, `multiprec.cpp/hpp` | Extended-precision arithmetic |
 | `MandelImageCombiner.cpp/hpp`, `ShareableImageWrapper.cpp/hpp`, `atomic_update_rect.cpp/hpp` | GUI-side image composition |
 
@@ -122,9 +131,20 @@ to drain the queued replies.
 - Value semantics, no scratchpad.  `number<BASE>` is one generic template
   holding only `BASE store`; every operation forwards to
   `number_traits<BASE>` (specialised for `double`, `__float128`, `dd_real`,
-  `dq_real`, `real642`, `dd_heap`), all inline in `MandelMath.hpp`.  The five
+  `dq_real`, `real642`, `dd_heap`, `de_real`, `dde_real`), all inline in `MandelMath.hpp`.  The seven
   POD-backed `number<BASE>` and `complex<BASE>` are trivially copyable (static_asserted),
   so temporaries are free.
+- `de_real` (precision `de`) and `dde_real` (`dde`, "DoubleExp"/"DDoubleExp" in the GUI) keep
+  the mantissa normalized to 1<=|m|<2 and the exponent in an `int32_t` (range 2^+-2^30; zero has
+  exponent `EXP_ZERO`, inf/NaN `EXP_SPECIAL`, so add/compare need no zero test).  Inside the
+  double range every operation only scales exactly, so results are bit-identical to `double` /
+  `dd` (verified on all check views, and on 2M random ops), except where `isTooLarge()` differs.
+  eps are those of double/dd; `isTooLarge()` checks the exponent (from ~2^(2^29)), so derivatives
+  that exceed double's limit keep going (in the check views only ExterAngle differs: some "edge"
+  pixels get their real angle). // TODO: this doesn't really have value; correctness is implied
+  Decimal I/O beyond binary128's range (~1e+-4900) scales by 10^k computed in binary128 with a
+  wide exponent (~2^-105 relative error).  Speed: de ~10x double, dde ~2.5x dd per operation
+  (normalization after every op); the Mandelbrot check view is ~13x / ~2.7x slower.
 - `number<number_any>` is a full class specialisation over a `std::variant`,
   with out-of-line members in `MandelMath_var.cpp`.  It is used by the models
   and by the main-thread `MandelEvaluator<number_any>` in each Orbit, so it
@@ -137,6 +157,13 @@ to drain the queued replies.
   `getMag()`, `getMag1()`, `getDist1()`, `mulreT()`, `ccw()`, `dist2()`,
   `recip_prepared(mag)`.  Old method names (`add`, `mul`, ...) remain as
   in-place wrappers.
+- Overflow guard: `number::isTooLarge()` (for squared magnitudes) and `complex::isTooLarge()`
+  (`getMag().isTooLarge()` without computing the magnitude) come from
+  `number_traits<BASE>::isTooLarge` / `isMagTooLarge`, so the limit is checked in the type's own
+  range, not after converting to double.  double/dd/qd/ddheap/real642 use sqrt(DBL_MAX)/7; float128
+  uses sqrt(FLT128_MAX)/7; de/dde use
+  `exp_detail::LARGE_EXP`.  Places that summed several magnitudes test each term instead (the /7
+  margin covers the sum). // TODO: remove history
 - Hot double-double primitives (`two_sum`, `two_prod`, `add`, `mul`, `sqr`,
   `recip`, `sqrt`, compares, `ldexp2`) are inline in `double_double.hpp`.
 - Rule for any future heap-backed BASE (e.g. MPFR): follow `dd_heap`
@@ -152,7 +179,7 @@ to drain the queued replies.
   in `MandelMath_var.cpp`, `MandelEvaluatorThread::owner`, the models'
   precision enums / `threads` variants / point-array switches, `main.qml`,
   `PRECISION_NAMES` in the runner, `check_images.py` and `PRECISIONS` in
-  Makefile-headless.  `MandelMath::visit` handles up to 8 alternatives.
+  Makefile-headless.  `MandelMath::visit` handles up to 12 alternatives.
 - Constructors still take `NumberType` (`number(NumberType)`,
   `complex(NumberType)`, `MandelPoint`, `JuliaPoint`, `LaguerrePoint`,
   `Compute*Params`).
@@ -189,6 +216,9 @@ to drain the queued replies.
 3. **Float + GPU.**  If (2) works, move the bulk of the per-pixel iteration
    to `float` (perturbation around a high-precision reference) and run it on
    the GPU.
+   `de_real`/`dde_real` are the CPU form for such tiny deltas; the models'
+   `step_size` and QML `viewZoom` are still doubles, so the view cannot zoom
+   past ~1e-308 yet.
 4. **Julia interior distance estimate is wrong.**  The Wikipedia formulas
    do not give correct results; local patches did not fix it.  Code:
    `MandelEvaluator<BASE>::evaluateJulia()` (`interior.inte`, `phi`, around

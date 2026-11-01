@@ -191,12 +191,12 @@ bool dd_real::reduce_angle()
   static const dd_real M_PIdd_chs(-M_PIdd.hi, -M_PIdd.lo_);
   static const dd_real M_PIdd_2(2*M_PIdd.hi, 2*M_PIdd.lo_);
   //static const dd_real M_PIdd_2chs(-2*3.141, -2*0.0005926);
-  if (M_PIdd_chs.isle(*this))
+  if (!M_PIdd_chs.isle(*this)) // this < -pi
   {
     add(M_PIdd_2);
     return true;
   }
-  else if (isle(M_PIdd))
+  else if (M_PIdd.isle(*this))
   {
     sub(M_PIdd_2);
     return true;

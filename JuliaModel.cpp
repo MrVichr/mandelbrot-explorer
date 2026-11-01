@@ -678,6 +678,12 @@ void JuliaModel::setImageSize(int width, int height)
       case MandelMath::NumberType::typeDDHeap:
         new_points=MandelMath::number<MandelMath::dd_heap>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, newLength*JuliaPoint<MandelMath::number_any>::LEN);
         break;
+      case MandelMath::NumberType::typeDExp:
+        new_points=MandelMath::number<MandelMath::de_real>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, newLength*JuliaPoint<MandelMath::number_any>::LEN);
+        break;
+      case MandelMath::NumberType::typeDDExp:
+        new_points=MandelMath::number<MandelMath::dde_real>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, newLength*JuliaPoint<MandelMath::number_any>::LEN);
+        break;
 #endif
     }
     MandelMath::complex<MandelMath::number_any> old_c(precisionRecord->position.center);
@@ -708,6 +714,12 @@ void JuliaModel::setImageSize(int width, int height)
         break;
       case MandelMath::NumberType::typeDDHeap:
         delete[] (MandelMath::dd_real *)precisionRecord->points;
+        break;
+      case MandelMath::NumberType::typeDExp:
+        delete[] (MandelMath::de_real *)precisionRecord->points;
+        break;
+      case MandelMath::NumberType::typeDDExp:
+        delete[] (MandelMath::dde_real *)precisionRecord->points;
         break;
 #endif
     }
@@ -2159,7 +2171,9 @@ int JuliaModel::giveWorkThreaded(MandelEvaluator<BASE> *me)
   if (epoch!=me->busyEpoch)
     return 3;
   int retryEffortFrom=0;
-  int nextEffortBonus=effortBonus; //don't jump to max instantly once pixels<threads
+  int nextEffortBonus=effortBonus.load(std::memory_order_relaxed); //don't jump to max instantly once pixels<threads
+  //other threads advance nextGivenPointIndex while we scan; re-reading it would jump ahead by pi
+  int scanStart=nextGivenPointIndex.load(std::memory_order_relaxed);
   //int intoEvaluator, _discard_;
   //me->currentData.self_allocator._getFirstCapac(intoEvaluator, _discard_);
   while (retryEffortFrom>=0)
@@ -2167,45 +2181,25 @@ int JuliaModel::giveWorkThreaded(MandelEvaluator<BASE> *me)
     retryEffortFrom=-1;
     for (int pi=0; pi<imageWidth*imageHeight; pi++)
     {
-      int pointIndex=(nextGivenPointIndex+pi)%(imageWidth*imageHeight);
+      int pointIndex=(scanStart+pi)%(imageWidth*imageHeight);
       //if ((lastGivenPointIndex_!=0) && (pointIndex==0))
         //dbgPoint();
       //MandelMath::worker_multi::Allocator allo(storeWorker->getAllocator(), pointIndex*MandelPoint::LEN, MandelPoint::LEN, nullptr);
       JuliaPointStore *storeAtIndex=&pointStore[pointIndex];
-      if (storeAtIndex->wstate.load(std::memory_order_relaxed)==JuliaPointStore::WorkState::stWorking)
-        continue; //speedup/precheck
-      int extra_effort=0;
-      JuliaPointStore::WorkState state_prev=storeAtIndex->wstate.exchange(JuliaPointStore::WorkState::stWorking, std::memory_order_acquire);
+      //acquire pairs with the release stores of stIdle/stDone, so rstate/iter below are published
+      JuliaPointStore::WorkState state_prev=storeAtIndex->wstate.load(std::memory_order_acquire);
       if (state_prev==JuliaPointStore::WorkState::stWorking)
         continue;
+      //finished pixel that still needs extangle; that step doesn't depend on maxiter
+      bool extra_work=false;
       if (state_prev==JuliaPointStore::WorkState::stDone)
       {
-        /*if ((_selectedPaintStyle==paintStyleFC) &&
-            (!storeAtIndex->has_fc_r) &&
-            (storeAtIndex->rstate==MandelPointStore::ResultState::stPeriod2 ||
-             storeAtIndex->rstate==MandelPointStore::ResultState::stPeriod3))
-        {
-          state_expected=MandelPointStore::WorkState::stDone;
-          if (!storeAtIndex->wstate.compare_exchange_strong(state_expected, MandelPointStore::WorkState::stWorking))
-            continue;
-            //should check if it still needs but it should be quite rare, evaluate tests it anyway
-          extra_effort=1;
-        }
-        else*/ if (_selectedPaintStyle==paintStyleExterAngle &&
-                 storeAtIndex->rstate==JuliaPointStore::ResultState::stOutside)
-        {
-          extra_effort=1;
-        }
-        else
-        {
-          storeAtIndex->wstate.store(JuliaPointStore::WorkState::stDone, std::memory_order_relaxed);
+        extra_work=(_selectedPaintStyle==paintStyleExterAngle &&
+                    storeAtIndex->rstate==JuliaPointStore::ResultState::stOutside);
+        if (!extra_work)
           continue;
-        }
       }
       {
-        if (me->currentParams.pixelIndex!=-1)
-          dbgPoint();
-        working_assert(me->currentParams.pixelIndex==-1);
         {
           int phasex=(pointIndex%imageWidth-imageWidth/2+precisionRecord->position.cached_center_re_mod+32768)%32768;
           int phasey=(pointIndex/imageWidth-imageHeight/2+precisionRecord->position.cached_center_im_mod+32768)%32768;
@@ -2218,9 +2212,19 @@ int JuliaModel::giveWorkThreaded(MandelEvaluator<BASE> *me)
             effort=MAX_EFFORT;
           if (effort<2)
             effort=2; //quick run ... at least 4 iterations
-          me->currentParams.maxiter=1<<effort;
-          if (storeAtIndex->iter >= me->currentParams.maxiter+extra_effort)
+          int maxiter=1<<effort;
+          //iter only grows within an epoch, so a stale read can only under-estimate it
+          if (!extra_work && storeAtIndex->iter>=maxiter && effort<MAX_EFFORT)
           {
+            if (retryEffortFrom<0)
+              retryEffortFrom=pointIndex;
+            continue;
+          }
+          if (!storeAtIndex->wstate.compare_exchange_strong(state_prev, JuliaPointStore::WorkState::stWorking,
+                                                            std::memory_order_acquire, std::memory_order_relaxed))
+            continue; //another thread took it
+          if (!extra_work && storeAtIndex->iter>=maxiter)
+          { //re-check now that we own it
             if (effort>=MAX_EFFORT)
             {
               storeAtIndex->rstate=JuliaPointStore::ResultState::stMaxIter;
@@ -2235,6 +2239,10 @@ int JuliaModel::giveWorkThreaded(MandelEvaluator<BASE> *me)
           }
           else
           {
+            if (me->currentParams.pixelIndex!=-1)
+              dbgPoint();
+            working_assert(me->currentParams.pixelIndex==-1);
+            me->currentParams.maxiter=maxiter;
             //if (me->currentWorker->ntype()!=precisionRecord->ntype)
               //dbgPoint();
             //evaluator->switchType(position.worker);
@@ -2252,8 +2260,9 @@ int JuliaModel::giveWorkThreaded(MandelEvaluator<BASE> *me)
             me->juliaStore.assign(storeAtIndex);
 #endif
             me->juliaData.readFrom(precisionRecord->points, pointIndex*JuliaPoint<MandelMath::number_any>::LEN);
-            nextGivenPointIndex=(pointIndex+1)%(imageWidth*imageHeight);
-            effortBonus=nextEffortBonus;
+            nextGivenPointIndex.store((pointIndex+1)%(imageWidth*imageHeight), std::memory_order_relaxed);
+            int eb=effortBonus.load(std::memory_order_relaxed);
+            while (eb<nextEffortBonus && !effortBonus.compare_exchange_weak(eb, nextEffortBonus, std::memory_order_relaxed)) { }
             return 0;
           }
         }
@@ -2263,7 +2272,7 @@ int JuliaModel::giveWorkThreaded(MandelEvaluator<BASE> *me)
     if ((retryEffortFrom>=0) && (nextEffortBonus<MAX_EFFORT))
     {
       nextEffortBonus++;
-      nextGivenPointIndex=retryEffortFrom;
+      scanStart=retryEffortFrom;
     }
     else
       retryEffortFrom=-1;
@@ -2361,6 +2370,14 @@ void JuliaModel::selectedPrecisionChanged()
     case EprecisionDDHeap:
       newPrecision=Type::typeDDHeap;
       new_points=MandelMath::number<MandelMath::dd_heap>::convert_block(precisionRecord?precisionRecord->ntype:Type::typeEmpty, precisionRecord?precisionRecord->points:nullptr, pointCount*JuliaPoint<MandelMath::dd_heap>::LEN);
+      break;
+    case EprecisionDExp:
+      newPrecision=Type::typeDExp;
+      new_points=MandelMath::number<MandelMath::de_real>::convert_block(precisionRecord?precisionRecord->ntype:Type::typeEmpty, precisionRecord?precisionRecord->points:nullptr, pointCount*JuliaPoint<MandelMath::de_real>::LEN);
+      break;
+    case EprecisionDDExp:
+      newPrecision=Type::typeDDExp;
+      new_points=MandelMath::number<MandelMath::dde_real>::convert_block(precisionRecord?precisionRecord->ntype:Type::typeEmpty, precisionRecord?precisionRecord->points:nullptr, pointCount*JuliaPoint<MandelMath::dde_real>::LEN);
       break;
 #endif
     default: goto lolwut;
@@ -2605,6 +2622,12 @@ JuliaModel::PrecisionRecord::PrecisionRecord(MandelMath::NumberType ntype, Preci
     case MandelMath::NumberType::typeDDHeap:
       threads=new MandelEvaluator<MandelMath::dd_heap> *[threadCount];
       break;
+    case MandelMath::NumberType::typeDExp:
+      threads=new MandelEvaluator<MandelMath::de_real> *[threadCount];
+      break;
+    case MandelMath::NumberType::typeDDExp:
+      threads=new MandelEvaluator<MandelMath::dde_real> *[threadCount];
+      break;
 #endif
   }
   MandelMath::visit([](auto &threads, PrecisionRecord &self, JuliaModel *doneReceiver, PrecisionRecord *source){
@@ -2684,6 +2707,12 @@ JuliaModel::PrecisionRecord::~PrecisionRecord()
       break;
   case MandelMath::NumberType::typeDDHeap:
       delete[] (MandelMath::dd_real *)points;
+      break;
+  case MandelMath::NumberType::typeDExp:
+      delete[] (MandelMath::de_real *)points;
+      break;
+  case MandelMath::NumberType::typeDDExp:
+      delete[] (MandelMath::dde_real *)points;
       break;
 #endif
   }

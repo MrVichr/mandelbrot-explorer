@@ -547,6 +547,12 @@ void LaguerreModel::setImageSize(int width, int height)
       case MandelMath::NumberType::typeDDHeap:
         new_points=MandelMath::number<MandelMath::dd_heap>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, newLength*LaguerrePoint<MandelMath::number_any>::LEN);
         break;
+      case MandelMath::NumberType::typeDExp:
+        new_points=MandelMath::number<MandelMath::de_real>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, newLength*LaguerrePoint<MandelMath::number_any>::LEN);
+        break;
+      case MandelMath::NumberType::typeDDExp:
+        new_points=MandelMath::number<MandelMath::dde_real>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, newLength*LaguerrePoint<MandelMath::number_any>::LEN);
+        break;
 #endif
     }
     MandelMath::complex<MandelMath::number_any> old_c(precisionRecord->position.center);
@@ -577,6 +583,12 @@ void LaguerreModel::setImageSize(int width, int height)
         break;
       case MandelMath::NumberType::typeDDHeap:
         delete[] (MandelMath::dd_real *)precisionRecord->points;
+        break;
+      case MandelMath::NumberType::typeDExp:
+        delete[] (MandelMath::de_real *)precisionRecord->points;
+        break;
+      case MandelMath::NumberType::typeDDExp:
+        delete[] (MandelMath::dde_real *)precisionRecord->points;
         break;
 #endif
     }
@@ -1263,7 +1275,9 @@ int LaguerreModel::giveWorkThreaded(MandelEvaluator<BASE> *me)
   if (epoch!=me->busyEpoch)
     return 3;
   int retryEffortFrom=0;
-  int nextEffortBonus=effortBonus; //don't jump to max instantly once pixels<threads
+  int nextEffortBonus=effortBonus.load(std::memory_order_relaxed); //don't jump to max instantly once pixels<threads
+  //other threads advance nextGivenPointIndex while we scan; re-reading it would jump ahead by pi
+  int scanStart=nextGivenPointIndex.load(std::memory_order_relaxed);
   while (retryEffortFrom>=0)
   {
     retryEffortFrom=-1;
@@ -1271,7 +1285,7 @@ int LaguerreModel::giveWorkThreaded(MandelEvaluator<BASE> *me)
     MandelMath::complex<BASE> &root=me->laguerreData.r;
     for (int pi=0; pi<imageWidth*imageHeight; pi++)
     {
-      int pointIndex=(nextGivenPointIndex+pi)%(imageWidth*imageHeight);
+      int pointIndex=(scanStart+pi)%(imageWidth*imageHeight);
       //if ((lastGivenPointIndex_!=0) && (pointIndex==0))
         //dbgPoint();
       //MandelMath::worker_multi::Allocator allo(storeWorker->getAllocator(), pointIndex*LaguerrePoint::LEN, LaguerrePoint::LEN, nullptr);
@@ -1327,8 +1341,9 @@ int LaguerreModel::giveWorkThreaded(MandelEvaluator<BASE> *me)
             //me->currentWorker->assign_across(me->currentParams.c.re, precisionRecord->currentWorker, tmpc.re);
             //me->currentWorker->assign_across(me->currentParams.c.im, precisionRecord->currentWorker, tmpc.im);
 
-            nextGivenPointIndex=(pointIndex+1)%(imageWidth*imageHeight);
-            effortBonus=nextEffortBonus;
+            nextGivenPointIndex.store((pointIndex+1)%(imageWidth*imageHeight), std::memory_order_relaxed);
+            int eb=effortBonus.load(std::memory_order_relaxed);
+            while (eb<nextEffortBonus && !effortBonus.compare_exchange_weak(eb, nextEffortBonus, std::memory_order_relaxed)) { }
             return 0;
           }
         }
@@ -1338,7 +1353,7 @@ int LaguerreModel::giveWorkThreaded(MandelEvaluator<BASE> *me)
     if ((retryEffortFrom>=0))// && (effortBonus<MAX_EFFORT))
     {
       nextEffortBonus++;
-      nextGivenPointIndex=retryEffortFrom;
+      scanStart=retryEffortFrom;
     }
     else
       retryEffortFrom=-1;
@@ -1471,6 +1486,14 @@ void LaguerreModel::selectedPrecisionChanged()
     case precisionDDHeap:
       newPrecision=Type::typeDDHeap;
       new_points=MandelMath::number<MandelMath::dd_heap>::convert_block(precisionRecord?precisionRecord->ntype:Type::typeEmpty, precisionRecord?precisionRecord->points:nullptr, pointCount*LaguerrePoint<MandelMath::dd_heap>::LEN);
+      break;
+    case precisionDExp:
+      newPrecision=Type::typeDExp;
+      new_points=MandelMath::number<MandelMath::de_real>::convert_block(precisionRecord?precisionRecord->ntype:Type::typeEmpty, precisionRecord?precisionRecord->points:nullptr, pointCount*LaguerrePoint<MandelMath::de_real>::LEN);
+      break;
+    case precisionDDExp:
+      newPrecision=Type::typeDDExp;
+      new_points=MandelMath::number<MandelMath::dde_real>::convert_block(precisionRecord?precisionRecord->ntype:Type::typeEmpty, precisionRecord?precisionRecord->points:nullptr, pointCount*LaguerrePoint<MandelMath::dde_real>::LEN);
       break;
 #endif
     default: goto lolwut;
@@ -1707,6 +1730,12 @@ LaguerreModel::PrecisionRecord::PrecisionRecord(MandelMath::NumberType ntype, Pr
   case MandelMath::NumberType::typeDDHeap:
     threads=new MandelEvaluator<MandelMath::dd_heap> *[threadCount];
     break;
+  case MandelMath::NumberType::typeDExp:
+    threads=new MandelEvaluator<MandelMath::de_real> *[threadCount];
+    break;
+  case MandelMath::NumberType::typeDDExp:
+    threads=new MandelEvaluator<MandelMath::dde_real> *[threadCount];
+    break;
 #endif
   }
   MandelMath::visit([](auto &threads, PrecisionRecord &self, LaguerreModel *doneReceiver, PrecisionRecord *source){
@@ -1786,6 +1815,12 @@ LaguerreModel::PrecisionRecord::~PrecisionRecord()
     break;
   case MandelMath::NumberType::typeDDHeap:
     delete[] (MandelMath::dd_real *)points;
+    break;
+  case MandelMath::NumberType::typeDExp:
+    delete[] (MandelMath::de_real *)points;
+    break;
+  case MandelMath::NumberType::typeDDExp:
+    delete[] (MandelMath::dde_real *)points;
     break;
 #endif
   }

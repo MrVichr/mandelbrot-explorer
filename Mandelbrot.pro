@@ -11,7 +11,9 @@ CONFIG += force_debug_info
 #removes dbgPoint :-(
 #QMAKE_CXXFLAGS_DEBUG += -O3
 #QMAKE_CFLAGS_DEBUG += -O3
-QMAKE_CXXFLAGS_DEBUG += -fconcepts-diagnostics-depth=9
+gcc:!clang: QMAKE_CXXFLAGS_DEBUG += -fconcepts-diagnostics-depth=9
+# clang does not search GCC's include dir for quadmath.h
+clang: QMAKE_CXXFLAGS += -idirafter $$system(gcc -print-file-name=include)
 # double-double error-free transforms must not be fused into FMA
 QMAKE_CXXFLAGS += -ffp-contract=off -mfma
 # strtoflt128 / quadmath_snprintf for decimal <-> __float128
@@ -31,6 +33,7 @@ SOURCES += \
         ShareableImageWrapper.cpp \
         atomic_update_rect.cpp \
         double_double.cpp \
+        double_exp.cpp \
         main.cpp \
         multiprec.cpp
 
@@ -58,4 +61,5 @@ HEADERS += \
   atomic_update_rect.hpp \
   dd_heap.hpp \
   double_double.hpp \
+  double_exp.hpp \
   multiprec.hpp

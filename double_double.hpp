@@ -7,6 +7,10 @@
 #include <cstdint>
 #include <QString>
 
+#if defined(__FP_FAST_FMA) || defined(__FMA__) || defined(__FMA4__) // GCC: __FP_FAST_FMA; Clang: __FMA__ (x86-64), __FMA4__ (old x86-64), __FP_FAST_FMA (aarch64)
+#define MANDELMATH_FMA_AVAILABLE 1
+#endif
+
 namespace MandelMath {
 
 void fpu_fix_start(unsigned int *old_cw);
@@ -136,7 +140,7 @@ inline void dd_real::split(double a)
 /* Computes fl(a*b) and err(a*b). */
 inline void dd_real::two_prod(double a, double b)
 {
-#ifdef FP_FAST_FMA
+#if defined(MANDELMATH_FMA_AVAILABLE) // clang on x86 defines only __FMA__
   hi = a * b;
   lo_ = std::fma(a, b, -hi);
 #else
@@ -152,7 +156,7 @@ inline void dd_real::two_prod(double a, double b)
 /* Computes fl(a*a) and err(a*a).  Faster than the above method. */
 inline void dd_real::two_sqr(double a)
 {
-#ifdef FP_FAST_FMA
+#if defined(MANDELMATH_FMA_AVAILABLE)
   hi = a * a;
   lo_ = std::fma(a, a, -hi);
 #else
@@ -193,7 +197,7 @@ inline dd_real &dd_real::mul_double(double h2)
 {
   dd_real p;
   p.two_prod(hi, h2);
-#ifdef FP_FAST_FMA
+#if defined(MANDELMATH_FMA_AVAILABLE)
   p.lo_ = std::fma(lo_, h2, p.lo_); // DWTimesFP3, Joldes-Muller-Popescu 2017, error <= 2u^2
 #else
   p.lo_ += lo_*h2;
@@ -225,7 +229,7 @@ inline dd_real &dd_real::mul(dd_real const &other)
 {
   dd_real p;
   p.two_prod(hi, other.hi);
-#ifdef FP_FAST_FMA
+#if defined(MANDELMATH_FMA_AVAILABLE)
   // DWTimesDW3, Joldes-Muller-Popescu 2017, error <= 4u^2
   double t = std::fma(hi, other.lo_, lo_ * other.lo_);
   p.lo_ += std::fma(lo_, other.hi, t);
@@ -240,7 +244,7 @@ inline dd_real &dd_real::sqr()
 {
   dd_real p;
   p.two_sqr(hi);
-#ifdef FP_FAST_FMA
+#if defined(MANDELMATH_FMA_AVAILABLE)
   p.lo_ += std::fma(2.0 * hi, lo_, lo_ * lo_); // DWTimesDW3 with x==y
 #else
   p.lo_ += 2.0 * hi * lo_;

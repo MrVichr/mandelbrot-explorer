@@ -6,11 +6,10 @@
 
 // Minimal QChar stub
 class QChar {
-    char16_t c;
 public:
-    QChar() : c(0) {}
-    QChar(char ch) : c((char16_t)ch) {}
-    QChar(char16_t ch) : c(ch) {}
+    QChar() = default;
+    QChar(char) {}
+    QChar(char16_t) {}
 };
 
 // Minimal QByteArray needed for toLocal8Bit()

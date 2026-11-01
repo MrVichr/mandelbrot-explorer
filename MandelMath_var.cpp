@@ -354,70 +354,79 @@ number_a::~number_a()
     nop(); //should be hit exactly once on program end
 }*/
 
-//these 2 have to be in front... maybe move all <number_a *> ?
-//...no more?
+// Element conversions for convert_block (dq_real converts as its base dd_real).
+// Results should match assign_across.
+static double to_double(double x) { return x; }
+static double to_double(__float128 x) { return (double)x; }
+static double to_double(dd_real const &x) { return x.hi; }
+static double to_double(real642 const &x) { return x.val1; }
+static double to_double(de_real const &x) { return x.toDouble(); }
+static double to_double(dde_real const &x) { return x.toDouble(); }
+
+static __float128 to_float128(double x) { return x; }
+static __float128 to_float128(__float128 x) { return x; }
+static __float128 to_float128(dd_real const &x) { return x.hi+(__float128)x.lo_; }
+static __float128 to_float128(real642 const &x) { return x.val1; }
+static __float128 to_float128(de_real const &x) { return x.toFloat128(); }
+static __float128 to_float128(dde_real const &x) { return x.toFloat128(); }
+
+static dd_real to_dd(double x) { return dd_real(x, 0); }
+static dd_real to_dd(__float128 x) { double hi=(double)x; return dd_real(hi, (double)(x-hi)); }
+static dd_real to_dd(dd_real const &x) { return dd_real(x.hi, x.lo_); }
+static dd_real to_dd(real642 const &x) { return dd_real(x.val1, 0); }
+static dd_real to_dd(de_real const &x) { return dd_real(x.toDouble(), 0); }
+static dd_real to_dd(dde_real const &x) { return x.toDD(); }
+
+static real642 to_real642(double x) { return {x, x}; }
+static real642 to_real642(__float128 x) { return {(double)x, (double)x}; }
+static real642 to_real642(dd_real const &x) { return {x.hi, x.hi}; }
+static real642 to_real642(real642 const &x) { return x; }
+static real642 to_real642(de_real const &x) { return {x.toDouble(), x.toDouble()}; }
+static real642 to_real642(dde_real const &x) { return {x.toDouble(), x.toDouble()}; }
+
+static de_real to_de(double x) { return de_real(x); }
+static de_real to_de(__float128 x) { return de_real::fromFloat128(x); }
+static de_real to_de(dd_real const &x) { return de_real(x.hi); }
+static de_real to_de(dd_heap const &x) { return de_real(x.value().hi); }
+static de_real to_de(real642 const &x) { return de_real(x.val1); }
+static de_real to_de(de_real const &x) { return x; }
+static de_real to_de(dde_real const &x) { return de_real(x.hi, x.e); }
+
+static dde_real to_dde(double x) { return dde_real(x); }
+static dde_real to_dde(__float128 x) { return dde_real::fromFloat128(x); }
+static dde_real to_dde(dd_real const &x) { return dde_real(x); }
+static dde_real to_dde(dd_heap const &x) { return dde_real(x.value()); }
+static dde_real to_dde(real642 const &x) { return dde_real(x.val1); }
+static dde_real to_dde(de_real const &x) { dde_real r; r.set(x.m, 0, x.e); return r; }
+static dde_real to_dde(dde_real const &x) { return x; }
+
+// result[i]=conv(old_data[i]) for a point array of any type
+template<typename DST>
+static DST *convert_block_with(NumberType old_type, const void *old_data, int count, auto conv)
+{
+  DST *result=new DST[count](); // value-initialized: zero for every type, also for typeEmpty
+  auto each=[&](auto const *src) {
+    for (int i=0; i<count; i++)
+      result[i]=conv(src[i]);
+  };
+  switch (old_type)
+  {
+    case NumberType::typeEmpty: break;
+    case NumberType::typeDouble: each((double const *)old_data); break;
+    case NumberType::typeFloat128: each((__float128 const *)old_data); break;
+    case NumberType::typeDDouble:
+    case NumberType::typeDDHeap: each((dd_real const *)old_data); break;
+    case NumberType::typeQDouble: each((dq_real const *)old_data); break;
+    case NumberType::typeReal642: each((real642 const *)old_data); break;
+    case NumberType::typeDExp: each((de_real const *)old_data); break;
+    case NumberType::typeDDExp: each((dde_real const *)old_data); break;
+  }
+  return result;
+}
 
 double *number_traits<double>::convert_block(NumberType old_type, const void *old_data, int count)
 {
-  double *result=new double[count];
-  switch (old_type)
-  {
-    case NumberType::typeEmpty:
-    {
-      for (int i=0; i<count; i++)
-        result[i]=0;
-    } break;
-    case NumberType::typeDouble:
-    {
-      const double *src_storage=(const double *)old_data;
-      //TODO: memmove but we'll see later
-      for (int i=0; i<count; i++)
-      {
-        result[i]=*src_storage;
-        src_storage++;
-      }
-    } break;
-#if !NUMBER_DOUBLE_ONLY
-    case NumberType::typeFloat128:
-    {
-      const __float128 *src_storage=(const __float128 *)old_data;
-      for (int i=0; i<count; i++)
-      {
-        result[i]=*src_storage;
-        src_storage++;
-      }
-    } break;
-    case NumberType::typeDDouble:
-    case NumberType::typeDDHeap:
-    {
-      const dd_real *src_storage=(const dd_real *)old_data;
-      for (int i=0; i<count; i++)
-      {
-        result[i]=src_storage->hi;
-        src_storage++;
-      }
-    } break;
-    case NumberType::typeQDouble:
-    {
-      const dq_real *src_storage=(const dq_real *)old_data;
-      for (int i=0; i<count; i++)
-      {
-        result[i]=src_storage->hi;
-        src_storage++;
-      }
-    } break;
-    case NumberType::typeReal642:
-    {
-      const real642 *src_storage=(const real642 *)old_data;
-      for (int i=0; i<count; i++)
-      {
-        result[i]=src_storage->val1;
-        src_storage++;
-      }
-    } break;
-#endif // !NUMBER_DOUBLE_ONLY
-  }
-  return result;
+  return convert_block_with<double>(old_type, old_data, count, [](auto const &x) { return to_double(x); });
 }
 
 template<> template<typename OTHER_BASE>
@@ -438,6 +447,8 @@ number<double> &number<double>::assign_across(number<OTHER_BASE> const &src)
     void operator()(number<dq_real> const &other, number<double> &self) { self.store=other.store.hi; }
     void operator()(number<real642> const &other, number<double> &self) { self.store=other.store.val1; }
     void operator()(number<dd_heap> const &other, number<double> &self) { self.store=other.store.value().hi; }
+    void operator()(number<de_real> const &other, number<double> &self) { self.store=other.store.toDouble(); }
+    void operator()(number<dde_real> const &other, number<double> &self) { self.store=other.store.toDouble(); }
     void operator()(number<number_any> const &other, number<double> &self) { visit(*this, other.store, self); }
   } assigner;
   assigner(src, *this);
@@ -531,64 +542,7 @@ int number_traits<double>::toRound(double store)
 #if !NUMBER_DOUBLE_ONLY
 __float128 *number_traits<__float128>::convert_block(NumberType old_type, const void *old_data, int count)
 {
-  __float128 *result=new __float128[count];
-  switch (old_type)
-  {
-    case NumberType::typeEmpty:
-    {
-      for (int i=0; i<count; i++)
-        result[i]=0;
-    } break;
-#if NUMBER_DOUBLE_EXISTS
-    case NumberType::typeDouble:
-    {
-      const double *src_storage=(const double *)old_data;
-      for (int i=0; i<count; i++)
-      {
-        result[i]=*src_storage;
-        src_storage++;
-      }
-    } break;
-#endif
-    case NumberType::typeFloat128:
-    {
-      const __float128 *src_storage=(const __float128 *)old_data;
-      for (int i=0; i<count; i++)
-      {
-        result[i]=*src_storage;
-        src_storage++;
-      }
-    } break;
-    case NumberType::typeDDouble:
-    case NumberType::typeDDHeap:
-    {
-      const dd_real *src_storage=(const dd_real *)old_data;
-      for (int i=0; i<count; i++)
-      {
-        result[i]=src_storage->hi+(__float128)src_storage->lo_;
-        src_storage++;
-      }
-    } break;
-    case NumberType::typeQDouble:
-    {
-      const dq_real *src_storage=(const dq_real *)old_data;
-      for (int i=0; i<count; i++)
-      {
-        result[i]=src_storage->hi+(__float128)src_storage->lo_;
-        src_storage++;
-      }
-    } break;
-    case NumberType::typeReal642:
-    {
-      const real642 *src_storage=(const real642 *)old_data;
-      for (int i=0; i<count; i++)
-      {
-        result[i]=src_storage->val1;
-        src_storage++;
-      }
-    } break;
-  }
-  return result;
+  return convert_block_with<__float128>(old_type, old_data, count, [](auto const &x) { return to_float128(x); });
 }
 
 template<> template<typename OTHER_BASE>
@@ -607,6 +561,8 @@ number<__float128> &number<__float128>::assign_across(number<OTHER_BASE> const &
     void operator()(number<dq_real> const &other, number<__float128> &self) { self.store=other.store.hi+__float128(other.store.lo_); }
     void operator()(number<real642> const &other, number<__float128> &self) { self.store=other.store.val1; }
     void operator()(number<dd_heap> const &other, number<__float128> &self) { self.store=other.store.value().hi+__float128(other.store.value().lo_); }
+    void operator()(number<de_real> const &other, number<__float128> &self) { self.store=other.store.toFloat128(); }
+    void operator()(number<dde_real> const &other, number<__float128> &self) { self.store=other.store.toFloat128(); }
     void operator()(number<number_any> const &other, number<__float128> &self) { visit(*this, other.store, self); }
   } assigner;
   assigner(src, *this);
@@ -696,64 +652,7 @@ int number_traits<__float128>::toRound(__float128 store)
 
 dd_real *number_traits<dd_real>::convert_block(NumberType old_type, const void *old_data, int count)
 {
-  dd_real *result=new dd_real[count];
-  switch (old_type)
-  {
-    case NumberType::typeEmpty:
-    {
-      for (int i=0; i<count; i++)
-        result[i].zero(0);
-    } break;
-    case NumberType::typeDouble:
-    {
-      const double *src_storage=(const double *)old_data;
-      for (int i=0; i<count; i++)
-      {
-        result[i].zero(*src_storage);
-        src_storage++;
-      }
-    } break;
-    case NumberType::typeFloat128:
-    {
-      const __float128 *src_storage=(const __float128 *)old_data;
-      for (int i=0; i<count; i++)
-      {
-        result[i].hi=(double)*src_storage;
-        result[i].lo_=*src_storage-result[i].hi;
-        src_storage++;
-      }
-    } break;
-    case NumberType::typeDDouble:
-    case NumberType::typeDDHeap:
-    {
-      const dd_real *src_storage=(const dd_real *)old_data;
-      for (int i=0; i<count; i++)
-      {
-        result[i].assign(*src_storage);
-        src_storage++;
-      }
-    } break;
-    case NumberType::typeQDouble:
-    {
-      const dq_real *src_storage=(const dq_real *)old_data;
-      for (int i=0; i<count; i++)
-      {
-        result[i].assign(*src_storage);
-        src_storage++;
-      }
-    } break;
-    case NumberType::typeReal642:
-    {
-      const real642 *src_storage=(const real642 *)old_data;
-      for (int i=0; i<count; i++)
-      {
-        result[i].hi=src_storage->val1;
-        result[i].lo_=0;
-        src_storage++;
-      }
-    } break;
-  }
-  return result;
+  return convert_block_with<dd_real>(old_type, old_data, count, [](auto const &x) { return to_dd(x); });
 }
 
 /*template<> //template <>
@@ -788,6 +687,8 @@ number<dd_real> &number<dd_real>::assign_across(number<OTHER_BASE> const &src)
     void operator()(number<dq_real> const &other, number<dd_real> &self) { self.store=other.store; }
     void operator()(number<real642> const &other, number<dd_real> &self) { self.store.zero(other.store.val1); }
     void operator()(number<dd_heap> const &other, number<dd_real> &self) { self.store=other.store.value(); }
+    void operator()(number<de_real> const &other, number<dd_real> &self) { self.store.zero(other.store.toDouble()); }
+    void operator()(number<dde_real> const &other, number<dd_real> &self) { self.store=other.store.toDD(); }
     void operator()(number<number_any> const &other, number<dd_real> &self) { visit(*this, other.store, self); }
   } assigner;
   assigner(src, *this);
@@ -849,64 +750,7 @@ number<dd_real> &number<dd_real>::assign_across(number_any const &src)
 
 dq_real *number_traits<dq_real>::convert_block(NumberType old_type, const void *old_data, int count)
 {
-  dq_real *result=new dq_real[count];
-  switch (old_type)
-  {
-  case NumberType::typeEmpty:
-  {
-    for (int i=0; i<count; i++)
-        result[i].zero(0);
-  } break;
-  case NumberType::typeDouble:
-  {
-    const double *src_storage=(const double *)old_data;
-    for (int i=0; i<count; i++)
-    {
-        result[i].zero(*src_storage);
-        src_storage++;
-    }
-  } break;
-  case NumberType::typeFloat128:
-  {
-    const __float128 *src_storage=(const __float128 *)old_data;
-    for (int i=0; i<count; i++)
-    {
-        result[i].hi=(double)*src_storage;
-        result[i].lo_=*src_storage-result[i].hi;
-        src_storage++;
-    }
-  } break;
-  case NumberType::typeDDouble:
-  case NumberType::typeDDHeap:
-  {
-    const dd_real *src_storage=(const dd_real *)old_data;
-    for (int i=0; i<count; i++)
-    {
-        result[i].assign(*src_storage);
-        src_storage++;
-    }
-  } break;
-  case NumberType::typeQDouble:
-  {
-    const dq_real *src_storage=(const dq_real *)old_data;
-    for (int i=0; i<count; i++)
-    {
-        result[i].assign(*src_storage);
-        src_storage++;
-    }
-  } break;
-  case NumberType::typeReal642:
-  {
-    const real642 *src_storage=(const real642 *)old_data;
-    for (int i=0; i<count; i++)
-    {
-        result[i].hi=src_storage->val1;
-        result[i].lo_=0;
-        src_storage++;
-    }
-  } break;
-  }
-  return result;
+  return convert_block_with<dq_real>(old_type, old_data, count, [](auto const &x) { dd_real d=to_dd(x); return dq_real(d.hi, d.lo_); });
 }
 
 /*template<> //template <>
@@ -941,6 +785,8 @@ public:
     void operator()(number<dq_real> const &other, number<dq_real> &self) { self.store=other.store; }
     void operator()(number<real642> const &other, number<dq_real> &self) { self.store.zero(other.store.val1); }
     void operator()(number<dd_heap> const &other, number<dq_real> &self) { self.store.hi=other.store.value().hi; self.store.lo_=other.store.value().lo_; }
+    void operator()(number<de_real> const &other, number<dq_real> &self) { self.store.zero(other.store.toDouble()); }
+    void operator()(number<dde_real> const &other, number<dq_real> &self) { self.store.assign(other.store.toDD()); }
     void operator()(number<number_any> const &other, number<dq_real> &self) { visit(*this, other.store, self); }
   } assigner;
   assigner(src, *this);
@@ -1020,71 +866,7 @@ number<dd_heap> &number<dd_heap>::assign_across(number<OTHER_BASE> const &src)
 
 real642 *number_traits<real642>::convert_block(NumberType old_type, const void *old_data, int count)
 {
-  real642 *result=new real642[count];
-  switch (old_type)
-  {
-    case NumberType::typeEmpty:
-    {
-      for (int i=0; i<count; i++)
-      {
-        result[i].val1=0;
-        result[i].val2=0;
-      }
-    } break;
-    case NumberType::typeDouble:
-    {
-      const double *src_storage=(const double *)old_data;
-      //TODO: memmove but we'll see later
-      for (int i=0; i<count; i++)
-      {
-        result[i].val1=*src_storage;
-        result[i].val2=*src_storage;
-        src_storage++;
-      }
-    } break;
-    case NumberType::typeFloat128:
-    {
-      const __float128 *src_storage=(const __float128 *)old_data;
-      for (int i=0; i<count; i++)
-      {
-        result[i].val1=*src_storage;
-        result[i].val2=*src_storage;
-        src_storage++;
-      }
-    } break;
-    case NumberType::typeDDouble:
-    case NumberType::typeDDHeap:
-    {
-      const dd_real *src_storage=(const dd_real *)old_data;
-      for (int i=0; i<count; i++)
-      {
-        result[i].val1=src_storage->hi;
-        result[i].val2=src_storage->hi+(__float128)src_storage->lo_;
-        src_storage++;
-      }
-    } break;
-    case NumberType::typeQDouble:
-    {
-      const dq_real *src_storage=(const dq_real *)old_data;
-      for (int i=0; i<count; i++)
-      {
-        result[i].val1=src_storage->hi;
-        result[i].val2=src_storage->hi+(__float128)src_storage->lo_;
-        src_storage++;
-      }
-    } break;
-    case NumberType::typeReal642:
-    {
-      const real642 *src_storage=(const real642 *)old_data;
-      for (int i=0; i<count; i++)
-      {
-        result[i].val1=src_storage->val1;
-        result[i].val2=src_storage->val2;
-        src_storage++;
-      }
-    } break;
-  }
-  return result;
+  return convert_block_with<real642>(old_type, old_data, count, [](auto const &x) { return to_real642(x); });
 }
 
 /*template<> template <typename OTHER>
@@ -1120,6 +902,8 @@ number<real642> &number<real642>::assign_across(number<OTHER_BASE> const &src)
     void operator()(number<dq_real> const &other, number<real642> &self) { self.store.val2=self.store.val1=other.store.hi; }
     void operator()(number<real642> const &other, number<real642> &self) { self.store=other.store; }
     void operator()(number<dd_heap> const &other, number<real642> &self) { self.store.val2=self.store.val1=other.store.value().hi; }
+    void operator()(number<de_real> const &other, number<real642> &self) { self.store.val2=self.store.val1=other.store.toDouble(); }
+    void operator()(number<dde_real> const &other, number<real642> &self) { self.store.val2=self.store.val1=other.store.toDouble(); }
     void operator()(number<number_any> const &other, number<real642> &self) { visit(*this, other.store, self); }
   } assigner;
   assigner(src, *this);
@@ -1175,6 +959,48 @@ int number_traits<real642>::toRound(real642 const &store)
   return qRound(store.val1);
 }
 
+de_real *number_traits<de_real>::convert_block(NumberType old_type, const void *old_data, int count)
+{
+  return convert_block_with<de_real>(old_type, old_data, count, [](auto const &x) { return to_de(x); });
+}
+
+dde_real *number_traits<dde_real>::convert_block(NumberType old_type, const void *old_data, int count)
+{
+  return convert_block_with<dde_real>(old_type, old_data, count, [](auto const &x) { return to_dde(x); });
+}
+
+template<> template<typename OTHER_BASE>
+number<de_real> &number<de_real>::assign_across(number<OTHER_BASE> const &src)
+{
+  auto assigner=[](auto const &other, number<de_real> &self) {
+    if constexpr (std::is_same_v<std::remove_cvref_t<decltype(other)>, std::monostate>)
+      self.store=de_real();
+    else
+      self.store=to_de(other.store);
+  };
+  if constexpr (std::is_same_v<OTHER_BASE, number_any>)
+    visit(assigner, src.store, *this);
+  else
+    assigner(src, *this);
+  return *this;
+}
+
+template<> template<typename OTHER_BASE>
+number<dde_real> &number<dde_real>::assign_across(number<OTHER_BASE> const &src)
+{
+  auto assigner=[](auto const &other, number<dde_real> &self) {
+    if constexpr (std::is_same_v<std::remove_cvref_t<decltype(other)>, std::monostate>)
+      self.store=dde_real();
+    else
+      self.store=to_dde(other.store);
+  };
+  if constexpr (std::is_same_v<OTHER_BASE, number_any>)
+    visit(assigner, src.store, *this);
+  else
+    assigner(src, *this);
+  return *this;
+}
+
 #endif // !NUMBER_DOUBLE_ONLY
 
 double number<number_any>::eps2() const
@@ -1199,14 +1025,14 @@ double number<number_any>::eps234() const
   }, store);
 }
 
-double number<number_any>::sqrtlarge() const
+bool number<number_any>::isTooLarge() const
 {
   return visit([](auto &val){
       using T=std::remove_cv_t<std::remove_reference_t<decltype(val)>>;
       if constexpr (std::is_same_v<T, std::monostate>)
-          return 1.915e153;
+          return false;
       else
-          return val.sqrtlarge();
+          return val.isTooLarge();
   }, store);
 }
 
@@ -1255,6 +1081,8 @@ number<number_any>::number(NumberType ntype): store()
     case NumberType::typeQDouble: store.emplace<number<dq_real>>(); break;
     case NumberType::typeReal642: store.emplace<number<real642>>(); break;
     case NumberType::typeDDHeap: store.emplace<number<dd_heap>>(); break;
+    case NumberType::typeDExp: store.emplace<number<de_real>>(); break;
+    case NumberType::typeDDExp: store.emplace<number<dde_real>>(); break;
 #endif
     default:
       dbgPoint();
@@ -1375,6 +1203,8 @@ number<number_any> &number<number_any>::assign_across(number<OTHER_BASE> const &
     void operator()(number<dq_real> &my_store, number<OTHER_BASE> const &other) { my_store.assign_across(other); }
     void operator()(number<real642> &my_store, number<OTHER_BASE> const &other) { my_store.assign_across(other); }
     void operator()(number<dd_heap> &my_store, number<OTHER_BASE> const &other) { my_store.assign_across(other); }
+    void operator()(number<de_real> &my_store, number<OTHER_BASE> const &other) { my_store.assign_across(other); }
+    void operator()(number<dde_real> &my_store, number<OTHER_BASE> const &other) { my_store.assign_across(other); }
     void operator()(number<number_any> &my_store, number<OTHER_BASE> const &other) {
     //  visit([](auto &my_store, auto const &other_store) { my_store.assign_across(other_store); }, self.store, other.store);
       (void)my_store;
@@ -2175,6 +2005,14 @@ template complex<real642> &complex<real642>::assign_across<real642>(const comple
 template class complex<dd_heap>;
 template complex<dd_heap> &complex<dd_heap>::assign_across<number_any>(const complex<number_any> &src);
 template complex<dd_heap> &complex<dd_heap>::assign_across<dd_heap>(const complex<dd_heap> &src);
+template number<de_real> &number<de_real>::assign_across<number_any>(const number<number_any> &src);
+template number<dde_real> &number<dde_real>::assign_across<number_any>(const number<number_any> &src);
+template class complex<de_real>;
+template complex<de_real> &complex<de_real>::assign_across<number_any>(const complex<number_any> &src);
+template complex<de_real> &complex<de_real>::assign_across<de_real>(const complex<de_real> &src);
+template class complex<dde_real>;
+template complex<dde_real> &complex<dde_real>::assign_across<number_any>(const complex<number_any> &src);
+template complex<dde_real> &complex<dde_real>::assign_across<dde_real>(const complex<dde_real> &src);
 
 #endif
 /*template class complex<worker_multi_float128>;

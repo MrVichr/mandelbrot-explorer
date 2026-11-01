@@ -23,9 +23,9 @@
 #
 #   make check-all           — all fractals × modes × precisions; log in current/check-all.log
 #   make bless-all           — bless all fractals × modes × precisions
-#   make bench               — time a larger Mandelbrot view at double, dd and ddheap (3 runs each)
+#   make bench               — time a larger Mandelbrot view at double, dd, ddheap, de and dde (3 runs each)
 #
-# PREC=double|float128|dd|qd|real642|ddheap selects the precision of the single-case
+# PREC=double|float128|dd|qd|real642|ddheap|de|dde selects the precision of the single-case
 # targets (default double); non-double outputs are tagged, e.g. Man_dd_...
 #
 # The python script also converts PPMs → PNG for human inspection (requires Pillow).
@@ -42,13 +42,19 @@ LAG_VIEW_ARGS := --cx -0.3625054588774519 --cy -0.0600809418829158 --scale 0.000
 BENCH_ARGS    := --cx -1.39473141148726511 --cy 0.00450422164786152379 --scale 1.4210854715202003717422485351563e-14 --width 160 --height 120 --title "Bench"
 
 PREC       ?= double
-PRECISIONS := double float128 dd qd real642 ddheap
+PRECISIONS := double float128 dd qd real642 ddheap de dde
 SELF       := $(firstword $(MAKEFILE_LIST))
 
 
 CXX      := g++
 OPTFLAGS ?= -O3
-CXXFLAGS := -std=c++20 -fext-numeric-literals \
+# clang (e.g. CXX=clang++-18) lacks -fext-numeric-literals and does not search GCC's include dir for quadmath.h
+ifneq (,$(findstring clang,$(shell $(CXX) --version 2>/dev/null)))
+COMPILER_FLAGS := -idirafter $(shell gcc -print-file-name=include)
+else
+COMPILER_FLAGS := -fext-numeric-literals
+endif
+CXXFLAGS := -std=c++20 $(COMPILER_FLAGS) \
             -I. -Ifake_qt \
             -Wall -Wextra \
             -Wno-unused-parameter \
@@ -66,6 +72,7 @@ LDFLAGS  := -lpthread -lquadmath
 # isn't needed for headless computation).
 SRCS := MandelMath_var.cpp \
         double_double.cpp \
+        double_exp.cpp \
         multiprec.cpp \
         MandelEvaluator.cpp \
         MandelModel.cpp \
@@ -186,6 +193,6 @@ bless-all: all
 	done; done; done
 
 bench: all
-	@for p in double dd ddheap; do for i in 1 2 3; do \
+	@for p in double dd ddheap de dde; do for i in 1 2 3; do \
 	  ./$(TARGET) --fractal man --mode text --precision $$p $(BENCH_ARGS) 2>&1 >/dev/null | grep '^timing' | sed "s/^/$$p /"; \
 	done; done

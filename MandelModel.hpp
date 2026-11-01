@@ -81,7 +81,9 @@ public:
     precisionDDouble=2,
     precisionQDouble=3,
     precisionReal642=4,
-    precisionDDHeap=5
+    precisionDDHeap=5,
+    precisionDExp=6,
+    precisionDDExp=7
 #endif
   };
   Q_ENUM(precision);
@@ -127,8 +129,8 @@ protected:
   int epoch=1;
   int imageWidth=0;
   int imageHeight=0;
-  int nextGivenPointIndex=0;
-  int effortBonus=0;
+  std::atomic<int> nextGivenPointIndex=0; //shared by workers under the read lock
+  std::atomic<int> effortBonus=0;
   //constexpr static int MAX_EFFORT=17;//131072 iters;
   static constexpr int MAX_EFFORT=22;//
   QElapsedTimer timerWriteToImage;
@@ -200,7 +202,9 @@ protected:
                  MandelEvaluator<MandelMath::dd_real> **,
                  MandelEvaluator<MandelMath::dq_real> **,
                  MandelEvaluator<MandelMath::real642> **,
-                 MandelEvaluator<MandelMath::dd_heap> **> threads;
+                 MandelEvaluator<MandelMath::dd_heap> **,
+                 MandelEvaluator<MandelMath::de_real> **,
+                 MandelEvaluator<MandelMath::dde_real> **> threads;
     PrecisionRecord(MandelMath::NumberType ntype, PrecisionRecord *source, MandelModel *doneReceiver);
     ~PrecisionRecord();
     //constexpr static int LEN=ShareableViewInfo::LEN+MandelPoint_<MandelMath::number_a *>::LEN+Position::LEN+Orbit::LEN+5  +6;
