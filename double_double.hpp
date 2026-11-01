@@ -169,12 +169,12 @@ inline void dd_real::two_sqr(double a)
 
 inline double dd_real::eps2() const
 {
-  return 6.07717e-64; // 2^-(2*(53+52)) rounded up
+  return 3.7982271e-65; // 2^-(2*(53+54)) rounded up
 }
 
 inline double dd_real::eps234() const
 {
-  return 3.87e-48; // eps2^(3/4)
+  return 4.838221e-49; // eps2^(3/4)
 }
 
 inline dd_real &dd_real::lshift(int exp)
@@ -401,4 +401,4 @@ inline double dd_real::toDouble() const
 
 } // namespace MandelMath
 
-#endif // MANDELMATH_NUMBER_DOUBLE_HPP
+#endif // MANDELMATH_DOUBLE_DOUBLE_HPP

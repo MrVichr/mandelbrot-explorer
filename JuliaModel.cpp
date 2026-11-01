@@ -11,10 +11,13 @@
 
 #define UPDATE_CACHED_MOD 0 //works until precision doesn't allow
 
+JuliaModel *Should_you_ever_need_JuliaModel=nullptr;
+
 JuliaModel::JuliaModel(): QObject()
 {
   unsigned int oldcw; //524319 = 0x8001F = mask all interrupts, 80bit precision
   MandelMath::fpu_fix_start(&oldcw);
+  Should_you_ever_need_JuliaModel=this;
   QObject::connect(this, &JuliaModel::selectedPrecisionChange,
                    this, &JuliaModel::selectedPrecisionChanged);
   selectedPrecisionChanged();
@@ -414,7 +417,7 @@ void JuliaModel::setParams(ShareableViewInfo viewInfo)
 
     transformStore(precisionRecord->points, pointStore, 0, 0, old_center,
                    precisionRecord->points, pointStore, imageWidth, imageHeight, precisionRecord->position.center,
-                   precisionRecord->position.step_log-old_step_log, precisionRecord->position.step_log);
+                   precisionRecord->position.step_log-old_step_log, precisionRecord->position.step_log, true);
 
     startNewEpoch();
   }
@@ -485,7 +488,7 @@ int PixelPositionTransformer::transform(int new_value, int offset)
 
 void JuliaModel::transformStore(void *old_points, JuliaPointStore *old_store, int old_width, int old_height, MandelMath::complex<MandelMath::number_any> const &old_c,
                                 void *new_points, JuliaPointStore *new_store, int new_width, int new_height, MandelMath::complex<MandelMath::number_any> const &new_c,
-                                int inlog, int new_step_log)
+                                int inlog, int new_step_log, bool resetUnfinished)
 {
   if (precisionRecord==nullptr)
   {
@@ -523,7 +526,8 @@ void JuliaModel::transformStore(void *old_points, JuliaPointStore *old_store, in
       //-1 is better than imageWidth, call reset() in the second loop, we may still need the points
       if ((oldy>newy) || ((oldy==newy) && (oldx>newx)))
       {
-        if ((oldy>=0) && (oldy<old_height) && (oldx>=0) && (oldx<old_width))
+        if ((oldy>=0) && (oldy<old_height) && (oldx>=0) && (oldx<old_width) &&
+            (!resetUnfinished || new_store[newy*new_width+newx].wstate==JuliaPointStore::WorkState::stDone))
         { //copy old point to new place
           new_store[newy*new_width+newx].assign(&old_store[oldy*old_width+oldx]);
           if (new_store[newy*new_width+newx].wstate==JuliaPointStore::WorkState::stWorking)
@@ -544,7 +548,7 @@ void JuliaModel::transformStore(void *old_points, JuliaPointStore *old_store, in
       };
     }
   }
-  for (int newy=(new_height-1)&0xfffffff; newy>=0; newy--) //avoid Clang warning about newy possibly ~ 2^31
+  for (int newy=(new_height-1); newy>=0; newy--) // &0xfffffff avoid Clang warning about newy possibly ~ 2^31
   {
     int oldy=ytrans.transform(newy, old_height/2);
     first_z.im.assign(precisionRecord->position.center.im);
@@ -554,7 +558,8 @@ void JuliaModel::transformStore(void *old_points, JuliaPointStore *old_store, in
       int oldx=xtrans.transform(newx, old_width/2);
       if ((oldy<newy) || ((oldy==newy) && (oldx<=newx)))
       {
-        if ((oldy>=0) && (oldy<old_height) && (oldx>=0) && (oldx<old_width))
+        if ((oldy>=0) && (oldy<old_height) && (oldx>=0) && (oldx<old_width) &&
+            (!resetUnfinished || new_store[newy*new_width+newx].wstate==JuliaPointStore::WorkState::stDone))
         { //copy old to new
           new_store[newy*new_width+newx].assign(&old_store[oldy*old_width+oldx]);
           if (new_store[newy*new_width+newx].wstate==JuliaPointStore::WorkState::stWorking)
@@ -590,7 +595,7 @@ void JuliaModel::setView(MandelMath::complex<MandelMath::number_any> const &c, d
 
     transformStore(precisionRecord->points, pointStore, imageWidth, imageHeight, old_c,
                    precisionRecord->points, pointStore, imageWidth, imageHeight, precisionRecord->position.center,
-                   precisionRecord->position.step_log-old_step_log, precisionRecord->position.step_log);
+                   precisionRecord->position.step_log-old_step_log, precisionRecord->position.step_log, false);
 
     startNewEpoch();
   }
@@ -599,8 +604,8 @@ void JuliaModel::setView(MandelMath::complex<MandelMath::number_any> const &c, d
 void JuliaModel::drag(double delta_x, double delta_y)
 {
   //qDebug()<<"drag ("<<delta_x<<","<<delta_y<<")";
-  MandelMath::complex<MandelMath::number_any> old_c(precisionRecord->orbit.evaluator.ntype);
-  old_c.assign(precisionRecord->position.center);
+  MandelMath::complex<MandelMath::number_any> old_c(precisionRecord->position.center);
+  //old_c.assign(precisionRecord->position.center);
 
   {
     QWriteLocker locker(&threading_mutex);
@@ -612,7 +617,7 @@ void JuliaModel::drag(double delta_x, double delta_y)
 
     transformStore(precisionRecord->points, pointStore, imageWidth, imageHeight, old_c,
                    precisionRecord->points, pointStore, imageWidth, imageHeight, precisionRecord->position.center,
-                   0, precisionRecord->position.step_log);
+                   0, precisionRecord->position.step_log, false);
 
     startNewEpoch();
   }
@@ -620,9 +625,8 @@ void JuliaModel::drag(double delta_x, double delta_y)
 
 void JuliaModel::zoom(double x, double y, int inlog)
 {
-  MandelMath::complex<MandelMath::number_any> old_c(precisionRecord->orbit.evaluator.ntype);
-
-  old_c.assign(precisionRecord->position.center);
+  MandelMath::complex<MandelMath::number_any> old_c(precisionRecord->position.center);
+  //old_c.assign(precisionRecord->position.center);
   int old_step_log=precisionRecord->position.step_log;
 
   {
@@ -632,7 +636,7 @@ void JuliaModel::zoom(double x, double y, int inlog)
 
     transformStore(precisionRecord->points, pointStore, imageWidth, imageHeight, old_c,
                    precisionRecord->points, pointStore, imageWidth, imageHeight, precisionRecord->position.center,
-                   precisionRecord->position.step_log-old_step_log, precisionRecord->position.step_log);
+                   precisionRecord->position.step_log-old_step_log, precisionRecord->position.step_log, false);
 
     startNewEpoch();
   }
@@ -670,7 +674,7 @@ void JuliaModel::setImageSize(int width, int height)
         new_points=MandelMath::number<MandelMath::dd_real>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, newLength*JuliaPoint<MandelMath::number_any>::LEN);
         break;
       case MandelMath::NumberType::typeQDouble:
-        new_points=MandelMath::number<MandelMath::dq_real>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, newLength*JuliaPoint<MandelMath::number_any>::LEN);
+        new_points=MandelMath::number<MandelMath::qd_real>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, newLength*JuliaPoint<MandelMath::number_any>::LEN);
         break;
       case MandelMath::NumberType::typeReal642:
         new_points=MandelMath::number<MandelMath::real642>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, newLength*JuliaPoint<MandelMath::number_any>::LEN);
@@ -691,7 +695,7 @@ void JuliaModel::setImageSize(int width, int height)
 
     transformStore(precisionRecord->points, pointStore, imageWidth, imageHeight, old_c,
                    new_points, newStore, width, height, precisionRecord->position.center,
-                   0, precisionRecord->position.step_log);
+                   0, precisionRecord->position.step_log, false);
 
     switch (precisionRecord->ntype)
     {
@@ -707,7 +711,7 @@ void JuliaModel::setImageSize(int width, int height)
         delete[] (MandelMath::dd_real *)precisionRecord->points;
         break;
       case MandelMath::NumberType::typeQDouble:
-        delete[] (MandelMath::dq_real *)precisionRecord->points;
+        delete[] (MandelMath::qd_real *)precisionRecord->points;
         break;
       case MandelMath::NumberType::typeReal642:
         delete[] (MandelMath::real642 *)precisionRecord->points;
@@ -741,7 +745,7 @@ void JuliaModel::pause(bool pause)
     epoch=(epoch%2000000000)+1; //invalidate threads while transforming store
     transformStore(precisionRecord->points, pointStore, imageWidth, imageHeight, precisionRecord->position.center,
                    precisionRecord->points, pointStore, imageWidth, imageHeight, precisionRecord->position.center,
-                   0, precisionRecord->position.step_log);
+                   0, precisionRecord->position.step_log, false);
 
     if (!pause)
       startNewEpoch();
@@ -2361,7 +2365,7 @@ void JuliaModel::selectedPrecisionChanged()
       break;
     case EprecisionQDouble:
       newPrecision=Type::typeQDouble;
-      new_points=MandelMath::number<MandelMath::dq_real>::convert_block(precisionRecord?precisionRecord->ntype:Type::typeEmpty, precisionRecord?precisionRecord->points:nullptr, pointCount*JuliaPoint<MandelMath::dq_real>::LEN);
+      new_points=MandelMath::number<MandelMath::qd_real>::convert_block(precisionRecord?precisionRecord->ntype:Type::typeEmpty, precisionRecord?precisionRecord->points:nullptr, pointCount*JuliaPoint<MandelMath::qd_real>::LEN);
       break;
     case EprecisionReal642:
       newPrecision=Type::typeReal642;
@@ -2394,6 +2398,13 @@ void JuliaModel::selectedPrecisionChanged()
 
   {
     QWriteLocker locker(&threading_mutex);
+
+    MandelMath::complex<MandelMath::number_any> old_c(precisionRecord->position.center);
+    //not running yet    epoch=(epoch%2000000000)+1; //invalidate threads while transforming store
+    transformStore(precisionRecord->points, pointStore, imageWidth, imageHeight, old_c,
+                   precisionRecord->points, pointStore, imageWidth, imageHeight, precisionRecord->position.center,
+                   0, precisionRecord->position.step_log, true);
+
     startNewEpoch();
   }
 }
@@ -2614,7 +2625,7 @@ JuliaModel::PrecisionRecord::PrecisionRecord(MandelMath::NumberType ntype, Preci
       threads=new MandelEvaluator<MandelMath::dd_real> *[threadCount];
       break;
     case MandelMath::NumberType::typeQDouble:
-      threads=new MandelEvaluator<MandelMath::dq_real> *[threadCount];
+      threads=new MandelEvaluator<MandelMath::qd_real> *[threadCount];
       break;
     case MandelMath::NumberType::typeReal642:
       threads=new MandelEvaluator<MandelMath::real642> *[threadCount];
@@ -2677,7 +2688,11 @@ JuliaModel::PrecisionRecord::~PrecisionRecord()
         for (int t=threadCount-1; t>=0; t--)
         {
           if (!threads[t]->thread.wait(1000))
-              qDebug() << "Thread" << t << "did not finish in time";
+          {
+            qDebug() << "Thread" << t << "did not finish in time";
+            if (!threads[t]->thread.wait(10000))
+              dbgPoint();
+          }
           delete threads[t];
         }
         delete[] threads;
@@ -2700,7 +2715,7 @@ JuliaModel::PrecisionRecord::~PrecisionRecord()
       delete[] (MandelMath::dd_real *)points;
       break;
   case MandelMath::NumberType::typeQDouble:
-      delete[] (MandelMath::dq_real *)points;
+      delete[] (MandelMath::qd_real *)points;
       break;
   case MandelMath::NumberType::typeReal642:
       delete[] (MandelMath::real642 *)points;

@@ -5,7 +5,7 @@
 #include <string>
 #include <quadmath.h>
 
-void __nop()
+static void __nop()
 {
 
 }

@@ -10,10 +10,13 @@
 
 #define UPDATE_CACHED_MOD 0 //works until precision doesn't allow
 
+LaguerreModel *Should_you_ever_need_LaguerreModel=nullptr;
+
 LaguerreModel::LaguerreModel(): QObject()
 {
   unsigned int oldcw; //524319 = 0x8001F = mask all interrupts, 80bit precision
   MandelMath::fpu_fix_start(&oldcw);
+  Should_you_ever_need_LaguerreModel=this;
   QObject::connect(this, &LaguerreModel::selectedPrecisionChange,
                    this, &LaguerreModel::selectedPrecisionChanged);
   selectedPrecisionChanged();
@@ -183,7 +186,7 @@ QString LaguerreModel::getTextInfoSpec()
       {
         case paintStyleCls:
           return QString("attr=")+QString::number(precisionRecord->orbit.pointData.fz_r.getMag_double())+
-                 QString(" firstM=")+QString::number(precisionRecord->orbit.pointData.store->firstM)+
+                 QString(" firstM=")+QString::number(precisionRecord->orbit.pointData.store->firstMabs)+
                  QString(" NChoice=")+naiveChoice;
         case paintStyleNthFz:
           return QString::number(precisionRecord->params.nth_fz)+
@@ -193,6 +196,10 @@ QString LaguerreModel::getTextInfoSpec()
                  QString("-th f'=")+precisionRecord->orbit.pointData.nth_fz.toString();
         case paintStyleRoots:
           return QString("attr=")+QString::number(precisionRecord->orbit.pointData.fz_r.getMag_double());
+        case paintStyleMultip:
+          return QString("firstM=")+QString::number(precisionRecord->orbit.pointData.store->firstMre)+
+                              "+I*"+QString::number(precisionRecord->orbit.pointData.store->firstMim)+
+                               " ("+QString::number(precisionRecord->orbit.pointData.store->firstMabs)+")";
       }
 
     } break;
@@ -283,7 +290,7 @@ void LaguerreModel::setParams(ShareableViewInfo viewInfo)
 
     transformStore(precisionRecord->points, pointStore, 0, 0, old_center,
                    precisionRecord->points, pointStore, imageWidth, imageHeight, precisionRecord->position.center,
-                   precisionRecord->position.step_log-old_step_log, precisionRecord->position.step_log);
+                   precisionRecord->position.step_log-old_step_log, precisionRecord->position.step_log, true);
 
     startNewEpoch();
   }
@@ -354,7 +361,7 @@ int PixelPositionTransformer::transform(int new_value, int offset)
 
 void LaguerreModel::transformStore(void *old_points, LaguerrePointStore *old_store, int old_width, int old_height, MandelMath::complex<MandelMath::number_any> const &old_c,
                                    void *new_points, LaguerrePointStore *new_store, int new_width, int new_height, MandelMath::complex<MandelMath::number_any> const &new_c,
-                                   int inlog, int new_step_log)
+                                   int inlog, int new_step_log, bool resetUnfinished)
 {
   if (precisionRecord==nullptr)
   {
@@ -392,7 +399,8 @@ void LaguerreModel::transformStore(void *old_points, LaguerrePointStore *old_sto
       //-1 is better than imageWidth, call reset() in the second loop, we may still need the points
       if ((oldy>newy) || ((oldy==newy) && (oldx>newx)))
       {
-        if ((oldy>=0) && (oldy<old_height) && (oldx>=0) && (oldx<old_width))
+        if ((oldy>=0) && (oldy<old_height) && (oldx>=0) && (oldx<old_width) &&
+            (!resetUnfinished || MandelMath::enum_is_one_of<LaguerrePointStore::State, LaguerrePointStore::State::stResolved, LaguerrePointStore::State::stFail>(new_store[newy*new_width+newx].state)))
         { //copy old point to new place
           new_store[newy*new_width+newx].assign(&old_store[oldy*old_width+oldx]);
           if (new_store[newy*new_width+newx].state==LaguerrePointStore::State::stWorking)
@@ -413,7 +421,7 @@ void LaguerreModel::transformStore(void *old_points, LaguerrePointStore *old_sto
       };
     }
   }
-  for (int newy=(new_height-1)&0xfffffff; newy>=0; newy--) //avoid Clang warning about newy possibly ~ 2^31
+  for (int newy=(new_height-1); newy>=0; newy--) // &0xfffffff avoid Clang warning about newy possibly ~ 2^31
   {
     int oldy=ytrans.transform(newy, old_height/2);
     c.im.assign(precisionRecord->position.center.im);
@@ -423,7 +431,8 @@ void LaguerreModel::transformStore(void *old_points, LaguerrePointStore *old_sto
       int oldx=xtrans.transform(newx, old_width/2);
       if ((oldy<newy) || ((oldy==newy) && (oldx<=newx)))
       {
-        if ((oldy>=0) && (oldy<old_height) && (oldx>=0) && (oldx<old_width))
+        if ((oldy>=0) && (oldy<old_height) && (oldx>=0) && (oldx<old_width) &&
+            (!resetUnfinished || MandelMath::enum_is_one_of<LaguerrePointStore::State, LaguerrePointStore::State::stResolved, LaguerrePointStore::State::stFail>(new_store[newy*new_width+newx].state)))
         { //copy old to new
           new_store[newy*new_width+newx].assign(&old_store[oldy*old_width+oldx]);
           if (new_store[newy*new_width+newx].state==LaguerrePointStore::State::stWorking)
@@ -459,7 +468,7 @@ void LaguerreModel::setView(MandelMath::complex<MandelMath::number_any> const &c
 
     transformStore(precisionRecord->points, pointStore, imageWidth, imageHeight, old_c,
                    precisionRecord->points, pointStore, imageWidth, imageHeight, precisionRecord->position.center,
-                   precisionRecord->position.step_log-old_step_log, precisionRecord->position.step_log);
+                   precisionRecord->position.step_log-old_step_log, precisionRecord->position.step_log, false);
 
     startNewEpoch();
   }
@@ -468,8 +477,8 @@ void LaguerreModel::setView(MandelMath::complex<MandelMath::number_any> const &c
 void LaguerreModel::drag(double delta_x, double delta_y)
 {
   //qDebug()<<"drag ("<<delta_x<<","<<delta_y<<")";
-  MandelMath::complex<MandelMath::number_any> old_c(precisionRecord->orbit.evaluator.ntype);
-  old_c.assign(precisionRecord->position.center);
+  MandelMath::complex<MandelMath::number_any> old_c(precisionRecord->position.center);
+  //old_c.assign(precisionRecord->position.center);
 
   {
     QWriteLocker locker(&threading_mutex);
@@ -481,7 +490,7 @@ void LaguerreModel::drag(double delta_x, double delta_y)
 
     transformStore(precisionRecord->points, pointStore, imageWidth, imageHeight, old_c,
                    precisionRecord->points, pointStore, imageWidth, imageHeight, precisionRecord->position.center,
-                   0, precisionRecord->position.step_log);
+                   0, precisionRecord->position.step_log, false);
 
     startNewEpoch();
   }
@@ -489,9 +498,8 @@ void LaguerreModel::drag(double delta_x, double delta_y)
 
 void LaguerreModel::zoom(double x, double y, int inlog)
 {
-  MandelMath::complex<MandelMath::number_any> old_c(precisionRecord->orbit.evaluator.ntype);
-
-  old_c.assign(precisionRecord->position.center);
+  MandelMath::complex<MandelMath::number_any> old_c(precisionRecord->position.center);
+  //old_c.assign(precisionRecord->position.center);
   int old_step_log=precisionRecord->position.step_log;
 
   {
@@ -501,7 +509,7 @@ void LaguerreModel::zoom(double x, double y, int inlog)
 
     transformStore(precisionRecord->points, pointStore, imageWidth, imageHeight, old_c,
                    precisionRecord->points, pointStore, imageWidth, imageHeight, precisionRecord->position.center,
-                   precisionRecord->position.step_log-old_step_log, precisionRecord->position.step_log);
+                   precisionRecord->position.step_log-old_step_log, precisionRecord->position.step_log, false);
 
     startNewEpoch();
   }
@@ -539,7 +547,7 @@ void LaguerreModel::setImageSize(int width, int height)
         new_points=MandelMath::number<MandelMath::dd_real>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, newLength*LaguerrePoint<MandelMath::number_any>::LEN);
         break;
       case MandelMath::NumberType::typeQDouble:
-        new_points=MandelMath::number<MandelMath::dq_real>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, newLength*LaguerrePoint<MandelMath::number_any>::LEN);
+        new_points=MandelMath::number<MandelMath::qd_real>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, newLength*LaguerrePoint<MandelMath::number_any>::LEN);
         break;
       case MandelMath::NumberType::typeReal642:
         new_points=MandelMath::number<MandelMath::real642>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, newLength*LaguerrePoint<MandelMath::number_any>::LEN);
@@ -560,7 +568,7 @@ void LaguerreModel::setImageSize(int width, int height)
 
     transformStore(precisionRecord->points, pointStore, imageWidth, imageHeight, old_c,
                    new_points, newStore, width, height, precisionRecord->position.center,
-                   0, precisionRecord->position.step_log);
+                   0, precisionRecord->position.step_log, false);
 
     switch (precisionRecord->ntype)
     {
@@ -576,7 +584,7 @@ void LaguerreModel::setImageSize(int width, int height)
         delete[] (MandelMath::dd_real *)precisionRecord->points;
         break;
       case MandelMath::NumberType::typeQDouble:
-        delete[] (MandelMath::dq_real *)precisionRecord->points;
+        delete[] (MandelMath::qd_real *)precisionRecord->points;
         break;
       case MandelMath::NumberType::typeReal642:
         delete[] (MandelMath::real642 *)precisionRecord->points;
@@ -610,7 +618,7 @@ void LaguerreModel::pause(bool pause)
     epoch=(epoch%2000000000)+1; //invalidate threads while transforming store
     transformStore(precisionRecord->points, pointStore, imageWidth, imageHeight, precisionRecord->position.center,
                    precisionRecord->points, pointStore, imageWidth, imageHeight, precisionRecord->position.center,
-                   0, precisionRecord->position.step_log);
+                   0, precisionRecord->position.step_log, false);
 
     if (!pause)
       startNewEpoch();
@@ -782,7 +790,10 @@ void LaguerreModel::paintOrbit(ShareableImageWrapper image, int x, int y)
   precisionRecord->orbit.evaluator.thread.syncLaguerre();
   //orbit.pointData.assign(orbit.worker, orbit.evaluator.currentData);
   precisionRecord->orbit.pointDataStore.iter=precisionRecord->orbit.evaluator.newtres.cyclesNeeded;
-  precisionRecord->orbit.pointDataStore.firstM=precisionRecord->orbit.evaluator.newtres.firstMum_re;
+  precisionRecord->orbit.pointDataStore.firstMre=precisionRecord->orbit.evaluator.newtres.firstMum_re;
+  precisionRecord->orbit.pointDataStore.firstMim=precisionRecord->orbit.evaluator.newtres.firstMum_im;
+  precisionRecord->orbit.pointDataStore.firstMabs=std::sqrt(precisionRecord->orbit.pointDataStore.firstMre*precisionRecord->orbit.pointDataStore.firstMre+
+                                                            precisionRecord->orbit.pointDataStore.firstMim*precisionRecord->orbit.pointDataStore.firstMim);
   precisionRecord->orbit.pointDataStore.firstStep_re=
       precisionRecord->orbit.evaluator.newtres.first_guess_lagu.re.toDouble()-
       precisionRecord->orbit.evaluator.currentParams.laguerre.first_z.re.toDouble();
@@ -1088,16 +1099,16 @@ int LaguerreModel::writeToImage(ShareableImageWrapper image)
                   g=0x00+0x40*(data->firstM+1);
                 else
                   g=0xdf;*/
-                if (wtiStore->firstM>=3)
+                if (wtiStore->firstMabs>=3)
                   g=0x7f;
-                else if (wtiStore->firstM>=2)
-                  g=0xbf-0x40*(wtiStore->firstM-2);
-                else if (wtiStore->firstM>=1)
-                  g=0xff-0x40*(wtiStore->firstM-1);
-                else if (wtiStore->firstM>=0)
-                  g=0x00+0x40*(wtiStore->firstM-0);
-                else if (wtiStore->firstM>=-1)
-                  g=0x40+0x40*(wtiStore->firstM+1);
+                else if (wtiStore->firstMabs>=2)
+                  g=0xbf-0x40*(wtiStore->firstMabs-2);
+                else if (wtiStore->firstMabs>=1)
+                  g=0xff-0x40*(wtiStore->firstMabs-1);
+                else if (wtiStore->firstMabs>=0)
+                  g=0x00+0x40*(wtiStore->firstMabs-0);
+                else if (wtiStore->firstMabs>=-1)
+                  g=0x40+0x40*(wtiStore->firstMabs+1);
                 else
                   g=0x80;
                 int b;
@@ -1244,6 +1255,69 @@ int LaguerreModel::writeToImage(ShareableImageWrapper image)
                   step_abs=step_abs==0?0:1.0/step_abs;
                   g=qRound(step_re*step_abs*127.49+128);
                   b=qRound(step_im*step_abs*127.49+256)%256;
+                }
+                image.image->setPixel(x, y, 0xff000000+(r<<16)+(g<<8)+(b));
+              }
+            } break;
+            case LaguerrePointStore::State::stFail:
+            {
+              //image.image->setPixel(x, y, 0xffffffff);
+              image.image->setPixel(x, y, FAIL_COLOR);
+            } break;
+          }
+        } break;
+        case paintStyle::paintStyleMultip:
+        {
+          switch (wtiStore->state.load())
+          {
+            case LaguerrePointStore::State::stUnknown:
+              //image.image->setPixel(x, y, 0xffffffff);
+              image.image->setPixel(x, y, 0xff000000);
+              break;
+            case LaguerrePointStore::State::stWorking:
+              //image.image->setPixel(x, y, 0xffffffff);
+              image.image->setPixel(x, y, 0xffff00ff);
+              break;
+            case LaguerrePointStore::State::stResolved:
+            {
+              /*if (wtiStore->iter<=1)
+                image.image->setPixel(x, y, 0xff606060); //the dead pool
+              else*/
+              {
+                int r,g,b;
+                {
+                  double fz_re=wtiStore->firstMre;
+                  double fz_im=wtiStore->firstMim;
+                  double fz_mag=std::hypot(fz_re, fz_im);
+                  int re=qRound(fz_re);
+                  if (re<=0)
+                    b=0;
+                  else switch (re)
+                  {
+                    case 0: b=0; break;
+                    case 1: b=0xff; break;
+                    case 2: b=0xc0; break;
+                    case 3: b=0x80; break;
+                    default: b=0xff-0x40*((re+2)%3);
+                  }
+                  double err=std::hypot(fz_re-re, fz_im);
+                  //0->0 1->1 0.1->0.3
+
+                  err=std::sqrt(err);
+                  if (err>1)
+                    err=0.75+0.25*(err-std::floor(err));
+                    //err=0.5+0.5*(err-std::floor(err));
+                  r=qRound(err*255);
+                  //fz_mag=(fz_mag)/4;
+                  fz_mag=fz_mag-std::floor(fz_mag);
+                  g=qRound(fz_mag*255);
+                  fz_im=fz_im/2+0.5; //-1 -> 0; 1 -> 1
+                  if (fz_im<=0)
+                    b=0;
+                  else if (fz_im>=1)
+                    b=255;
+                  else
+                    b=qRound(fz_im*255);
                 }
                 image.image->setPixel(x, y, 0xff000000+(r<<16)+(g<<8)+(b));
               }
@@ -1403,7 +1477,10 @@ int LaguerreModel::doneWorkThreaded(MandelEvaluator<BASE> *me, int result, bool 
           me->laguerreData.writeTo(precisionRecord->points, me->currentParams.pixelIndex*LaguerrePoint<MandelMath::number_any>::LEN);
           dstStore->iter=me->newtres.cyclesNeeded;
           dstStore->naiveChoice=me->newtres.naiveChoice;
-          dstStore->firstM=me->newtres.firstMum_re;
+          dstStore->firstMre=me->newtres.firstMum_re;
+          dstStore->firstMim=me->newtres.firstMum_im;
+          dstStore->firstMabs=std::sqrt(dstStore->firstMre*dstStore->firstMre+
+                                        dstStore->firstMim*dstStore->firstMim);
           /* first lagu step - it's easier to just show direction to the root itself, not first step
           dstStore->firstStep_re=me->currentWorker->toDouble(me->newtres.first_guess_lagu.re)-
                                  me->currentWorker->toDouble(me->currentData.f.re);
@@ -1477,7 +1554,7 @@ void LaguerreModel::selectedPrecisionChanged()
       break;
     case precisionQDouble:
       newPrecision=Type::typeQDouble;
-      new_points=MandelMath::number<MandelMath::dq_real>::convert_block(precisionRecord?precisionRecord->ntype:Type::typeEmpty, precisionRecord?precisionRecord->points:nullptr, pointCount*LaguerrePoint<MandelMath::dq_real>::LEN);
+      new_points=MandelMath::number<MandelMath::qd_real>::convert_block(precisionRecord?precisionRecord->ntype:Type::typeEmpty, precisionRecord?precisionRecord->points:nullptr, pointCount*LaguerrePoint<MandelMath::qd_real>::LEN);
       break;
     case precisionReal642:
       newPrecision=Type::typeReal642;
@@ -1510,6 +1587,13 @@ void LaguerreModel::selectedPrecisionChanged()
 
   {
     QWriteLocker locker(&threading_mutex);
+
+    MandelMath::complex<MandelMath::number_any> old_c(precisionRecord->position.center);
+    //not running yet    epoch=(epoch%2000000000)+1; //invalidate threads while transforming store
+    transformStore(precisionRecord->points, pointStore, imageWidth, imageHeight, old_c,
+                   precisionRecord->points, pointStore, imageWidth, imageHeight, precisionRecord->position.center,
+                   0, precisionRecord->position.step_log, true);
+
     startNewEpoch();
   }
 }
@@ -1722,7 +1806,7 @@ LaguerreModel::PrecisionRecord::PrecisionRecord(MandelMath::NumberType ntype, Pr
     threads=new MandelEvaluator<MandelMath::dd_real> *[threadCount];
     break;
   case MandelMath::NumberType::typeQDouble:
-    threads=new MandelEvaluator<MandelMath::dq_real> *[threadCount];
+    threads=new MandelEvaluator<MandelMath::qd_real> *[threadCount];
     break;
   case MandelMath::NumberType::typeReal642:
     threads=new MandelEvaluator<MandelMath::real642> *[threadCount];
@@ -1785,7 +1869,11 @@ LaguerreModel::PrecisionRecord::~PrecisionRecord()
           for (int t=threadCount-1; t>=0; t--)
           {
               if (!threads[t]->thread.wait(1000))
-                  qDebug() << "Thread" << t << "did not finish in time";
+              {
+                qDebug() << "Thread" << t << "did not finish in time";
+                if (!threads[t]->thread.wait(10000))
+                  dbgPoint();
+              }
               delete threads[t];
           }
           delete[] threads;
@@ -1808,7 +1896,7 @@ LaguerreModel::PrecisionRecord::~PrecisionRecord()
     delete[] (MandelMath::dd_real *)points;
     break;
   case MandelMath::NumberType::typeQDouble:
-    delete[] (MandelMath::dq_real *)points;
+    delete[] (MandelMath::qd_real *)points;
     break;
   case MandelMath::NumberType::typeReal642:
     delete[] (MandelMath::real642 *)points;

@@ -35,7 +35,8 @@ SOURCES += \
         double_double.cpp \
         double_exp.cpp \
         main.cpp \
-        multiprec.cpp
+        multiprec.cpp \
+        quad_double.cpp
 
 RESOURCES += qml.qrc
 
@@ -62,4 +63,5 @@ HEADERS += \
   dd_heap.hpp \
   double_double.hpp \
   double_exp.hpp \
-  multiprec.hpp
+  multiprec.hpp \
+  quad_double.hpp

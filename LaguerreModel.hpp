@@ -27,7 +27,7 @@ public:
                       int inlog, int new_step_log);*/
   void transformStore(void *old_points, LaguerrePointStore *old_store, int old_width, int old_height, MandelMath::complex<MandelMath::number_any> const &old_c,
                       void *new_points, LaguerrePointStore *new_store, int new_width, int new_height, MandelMath::complex<MandelMath::number_any> const &new_c,
-                      int inlog, int new_step_log);
+                      int inlog, int new_step_log, bool resetUnfinished);
   void recomputeRoot(int max_effort);
   Q_INVOKABLE void setParams(ShareableViewInfo viewInfo);
   Q_INVOKABLE QString getViewJson(); // current view in the format of the QML presets
@@ -65,6 +65,7 @@ public:
     paintStyleNthFz=1,
     paintStyleNthFz1=2,
     paintStyleRoots=3,
+    paintStyleMultip=4,
   };
   Q_ENUM(paintStyle);
   paintStyle _selectedPaintStyle=paintStyleCls;
@@ -176,7 +177,7 @@ protected:
                  MandelEvaluator<double> **,
                  MandelEvaluator<__float128> **,
                  MandelEvaluator<MandelMath::dd_real> **,
-                 MandelEvaluator<MandelMath::dq_real> **,
+                 MandelEvaluator<MandelMath::qd_real> **,
                  MandelEvaluator<MandelMath::real642> **,
                  MandelEvaluator<MandelMath::dd_heap> **,
                  MandelEvaluator<MandelMath::de_real> **,

@@ -26,9 +26,9 @@ public:
   void transformStore(WORKER_MULTI *old_worker, WORKER_MULTI *old_sworker, MandelPointStore *old_store, int old_width, int old_height, const MandelMath::complex<WORKER_MULTI> *old_c,
                       WORKER_MULTI *new_worker, WORKER_MULTI *new_sworker, MandelPointStore *new_store, int new_width, int new_height, const MandelMath::complex<WORKER_MULTI> *new_c,
                       int inlog, int new_step_log);*/
-  void transformStore(void *old_points, MandelPointStore *old_store, int old_width, int old_height, const MandelMath::complex<MandelMath::number_any> *old_c,
-                      void *new_points, MandelPointStore *new_store, int new_width, int new_height, const MandelMath::complex<MandelMath::number_any> *new_c,
-                      int inlog, int new_step_log);
+  void transformStore(void *old_points, MandelPointStore *old_store, int old_width, int old_height, MandelMath::complex<MandelMath::number_any> const &old_c,
+                      void *new_points, MandelPointStore *new_store, int new_width, int new_height, MandelMath::complex<MandelMath::number_any> const &new_c,
+                      int inlog, int new_step_log, bool resetUnfinished);
   Q_INVOKABLE void setView_double(double c_re, double c_im, double scale);
   Q_INVOKABLE void setView_str(const QString &c_re, const QString &c_im, double scale); // decimal strings, full precision
   void setView(MandelMath::complex<MandelMath::number_any> const &c, double scale);
@@ -200,7 +200,7 @@ protected:
                  MandelEvaluator<double> **,
                  MandelEvaluator<__float128> **,
                  MandelEvaluator<MandelMath::dd_real> **,
-                 MandelEvaluator<MandelMath::dq_real> **,
+                 MandelEvaluator<MandelMath::qd_real> **,
                  MandelEvaluator<MandelMath::real642> **,
                  MandelEvaluator<MandelMath::dd_heap> **,
                  MandelEvaluator<MandelMath::de_real> **,

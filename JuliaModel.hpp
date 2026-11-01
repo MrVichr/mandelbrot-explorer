@@ -23,7 +23,7 @@ public:
   Q_INVOKABLE void startRunning();
   void transformStore(void *old_points, JuliaPointStore *old_store, int old_width, int old_height, MandelMath::complex<MandelMath::number_any> const &old_c,
                       void *new_points, JuliaPointStore *new_store, int new_width, int new_height, MandelMath::complex<MandelMath::number_any> const &new_c,
-                      int inlog, int new_step_log);
+                      int inlog, int new_step_log, bool resetUnfinished);
   void recomputeRoot(int max_effort);
   Q_INVOKABLE void setParams(class ShareableViewInfo viewInfo);
   Q_INVOKABLE QString getViewJson(); // current view in the format of the QML presets
@@ -220,7 +220,7 @@ protected:
                  MandelEvaluator<double> **,
                  MandelEvaluator<__float128> **,
                  MandelEvaluator<MandelMath::dd_real> **,
-                 MandelEvaluator<MandelMath::dq_real> **,
+                 MandelEvaluator<MandelMath::qd_real> **,
                  MandelEvaluator<MandelMath::real642> **,
                  MandelEvaluator<MandelMath::dd_heap> **,
                  MandelEvaluator<MandelMath::de_real> **,

@@ -73,6 +73,7 @@ LDFLAGS  := -lpthread -lquadmath
 SRCS := MandelMath_var.cpp \
         double_double.cpp \
         double_exp.cpp \
+        quad_double.cpp \
         multiprec.cpp \
         MandelEvaluator.cpp \
         MandelModel.cpp \

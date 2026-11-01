@@ -15,6 +15,7 @@
 #include <quadmath.h>
 
 #include "double_double.hpp"
+#include "quad_double.hpp"
 #include "double_exp.hpp"
 #include "dd_heap.hpp"
 //#include "multiprec.hpp"
@@ -30,7 +31,7 @@
 void dbgPoint();
 void dbgPointII(int x1, int x2);
 #if QT_NO_DEBUG
-#define working_assert(x)
+#define working_assert(x) { if (!(x)) { qDebug()<<"assertion failed: " << #x; } }
 #else
 //#define working_assert(x) { if (!(x)) dbgPoint(); }
 #define working_assert(x) assert(x)
@@ -161,12 +162,12 @@ enum NumberType { typeEmpty
           };
 
 //typedef dd_real dq_real;
-class dq_real: public dd_real
+/*class dq_real: public dd_real
 {
   public:
   dq_real(): dd_real() {} //hi(0), lo_(0) { }
   dq_real(double h, double l): dd_real(h, l) {} //hi(h), lo_(l) { }
-};
+};*/
 
 struct real642
 {
@@ -179,7 +180,7 @@ template <> struct NumberTypeFromBase<double> { static constexpr NumberType ntyp
 #if !NUMBER_DOUBLE_ONLY
 template <> struct NumberTypeFromBase<__float128> { static constexpr NumberType ntype=typeFloat128; };
 template <> struct NumberTypeFromBase<dd_real> { static constexpr NumberType ntype=typeDDouble; };
-template <> struct NumberTypeFromBase<dq_real> { static constexpr NumberType ntype=typeQDouble; };
+template <> struct NumberTypeFromBase<qd_real> { static constexpr NumberType ntype=typeQDouble; };
 template <> struct NumberTypeFromBase<real642> { static constexpr NumberType ntype=typeReal642; };
 template <> struct NumberTypeFromBase<dd_heap> { static constexpr NumberType ntype=typeDDHeap; };
 template <> struct NumberTypeFromBase<de_real> { static constexpr NumberType ntype=typeDExp; };
@@ -194,7 +195,7 @@ class number;
 template<typename BASE>
 class complex;
 
-using number_any=std::variant<std::monostate, number<double>, number<__float128>, number<dd_real>, number<dq_real>, number<real642>, number<dd_heap>,
+using number_any=std::variant<std::monostate, number<double>, number<__float128>, number<dd_real>, number<qd_real>, number<real642>, number<dd_heap>,
                               number<de_real>, number<dde_real>>;
 
 template<typename T>
@@ -301,7 +302,7 @@ struct number_traits;
 template<>
 struct number_traits<double>
 {
-  static double eps2() { return 1.232596e-32; } // 2^-(2*53) rounded up
+  static double eps2() { return 1.232596e-32; } // 2^-(2*53) rounded up; step at x=0.501..0.999
   static double eps234() { return 1.17e-24; } // eps2^(3/4)
   static constexpr double large=1.915e153; // sqrt(DBL_MAX)/7
   static bool isTooLarge(double s) { return s>large; }
@@ -481,8 +482,8 @@ struct number_traits<__float128>
 template<>
 struct number_traits<dd_real>
 {
-  static double eps2() { return 6.07717e-64; } // 2^-(2*(53+52)) rounded up
-  static double eps234() { return 3.87e-48; } // eps2^(3/4)
+  static double eps2() { return 3.7982271e-65; } // 2^-(2*(53+54)) rounded up
+  static double eps234() { return 4.838221e-49; } // eps2^(3/4)
   static bool isTooLarge(dd_real const &s) { return number_traits<double>::isTooLarge(s.hi); }
   static bool isMagTooLarge(dd_real const &re, dd_real const &im) { return number_traits<double>::isMagTooLarge(re.hi, im.hi); }
   static void zero(dd_real &s, double v) { s.zero(v); }
@@ -516,12 +517,6 @@ struct number_traits<dd_real>
   static int toRound(dd_real const &s) { return s.toRound(); }
   static double toDouble(dd_real const &s) { return s.hi; }
   static dd_real *convert_block(NumberType old_type, const void *old_data, int count);
-};
-
-template<>
-struct number_traits<dq_real>: number_traits<dd_real>
-{
-  static dq_real *convert_block(NumberType old_type, const void *old_data, int count);
 };
 
 template<>
@@ -708,6 +703,17 @@ struct number_traits<dde_real>: number_traits_members<dde_real>
   static dde_real *convert_block(NumberType old_type, const void *old_data, int count);
 };
 
+template<>
+struct number_traits<qd_real>: number_traits_members<qd_real>
+{
+  static double eps2() { return 3.60664e-130; } // 2^-(2*(53+54+54+54)) rounded up
+  static double eps234() { return 8.276113e-98; } // eps2^(3/4)
+  static bool isTooLarge(qd_real const &s) { return number_traits<double>::isTooLarge(s.x[0]); }
+  static bool isMagTooLarge(qd_real const &re, qd_real const &im) { return number_traits<double>::isMagTooLarge(re.x[0], im.x[0]); }
+  static double toDouble(qd_real const &s) { return s.x[0]; }
+  static qd_real *convert_block(NumberType old_type, const void *old_data, int count);
+};
+
 // Element type of point arrays and convert_block; differs from BASE only for heap-backed types.
 template<typename BASE> struct number_storage { using type=BASE; };
 template<> struct number_storage<dd_heap> { using type=dd_real; };
@@ -805,7 +811,7 @@ class number: public number_operators<number<BASE>>
 static_assert(std::is_trivially_copyable_v<number<double>>);
 static_assert(std::is_trivially_copyable_v<number<__float128>>);
 static_assert(std::is_trivially_copyable_v<number<dd_real>>);
-static_assert(std::is_trivially_copyable_v<number<dq_real>>);
+static_assert(std::is_trivially_copyable_v<number<qd_real>>);
 static_assert(std::is_trivially_copyable_v<number<real642>>);
 static_assert(std::is_trivially_copyable_v<number<de_real>>);
 static_assert(std::is_trivially_copyable_v<number<dde_real>>);
@@ -963,7 +969,7 @@ public:
 static_assert(sizeof(number<double>)==8);
 static_assert(sizeof(number<__float128>)==16);
 static_assert(sizeof(number<dd_real>)==16);
-static_assert(sizeof(number<dq_real>)==8*2);
+static_assert(sizeof(number<qd_real>)==8*4);
 static_assert(sizeof(number<real642>)==8+8+16);
 static_assert(sizeof(number<de_real>)==16);
 static_assert(sizeof(number<dde_real>)==24);

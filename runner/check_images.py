@@ -63,7 +63,7 @@ STYLE_NAMES: dict[str, list[str]] = {
     "man": ["Kind", "Cls", "Exter", "ExterAngle", "Inter", "Near", "FZ", "FC"],
     "jul": ["Kind", "Cls", "Exter", "ExterAngle", "Inter",
             "Near0", "NearZ", "Phi", "Phi1", "Phi2", "F1", "FirstUnder1", "NearMR"],
-    "lag": ["Cls", "NthFz", "NthFz1", "Roots"],
+    "lag": ["Cls", "NthFz", "NthFz1", "Roots", "Multip"],
 }
 
 FRACTAL_PREFIX: dict[str, str] = {

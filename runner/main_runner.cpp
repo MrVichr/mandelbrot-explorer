@@ -150,14 +150,15 @@ static const PaintStyleEntry JUL_PAINT_STYLES[] = {
 static constexpr int N_JUL_STYLES = 13;
 static constexpr int JUL_CLS_IDX  = 1;
 
-// Laguerre — 4 styles
+// Laguerre — 5 styles
 static const PaintStyleEntry LAG_PAINT_STYLES[] = {
     { LaguerreModel::paintStyleCls,    "Cls"    },
     { LaguerreModel::paintStyleNthFz,  "NthFz"  },
     { LaguerreModel::paintStyleNthFz1, "NthFz1" },
     { LaguerreModel::paintStyleRoots,  "Roots"  },
+    { LaguerreModel::paintStyleMultip, "Multip" },
 };
-static constexpr int N_LAG_STYLES = 4;
+static constexpr int N_LAG_STYLES = 5;
 static constexpr int LAG_CLS_IDX  = 0;
 
 // ── Run options shared by the compute functions ──────────────────────────────
@@ -438,8 +439,8 @@ static void print_point_lag(LaguerreModelInspector &model)
     LaguerrePoint<MandelMath::number_any> &n = model.point(0);
     std::printf("c          = %s\n", qs(model.c()));
     std::printf("z          = %s\n", qs(model.center()));
-    std::printf("state=%s iter=%d firstM=%.17g firstStep=%.17g%+.17gi naiveChoice=%d\n",
-                state_name(p.state.load()), p.iter, p.firstM, p.firstStep_re, p.firstStep_im, (int)p.naiveChoice);
+    std::printf("state=%s iter=%d firstM=%.17g%+.17gi firstStep=%.17g%+.17gi naiveChoice=%d\n",
+                state_name(p.state.load()), p.iter, p.firstMre, p.firstMim, p.firstStep_re, p.firstStep_im, (int)p.naiveChoice);
     std::printf("r          = %s\n", qs(n.r.toString()));
     std::printf("fz_r       = %s\n", qs(n.fz_r.toString()));
     std::printf("nth_fz     = %s\n", qs(n.nth_fz.toString()));
@@ -793,7 +794,7 @@ static void run_text_mode_lag(LaguerreModelInspector &model, MainQThread &mainTh
                 y, x,
                 state_name(p.state.load()),
                 p.iter,
-                p.firstM);
+                p.firstMre);
             for (int si = 0; si < N_LAG_STYLES; ++si)
                 std::fprintf(f, "%s\"%08X\"", si ? "," : "",
                              colors[si][y * W + x]);

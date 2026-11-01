@@ -71,8 +71,9 @@ clang does not, so `double_double.hpp` also checks `__FMA__`) and makes
 use the FMA algorithms of Joldes, Muller, Popescu 2017 ("Tight and rigorous
 error bounds for basic building blocks of double-word arithmetic":
 DWTimesFP3, DWTimesDW3).  Without `-mfma` they fall back to Dekker's split and
-the QD formulas; dd/qd results then differ in the last bits (1 Laguerre pixel
-in the check views), so references are build-specific.  An `-mfma` binary
+the QD formulas; dd results then differ in the last bits (1 Laguerre pixel
+in the check views), so references are build-specific.  `qd_real` always uses
+Dekker's split (not converted to FMA yet).  An `-mfma` binary
 needs an FMA CPU (Haswell / Piledriver or newer).
 
 Pieces of the headless build:
@@ -86,12 +87,6 @@ Pieces of the headless build:
 
 `blessed/` and `current/` are git-ignored, local only.
 
-### Critical usage note
-
-**`setImageSize(W, H)` must be called BEFORE `setView_double(...)`.**
-`MandelModel::transformStore` loops `for (int newy=(new_height-1)&0xfffffff; ...)`,
-i.e. ~268M no-op iterations when the height is still 0.
-
 ---
 
 ## Key files
@@ -100,10 +95,10 @@ i.e. ~268M no-op iterations when the height is still 0.
 |---|---|
 | `MandelModel.cpp/hpp`, `JuliaModel.cpp/hpp`, `LaguerreModel.cpp/hpp` | Top-level models: image store, worker threads, view position, epoch counter, paint styles |
 | `MandelEvaluator.cpp/hpp` | Per-thread worker: `MandelEvaluatorThread` (QThread subclass) + `MandelEvaluator<BASE>` (`evaluateMandel`, `evaluateJulia`, `mandel_until_bailout`, `julia_until_bailout`, `MandelLoopEvaluator`, `Bulb`, `LaguerreStep`) |
-| `MandelMath.hpp` / `MandelMath_var.cpp` | Number types: `number<BASE>` for `double`, `__float128`, `dd_real`, `dq_real`, `real642`, `dd_heap`, `de_real`, `dde_real`, and `number_any` (variant wrapper); `complex<BASE>`; `number_traits<BASE>` |
+| `MandelMath.hpp` / `MandelMath_var.cpp` | Number types: `number<BASE>` for `double`, `__float128`, `dd_real`, `qd_real`, `real642`, `dd_heap`, `de_real`, `dde_real`, and `number_any` (variant wrapper); `complex<BASE>`; `number_traits<BASE>` |
 | `dd_heap.hpp` | `dd_heap`: dd_real kept on the heap with a per-thread free list; the template for future heap-backed types |
 | `double_exp.cpp/hpp` | `de_real` / `dde_real`: double / double-double mantissa (1<=\|m\|<2) with an `int32_t` exponent |
-| `double_double.cpp/hpp`, `multiprec.cpp/hpp` | Extended-precision arithmetic |
+| `double_double.cpp/hpp`, `quad_double.cpp/hpp`, `multiprec.cpp/hpp` | Extended-precision arithmetic (`quad_double`: Bailey's QD quad-double, `x[4]`, Dekker split, no FMA yet) |
 | `MandelImageCombiner.cpp/hpp`, `ShareableImageWrapper.cpp/hpp`, `atomic_update_rect.cpp/hpp` | GUI-side image composition |
 
 ---
@@ -131,7 +126,7 @@ to drain the queued replies.
 - Value semantics, no scratchpad.  `number<BASE>` is one generic template
   holding only `BASE store`; every operation forwards to
   `number_traits<BASE>` (specialised for `double`, `__float128`, `dd_real`,
-  `dq_real`, `real642`, `dd_heap`, `de_real`, `dde_real`), all inline in `MandelMath.hpp`.  The seven
+  `qd_real`, `real642`, `dd_heap`, `de_real`, `dde_real`), all inline in `MandelMath.hpp`.  The seven
   POD-backed `number<BASE>` and `complex<BASE>` are trivially copyable (static_asserted),
   so temporaries are free.
 - `de_real` (precision `de`) and `dde_real` (`dde`, "DoubleExp"/"DDoubleExp" in the GUI) keep
@@ -180,13 +175,16 @@ to drain the queued replies.
   precision enums / `threads` variants / point-array switches, `main.qml`,
   `PRECISION_NAMES` in the runner, `check_images.py` and `PRECISIONS` in
   Makefile-headless.  `MandelMath::visit` handles up to 12 alternatives.
+- Conversions into `real642` (`convert_block`, `assign_across`) keep only the
+  double part: `val2=val1`.
 - Constructors still take `NumberType` (`number(NumberType)`,
   `complex(NumberType)`, `MandelPoint`, `JuliaPoint`, `LaguerrePoint`,
   `Compute*Params`).
 - Decimal I/O: `toString()` returns the shortest decimal that parses back to
-  the same value (double: `std::to_chars`; float128/dd/qd/ddheap: libquadmath
-  via `float128_toString`; real642 prints `val2`); `fromString(QString)` parses
-  at full precision (dd from a float128 parse, so 113 bits) and returns false on
+  the same value (double: `std::to_chars`; float128/dd/ddheap: libquadmath
+  via `float128_toString`; qd: exact conversion with a small bignum in
+  `quad_double.cpp`; real642 prints `val2`); `fromString(QString)` parses
+  at full precision (dd from a float128 parse, so 113 bits; qd 215 bits) and returns false on
   garbage.  Both are independent of `LC_NUMERIC` (Qt sets it from the
   environment).  Both builds link `-lquadmath`.
 - GUI view presets in `main.qml` are strings (`viewRe`, `viewIm`, `cRe`, `cIm`;

@@ -214,9 +214,10 @@ Window {
                 model: ListModel {
                     id: lagu_paintstyle_model
                     ListElement { text: "Classic"; key: 0 }//laguModel.paintStyleCls
-                    ListElement { text: "n-th f'"; key: 1 }//laguModel.paintStyleNthFz
-                    ListElement { text: "n-th f'-1"; key: 2 }//laguModel.paintStyleNthFz1
-                    ListElement { text: "roots"; key: 3 }//laguModel.paintStyleRoots
+                    ListElement { text: "N-th f'"; key: 1 }//laguModel.paintStyleNthFz
+                    ListElement { text: "N-th f'-1"; key: 2 }//laguModel.paintStyleNthFz1
+                    ListElement { text: "Roots"; key: 3 }//laguModel.paintStyleRoots
+                    ListElement { text: "Multip"; key: 4 }//laguModel.paintStyleMultip
                 }
                 onActivated: laguerreModel.selectedPaintStyle=lagu_paintstyle_model.get(currentIndex).key;
             }
@@ -563,6 +564,7 @@ Window {
                         {viewRe: "-0.5622179376996712", viewIm: "0.67689119098929496", viewZoom: 1/35184372088832.0, caption: 'Bad Newton'},
                         {viewRe: "-1.39473140405954614332029173340288", viewIm: "0.004504213285590670870495166866476211", viewZoom: 1.7347234759768071e-18, caption: "dd zoom"},
                         {viewRe: "-1.739257812500001110223024625154915", viewIm: "-4.3333423748712806693759503708160865e-34", viewZoom: 2.4074124304840448e-35, caption: "f128 zoom"},
+                        {viewRe: "-1.73925781250000111022302462515491290826642766422636705986135787568296588593517", viewIm: "-1.55575381946528542678601601344503106014756304218029178327527915369742470850885e-59", viewZoom: 6.2230152778611417e-61, caption: "qd zoom not max"},
                     ]
                     MenuItem {
                         text: modelData.caption
