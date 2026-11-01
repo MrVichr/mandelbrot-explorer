@@ -190,9 +190,10 @@ Window {
                 model: ListModel {
                     id: lagu_paintstyle_model
                     ListElement { text: "Classic"; key: 0 }//laguModel.paintStyleCls
-                    ListElement { text: "n-th f'"; key: 1 }//laguModel.paintStyleNthFz
-                    ListElement { text: "n-th f'-1"; key: 2 }//laguModel.paintStyleNthFz1
-                    ListElement { text: "roots"; key: 3 }//laguModel.paintStyleRoots
+                    ListElement { text: "N-th f'"; key: 1 }//laguModel.paintStyleNthFz
+                    ListElement { text: "N-th f'-1"; key: 2 }//laguModel.paintStyleNthFz1
+                    ListElement { text: "Roots"; key: 3 }//laguModel.paintStyleRoots
+                    ListElement { text: "Multip"; key: 4 }//laguModel.paintStyleMultip
                 }
                 onActivated: laguerreModel.selectedPaintStyle=lagu_paintstyle_model.get(currentIndex).key;
             }

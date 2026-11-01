@@ -30,7 +30,7 @@ void ComputeLaguerreParams<BASE>::assign_across(const ComputeLaguerreParams<OTHE
 }
 
 LaguerrePointStore::LaguerrePointStore(): state(State::stUnknown),
-  firstM(0), firstStep_re(0), firstStep_im(0), iter(0)
+  firstMabs(0), firstMre(0), firstMim(0), firstStep_re(0), firstStep_im(0), naiveChoice(ncClose), iter(0)
 {
 
 }
@@ -40,7 +40,9 @@ void LaguerrePointStore::assign(const LaguerrePointStore *src)
   working_assert(src!=nullptr);
   //TODO: if (src==nullptr) see LaguerrePoint::zero
   state=src->state.load();
-  firstM=src->firstM;
+  firstMabs=src->firstMabs;
+  firstMre=src->firstMre;
+  firstMim=src->firstMim;
   firstStep_re=src->firstStep_re;
   firstStep_im=src->firstStep_im;
   iter=src->iter;
@@ -74,7 +76,9 @@ template<class BASE>
 void LaguerrePoint<BASE>::zero(const MandelMath::complex<BASE> &c)
 {
   store->state=LaguerrePointStore::State::stUnknown;
-  store->firstM=0;
+  store->firstMabs=0;
+  store->firstMre=0;
+  store->firstMim=0;
   store->firstStep_re=0;
   store->firstStep_im=0;
   store->iter=0;
@@ -654,6 +658,15 @@ bool LaguerreStep<BASE>::eval(int lg2_degree, MandelMath::complex<BASE> const &f
       };
       dbg.mum_re=mum_re;
       dbg.mum_im=mum_im;
+
+      if (!(dbg.mum_re>=1.3)) //also m=1 if mu_re is NaN    (mu_re<1.3)
+        m=1;
+      else
+      {
+        m=qRound(dbg.mum_re);
+        if (m>maxm)
+          m=maxm;
+      }
     }
 
     //m= some func of mu where mu is solution of ((1-1/n)*H/G^2-1/n) mu^2 + 2*mu/n -1=0
@@ -676,7 +689,8 @@ bool LaguerreStep<BASE>::eval(int lg2_degree, MandelMath::complex<BASE> const &f
       MandelMath::complex_double_quadratic(&mu_re, &mu_im, a_re, a_im, order1, 0, -1, 0);
       dbg.mu_re=mu_re;
       dbg.mu_im=mu_im;
-      if (!(mu_re>=1.3)) //also m=1 if mu_re is NaN    (mu_re<1.3)
+#if 0
+      if (!(dbg.mu_re>=1.3)) //also m=1 if mu_re is NaN    (mu_re<1.3)
         m=1;
       else {/*if (abs(mu_im)>mu_re/2)
         m=1;
@@ -685,10 +699,11 @@ bool LaguerreStep<BASE>::eval(int lg2_degree, MandelMath::complex<BASE> const &f
         double mu_mag=mu_re*mu_re+mu_im*mu_im;
         m=qRound(sqrt(mu_mag)); //or just round mu_re?
         */
-        m=qRound(mu_re);
+        m=qRound(dbg.mu_re);
         if (m>maxm)
           m=maxm;
       }
+#endif
     }
 #if 0
     if (newtonCycle==0)
@@ -1623,7 +1638,7 @@ MandelEvaluatorThread::MandelEvaluatorThread(MandelEvaluator<MandelMath::dd_real
 
 }
 
-MandelEvaluatorThread::MandelEvaluatorThread(MandelEvaluator<MandelMath::dq_real> *owner):
+MandelEvaluatorThread::MandelEvaluatorThread(MandelEvaluator<MandelMath::qd_real> *owner):
   QThread(nullptr), owner(owner)
 {
 
@@ -1852,7 +1867,7 @@ void MandelEvaluator<BASE>::doMandelThreadedSplit(int epoch)
   if (threaded.give(this)) //debug && !wantStop)
 #endif
   {
-    for (;;)
+    for (;workIfEpoch==busyEpoch;)
     {
       timeInvoke.start();
 #if THREADED_DONE_GIVE_WORK
@@ -1892,7 +1907,7 @@ void MandelEvaluator<BASE>::doJuliaThreadedSplit(int epoch)
   if (threaded.give(this)) //debug && !wantStop)
 #endif
   {
-    for (;;)
+    for (;workIfEpoch==busyEpoch;)
     {
       timeInvoke.start();
 #if THREADED_DONE_GIVE_WORK
@@ -1934,7 +1949,7 @@ void MandelEvaluator<BASE>::doLaguerreThreadedSplit(int epoch)
   if (threaded.give(this)) //debug && !wantStop)
 #endif
   {
-    for (;;)
+    for (;workIfEpoch==busyEpoch;)
     {
       timeInvoke.start();
 #if THREADED_DONE_GIVE_WORK
@@ -3326,6 +3341,7 @@ int MandelEvaluator<BASE>::laguerre(int period, MandelMath::complex<BASE> const 
     //currentWorker->add_double(newtres.fz_r.re, -1);
     double g_r_mag=newt.f_r.getMag_double();
     double gz_r_mag=newtres.fz_r.getMag_double();
+    double gzz_r_mag=newt.fzz_r.getMag_double();
     //newtres.accy_tostop=eps_cumul;//r_mag_rough*eps_cumul10;
     newtres.accy_tostop=std::max(1.0, g_r_mag/c.eps2());
     newtres.accy_multiplier=std::max(1.0, 1/gz_r_mag);
@@ -3421,7 +3437,9 @@ int MandelEvaluator<BASE>::laguerre(int period, MandelMath::complex<BASE> const 
       //sometimes lastm says 3 but in reality it's 1; crosscheck by f/f' small (ideally just f small && f' small, but what limit?)
       //since lastm>1, we know f'' is not small; since lastm is of order ~1, we know f/f' ~ f'/f''
       //so check f'/f'' instead of f/f'
-      bool ggood2=gz_r_mag*(lastm*lastm)<loope.f_zz.getMag_double()*c.eps234();
+      //only for lastm==2 ? f_zz.mag>1e-20 ?
+      bool ggood2=gz_r_mag*(lastm*lastm)<gzz_r_mag*c.eps234();
+      //bool ggood2=gz_r_mag<howmuch*c.eps2();
       if (ggood && !ggood2)
         ggood=false; //quite rare but helps
       if (newtonCycle>0 && (stepgood || ggood))
@@ -3457,10 +3475,93 @@ int MandelEvaluator<BASE>::laguerre(int period, MandelMath::complex<BASE> const 
       bestfm=g_r_mag;
       newt.bestr.assign(*r);
     };
+    if (g_r_mag<c.eps2()*16 && gz_r_mag<c.eps234()*16) //gz_r_mag up to ~ eps (=sqrt(eps2))
+    {
+      //if c=exact multiroot then say r=r0
+      //moving c to c+eps splits root to r0+eps/2, r0+-sqrt(eps)
+      //so if step<sqrt(eps), we might as well pretend it's a multiroot
+#if 0
+      if (gz_r_mag<c.eps2()*16 && gzz_r_mag<c.eps234()*16)
+      {
+        //we're too close to the root to make any further progress, short of walking around to find smallest f''
+        return lastm;
+      };
+      newt.laguX.assign(newt.fzz_r);
+      newt.laguX.recip();
+      newt.laguX.mul(newtres.fz_r); //f'/f''
+      prevm=lastm;
+      if (newtonCycle>0)
+      { //now is: m:=lastm/(1- (f'/f'')/newtX)
+        //should be: m:=(1-r)/(1/lastm-r)  where r=laguX/newtX, or lastm+1 if divide by 0
+        newt.laguG.assign(newt.newtX); //safer to divide new_step/old_step since usually new<old
+        newt.laguG.recip();
+        newt.laguG.mul(newt.laguX);
+        //newt.laguG.add_double(-1); newt.laguG.recip(); newt.laguG.mul_double(-lastm);
+        //double m=qRound(newt.laguG.re.toDouble());
+        newt.laguG2.assign(newt.laguG);
+        newt.laguG2.add_double(-1/lastm);
+        newt.laguG.add_double(-1);
+        double safety=newt.laguG.getMag_double() - (lastm+3)*(lastm+3)*newt.laguG2.getMag_double();
+        if (safety<0)
+        {
+          lastm=lastm+1;
+          lastm_err=1;
+        }
+        else
+        {
+          newt.laguG2.recip();
+          newt.laguG.mul(newt.laguG2);
+          double m=newt.laguG.re.toDouble();
+          if (m<2)
+            lastm=2;
+          else
+            lastm=std::min(qRound(m), maxm);
+          lastm_err=MandelMath::sqr_double(newt.laguG.re.toDouble()-lastm)+MandelMath::sqr_double(newt.laguG.im.toDouble());
+        }
+        newt.laguX.mul_double(lastm-1); //looks like we just need 2*f'/f'' for m==3
+      };
+      newt.newtX.assign(newt.laguX);
+      last_was_newton=true;
+      r->sub(newt.newtX);
+      prev_grmag=g_r_mag;
+      prev_accy_multiplier=newtres.accy_multiplier;
+      prev_accy_noise=newtres.accy_noise;
+      newt.prevGz.assign(newtres.fz_r);
+#else
+      double away=3*std::exp(std::log(r->eps2())/(2*lastm));
+      //move r "away" off, preferably in the direction away from estimated root
+      newt.laguX.assign(newt.fzz_r);
+      if (newt.laguX.getMag_double()>r->eps2()*5)
+      {
+        newt.laguX.recip();
+        newt.laguX.mul(newtres.fz_r); //f'/f''
+        if (newt.laguX.getMag_double()>r->eps2()*5)
+        {
+          newt.laguX.sign();
+          newt.laguX.mul_double(away);
+        }
+        else
+          newt.laguX.zero(away, 0);
+      }
+      else
+        newt.laguX.zero(away, 0);
+      r->add(newt.laguX);
+
+      if (!loope.eval_zz(period, c, *r, true))
+        return 0;
+      if (!this->bulb.lagu.eval(period, loope.f, loope.f_z, loope.f_zz))
+        return 0;
+      r->sub(bulb.lagu.step);
+      return qRound(bulb.lagu.dbg.mum_re);
+#endif
+      continue;
+    };
     if (newtonCycle>0 && g_r_mag>=prev_grmag)//+1000*newtres.accy_tostop*currentWorker->eps2())
     { //g_r_mag didn't go down and it wasn't because of limited precision
       //no reason to continue from here, polynomials don't have poles
       //undo half of last step and try again
+      if (prev_grmag<c.eps2()/4)
+        nop();
       newt.newtX.lshift(-1);
       //r->add(&newt.newtX);
       r->assign(newt.prevR); //Justin Case
@@ -3713,7 +3814,11 @@ int MandelEvaluator<BASE>::laguerre(int period, MandelMath::complex<BASE> const 
       double h_mag=h_re*h_re+h_im*h_im;
       double g2_re=newt.laguG2.re.toDouble();
       double g2_im=newt.laguG2.im.toDouble();
-      if (h_mag>0.01)
+      double g2_mag=g2_re*g2_re+g2_im*g2_im;
+      //if (h_mag>0.01)
+      if (h_mag>0.0001*g2_mag) // |g^2/h|<100 <-> g2_mag/h_mag<10000 <-> g2_mag/10000<h_mag
+          //generally g2 is large so the test only fails in true singularity
+          //but when far away, g2 can be small and (h_mag>0.01) fails when it should not
       { //h_mag ok
         mum_re=(g2_re*h_re+g2_im*h_im)/h_mag;
         mum_im=(g2_im*h_re-g2_re*h_im)/h_mag;
@@ -7151,13 +7256,13 @@ template class MandelEvaluator<MandelMath::dd_real>;
 template void ComputeMandelParams<MandelMath::dd_real>::assign_across<MandelMath::number_any>(const ComputeMandelParams<MandelMath::number_any> &src);
 template void ComputeLaguerreParams<MandelMath::dd_real>::assign_across<MandelMath::number_any>(const ComputeLaguerreParams<MandelMath::number_any> &src);
 template void ComputeJuliaParams<MandelMath::dd_real>::assign_across<MandelMath::number_any>(const ComputeJuliaParams<MandelMath::number_any> &src);
-template struct LaguerrePoint<MandelMath::dq_real>;
-template struct MandelPoint<MandelMath::dq_real>;
-template struct JuliaPoint<MandelMath::dq_real>;
-template class MandelEvaluator<MandelMath::dq_real>;
-template void ComputeMandelParams<MandelMath::dq_real>::assign_across<MandelMath::number_any>(const ComputeMandelParams<MandelMath::number_any> &src);
-template void ComputeLaguerreParams<MandelMath::dq_real>::assign_across<MandelMath::number_any>(const ComputeLaguerreParams<MandelMath::number_any> &src);
-template void ComputeJuliaParams<MandelMath::dq_real>::assign_across<MandelMath::number_any>(const ComputeJuliaParams<MandelMath::number_any> &src);
+template struct LaguerrePoint<MandelMath::qd_real>;
+template struct MandelPoint<MandelMath::qd_real>;
+template struct JuliaPoint<MandelMath::qd_real>;
+template class MandelEvaluator<MandelMath::qd_real>;
+template void ComputeMandelParams<MandelMath::qd_real>::assign_across<MandelMath::number_any>(const ComputeMandelParams<MandelMath::number_any> &src);
+template void ComputeLaguerreParams<MandelMath::qd_real>::assign_across<MandelMath::number_any>(const ComputeLaguerreParams<MandelMath::number_any> &src);
+template void ComputeJuliaParams<MandelMath::qd_real>::assign_across<MandelMath::number_any>(const ComputeJuliaParams<MandelMath::number_any> &src);
 template struct LaguerrePoint<MandelMath::real642>;
 template struct MandelPoint<MandelMath::real642>;
 template struct JuliaPoint<MandelMath::real642>;

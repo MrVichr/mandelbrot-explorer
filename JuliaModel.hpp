@@ -216,7 +216,7 @@ protected:
                  MandelEvaluator<double> **,
                  MandelEvaluator<__float128> **,
                  MandelEvaluator<MandelMath::dd_real> **,
-                 MandelEvaluator<MandelMath::dq_real> **,
+                 MandelEvaluator<MandelMath::qd_real> **,
                  MandelEvaluator<MandelMath::real642> **> threads;
     PrecisionRecord(MandelMath::NumberType ntype, PrecisionRecord *source, JuliaModel *doneReceiver);
     ~PrecisionRecord();

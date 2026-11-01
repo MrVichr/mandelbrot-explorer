@@ -10,11 +10,14 @@
 #define CURRENT_STORE_DIRECT 0 //either both or none of store and numbers must be direct, can't mix
 #define UPDATE_CACHED_MOD 0 //works until precision doesn't allow
 
+MandelModel *Should_you_ever_need_MandelModel=nullptr;
+
 MandelModel::MandelModel(): QObject(),
   _extAngleZoom(0), pointStore(nullptr), precisionRecord(nullptr)
 {
   unsigned int oldcw; //524319 = 0x8001F = mask all interrupts, 80bit precision
   MandelMath::fpu_fix_start(&oldcw);
+  Should_you_ever_need_MandelModel=this;
 
    /*__float128 p=1.4;
    p=(2/p+p)/2;
@@ -54,6 +57,55 @@ MandelModel::MandelModel(): QObject(),
   dd1.split(0x20000010); //-> 0x20000010 + 0x0
   dd1.split(0x20000011); //-> 0x20000010 + 0x1
   dd1.split(-0.00043541188577694845);
+
+  {
+    MandelMath::qd_real x1(1, 0, 0, 0), x2(0.5, 0, 0, 0), x3(1, 0, 0, 0), x5, t;
+    int x4=0;
+    x2.sqrt();
+    t=x2;
+    t.sqr();
+
+    for (int i=0; i<6; i++)
+    {
+      //x3-=(x1-x2)^2*2^x4
+      t=x1;
+      t.sub(x2);
+      t.sqr();
+      t.lshift(x4);
+      x3.sub(t);
+      x4++;
+      //x1,x2 = (x1+x2)/2, sqrt(x1*x2)
+      t=x1;
+      t.mul(x2);
+      t.sqrt();
+      x1.add(x2);
+      x5=x1;
+      x1.lshift(-1);
+      x2=t;
+      //x5=(x1_new)^2/(x3) = (x1_new*2)^2/(x3*4)
+      x5.sqr();
+      t=x3;
+      t.recip();
+      x5.mul(t);
+      //x5.lshift(1);
+      MandelMath::gcd(1, 1);
+    }
+    x5.add_pi(-1);
+    double x52=MandelMath::sqr_double(x5.x[0]);
+    double e2=x5.eps2();
+    working_assert(x52<16*e2); //0.5..1: eps    1-2: 2*eps    2-4: 4*eps
+
+    MandelMath::qd_real epstest(3, 0, 0, 0);
+    epstest.recip();
+    epstest.add_double(0.5);
+    epstest.mul_double(3);
+    epstest.add_double(-2.5);
+    //MandelMath::qd_real epstest2(epstest);
+    //epstest2.sub(epstest);
+    //double bits=std::log(std::abs(epstest2.x[0]))/std::log(2);
+    working_assert(epstest.x[0]*epstest.x[0]==0);//<e2);
+  }
+
 
   _selectedPaintStyle=paintStyleCls;//Kind;
   _selectedPrecision=precisionDouble;
@@ -380,7 +432,7 @@ int PixelPositionTransformer::transform(int new_value, int offset)
 //template <class WORKER_MULTI>
 void MandelModel::transformStore(void *old_points, MandelPointStore *old_store, int old_width, int old_height, const MandelMath::complex<MandelMath::number_any> *old_c,
                                  void *new_points, MandelPointStore *new_store, int new_width, int new_height, const MandelMath::complex<MandelMath::number_any> *new_c,
-                                 int inlog, int new_step_log)
+                                 int inlog, int new_step_log, bool resetUnfinished)
 {
   if (precisionRecord==nullptr)
   {
@@ -415,7 +467,8 @@ void MandelModel::transformStore(void *old_points, MandelPointStore *old_store, 
       //-1 is better than imageWidth, call reset() in the second loop, we may still need the points
       if ((oldy>newy) || ((oldy==newy) && (oldx>newx)))
       {
-        if ((oldy>=0) && (oldy<old_height) && (oldx>=0) && (oldx<old_width))
+        if ((oldy>=0) && (oldy<old_height) && (oldx>=0) && (oldx<old_width) &&
+            (!resetUnfinished || new_store[newy*new_width+newx].wstate==MandelPointStore::WorkState::stDone))
         { //copy old point to new place
           new_store[newy*new_width+newx].assign(&old_store[oldy*old_width+oldx]);
           if (new_store[newy*new_width+newx].wstate==MandelPointStore::WorkState::stWorking)
@@ -436,7 +489,7 @@ void MandelModel::transformStore(void *old_points, MandelPointStore *old_store, 
       };
     }
   }
-  for (int newy=(new_height-1)&0xfffffff; newy>=0; newy--) //avoid Clang warning about newy possibly ~ 2^31
+  for (int newy=(new_height-1); newy>=0; newy--) // &0xfffffff avoid Clang warning about newy possibly ~ 2^31
   {
     int oldy=ytrans.transform(newy, old_height/2);
     first_z.im.assign(precisionRecord->position.center.im);
@@ -446,7 +499,8 @@ void MandelModel::transformStore(void *old_points, MandelPointStore *old_store, 
       int oldx=xtrans.transform(newx, old_width/2);
       if ((oldy<newy) || ((oldy==newy) && (oldx<=newx)))
       {
-        if ((oldy>=0) && (oldy<old_height) && (oldx>=0) && (oldx<old_width))
+        if ((oldy>=0) && (oldy<old_height) && (oldx>=0) && (oldx<old_width) &&
+            (!resetUnfinished || new_store[newy*new_width+newx].wstate==MandelPointStore::WorkState::stDone))
         { //copy old to new
           new_store[newy*new_width+newx].assign(&old_store[oldy*old_width+oldx]);
           if (new_store[newy*new_width+newx].wstate==MandelPointStore::WorkState::stWorking)
@@ -489,7 +543,7 @@ void MandelModel::setView(MandelMath::complex<MandelMath::number_any> const &c, 
 
     transformStore(precisionRecord->points, pointStore, imageWidth, imageHeight, &old_c,
                    precisionRecord->points, pointStore, imageWidth, imageHeight, &precisionRecord->position.center,
-                   precisionRecord->position.step_log-old_step_log, precisionRecord->position.step_log);
+                   precisionRecord->position.step_log-old_step_log, precisionRecord->position.step_log, false);
 
     startNewEpoch();
   }
@@ -498,8 +552,8 @@ void MandelModel::setView(MandelMath::complex<MandelMath::number_any> const &c, 
 void MandelModel::drag(double delta_x, double delta_y)
 {
   //qDebug()<<"drag ("<<delta_x<<","<<delta_y<<")";
-  MandelMath::complex<MandelMath::number_any> old_c(&precisionRecord->orbit.evaluator.tmp);
-  old_c.assign(precisionRecord->position.center);
+  MandelMath::complex<MandelMath::number_any> old_c(precisionRecord->position.center);
+  //old_c.assign(precisionRecord->position.center);
 
   {
     QWriteLocker locker(&threading_mutex);
@@ -511,7 +565,7 @@ void MandelModel::drag(double delta_x, double delta_y)
 
     transformStore(precisionRecord->points, pointStore, imageWidth, imageHeight, &old_c,
                    precisionRecord->points, pointStore, imageWidth, imageHeight, &precisionRecord->position.center,
-                   0, precisionRecord->position.step_log);
+                   0, precisionRecord->position.step_log, false);
 
     startNewEpoch();
 #if 0
@@ -529,8 +583,8 @@ void MandelModel::drag(double delta_x, double delta_y)
 
 void MandelModel::zoom(double x, double y, int inlog)
 {
-  MandelMath::complex<MandelMath::number_any> old_c(&precisionRecord->orbit.evaluator.tmp);
-  old_c.assign(precisionRecord->position.center);
+  MandelMath::complex<MandelMath::number_any> old_c(precisionRecord->position.center);
+  //old_c.assign(precisionRecord->position.center);
   int old_step_log=precisionRecord->position.step_log;
 
   {
@@ -540,7 +594,7 @@ void MandelModel::zoom(double x, double y, int inlog)
 
     transformStore(precisionRecord->points, pointStore, imageWidth, imageHeight, &old_c,
                    precisionRecord->points, pointStore, imageWidth, imageHeight, &precisionRecord->position.center,
-                   precisionRecord->position.step_log-old_step_log, precisionRecord->position.step_log);
+                   precisionRecord->position.step_log-old_step_log, precisionRecord->position.step_log, false);
 
     startNewEpoch();
   }
@@ -579,7 +633,7 @@ void MandelModel::setImageSize(int width, int height)
         new_points=MandelMath::number<MandelMath::dd_real>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, newLength*MandelPoint<MandelMath::number_any>::LEN);
         break;
       case MandelMath::NumberType::typeQDouble:
-        new_points=MandelMath::number<MandelMath::dq_real>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, newLength*MandelPoint<MandelMath::number_any>::LEN);
+        new_points=MandelMath::number<MandelMath::qd_real>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, newLength*MandelPoint<MandelMath::number_any>::LEN);
         break;
       case MandelMath::NumberType::typeReal642:
         new_points=MandelMath::number<MandelMath::real642>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, newLength*MandelPoint<MandelMath::number_any>::LEN);
@@ -591,7 +645,7 @@ void MandelModel::setImageSize(int width, int height)
 
     transformStore(precisionRecord->points, pointStore, imageWidth, imageHeight, &old_c,
                    new_points, newStore, width, height, &precisionRecord->position.center,
-                   0, precisionRecord->position.step_log);
+                   0, precisionRecord->position.step_log, false);
 
     switch (precisionRecord->ntype)
     {
@@ -607,7 +661,7 @@ void MandelModel::setImageSize(int width, int height)
         delete[] (MandelMath::dd_real *)precisionRecord->points;
         break;
       case MandelMath::NumberType::typeQDouble:
-        delete[] (MandelMath::dq_real *)precisionRecord->points;
+        delete[] (MandelMath::qd_real *)precisionRecord->points;
         break;
       case MandelMath::NumberType::typeReal642:
         delete[] (MandelMath::real642 *)precisionRecord->points;
@@ -637,7 +691,7 @@ void MandelModel::pause(bool pause)
     //change working back to unknown
     transformStore(precisionRecord->points, pointStore, imageWidth, imageHeight, &precisionRecord->position.center,
                    precisionRecord->points, pointStore, imageWidth, imageHeight, &precisionRecord->position.center,
-                   0, precisionRecord->position.step_log);
+                   0, precisionRecord->position.step_log, false);
 
     if (!pause)
       startNewEpoch();
@@ -1901,7 +1955,7 @@ void MandelModel::selectedPrecisionChanged()
       break;
     case precisionQDouble:
       newPrecision=Type::typeQDouble;
-      new_points=MandelMath::number<MandelMath::dq_real>::convert_block(precisionRecord?precisionRecord->ntype:Type::typeEmpty, precisionRecord?precisionRecord->points:nullptr, pointCount*MandelPoint<MandelMath::dq_real>::LEN);
+      new_points=MandelMath::number<MandelMath::qd_real>::convert_block(precisionRecord?precisionRecord->ntype:Type::typeEmpty, precisionRecord?precisionRecord->points:nullptr, pointCount*MandelPoint<MandelMath::qd_real>::LEN);
       break;
     case precisionReal642:
       newPrecision=Type::typeReal642;
@@ -1922,6 +1976,13 @@ void MandelModel::selectedPrecisionChanged()
 
   {
     QWriteLocker locker(&threading_mutex);
+
+    MandelMath::complex<MandelMath::number_any> old_c(precisionRecord->position.center);
+    //not running yet    epoch=(epoch%2000000000)+1; //invalidate threads while transforming store
+    transformStore(precisionRecord->points, pointStore, imageWidth, imageHeight, &old_c,
+                   precisionRecord->points, pointStore, imageWidth, imageHeight, &precisionRecord->position.center,
+                   0, precisionRecord->position.step_log, true);
+
     startNewEpoch();
   }
 }
@@ -2137,7 +2198,7 @@ MandelModel::PrecisionRecord::PrecisionRecord(MandelMath::NumberType ntype, Prec
     threads=new MandelEvaluator<MandelMath::dd_real> *[threadCount];
     break;
   case MandelMath::NumberType::typeQDouble:
-    threads=new MandelEvaluator<MandelMath::dq_real> *[threadCount];
+    threads=new MandelEvaluator<MandelMath::qd_real> *[threadCount];
     break;
   case MandelMath::NumberType::typeReal642:
     threads=new MandelEvaluator<MandelMath::real642> *[threadCount];
@@ -2191,7 +2252,12 @@ MandelModel::PrecisionRecord::~PrecisionRecord()
       {
           for (int t=threadCount-1; t>=0; t--)
           {
-              threads[t]->thread.wait(1000);
+              if (!threads[t]->thread.wait(1000))
+              {
+                dbgPoint();
+                if (!threads[t]->thread.wait(10000))
+                  dbgPoint();
+              };
               delete threads[t];
           }
           delete[] threads;
@@ -2214,7 +2280,7 @@ MandelModel::PrecisionRecord::~PrecisionRecord()
     delete[] (MandelMath::dd_real *)points;
     break;
   case MandelMath::NumberType::typeQDouble:
-    delete[] (MandelMath::dq_real *)points;
+    delete[] (MandelMath::qd_real *)points;
     break;
   case MandelMath::NumberType::typeReal642:
     delete[] (MandelMath::real642 *)points;

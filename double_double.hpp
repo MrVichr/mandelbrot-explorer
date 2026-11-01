@@ -64,4 +64,4 @@ public:
 
 } // namespace MandelMath
 
-#endif // MANDELMATH_NUMBER_DOUBLE_HPP
+#endif // MANDELMATH_DOUBLE_DOUBLE_HPP

@@ -24,7 +24,7 @@ struct LaguerrePointStore
 {
   enum State { stUnknown, stWorking, stResolved, stFail };
   std::atomic<State> state;
-  double firstM;
+  double firstMabs, firstMre, firstMim;
   double firstStep_re, firstStep_im;
   NewtonNaiveChoice naiveChoice;
   int iter;
@@ -428,7 +428,7 @@ protected:
                MandelEvaluator<double> *,
                MandelEvaluator<__float128> *,
                MandelEvaluator<MandelMath::dd_real> *,
-               MandelEvaluator<MandelMath::dq_real> *,
+               MandelEvaluator<MandelMath::qd_real> *,
                MandelEvaluator<MandelMath::real642> *,
                MandelEvaluator<MandelMath::number_any> *> owner;
   //MandelEvaluator<MandelMath::number_any> *owner_;
@@ -436,7 +436,7 @@ public:
   MandelEvaluatorThread(MandelEvaluator<double> *owner);
   MandelEvaluatorThread(MandelEvaluator<__float128> *owner);
   MandelEvaluatorThread(MandelEvaluator<MandelMath::dd_real> *owner);
-  MandelEvaluatorThread(MandelEvaluator<MandelMath::dq_real> *owner);
+  MandelEvaluatorThread(MandelEvaluator<MandelMath::qd_real> *owner);
   MandelEvaluatorThread(MandelEvaluator<MandelMath::real642> *owner);
   MandelEvaluatorThread(MandelEvaluator<MandelMath::number_any> *owner);
   void syncMandel();

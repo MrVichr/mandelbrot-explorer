@@ -27,7 +27,7 @@ public:
                       int inlog, int new_step_log);*/
   void transformStore(void *old_points, MandelPointStore *old_store, int old_width, int old_height, const MandelMath::complex<MandelMath::number_any> *old_c,
                       void *new_points, MandelPointStore *new_store, int new_width, int new_height, const MandelMath::complex<MandelMath::number_any> *new_c,
-                      int inlog, int new_step_log);
+                      int inlog, int new_step_log, bool resetUnfinished);
   Q_INVOKABLE void setView_double(double c_re, double c_im, double scale);
   void setView(MandelMath::complex<MandelMath::number_any> const &c, double scale);
   Q_INVOKABLE void drag(double delta_x, double delta_y);
@@ -194,7 +194,7 @@ protected:
                  MandelEvaluator<double> **,
                  MandelEvaluator<__float128> **,
                  MandelEvaluator<MandelMath::dd_real> **,
-                 MandelEvaluator<MandelMath::dq_real> **,
+                 MandelEvaluator<MandelMath::qd_real> **,
                  MandelEvaluator<MandelMath::real642> **> threads;
     PrecisionRecord(MandelMath::NumberType ntype, PrecisionRecord *source, MandelModel *doneReceiver);
     ~PrecisionRecord();

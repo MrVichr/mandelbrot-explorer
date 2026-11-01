@@ -5,6 +5,7 @@
 #include <QString>
 
 #include "double_double.hpp"
+#include "quad_double.hpp"
 //#include "multiprec.hpp"
 
 #define NUMBER_DOUBLE_EXISTS 1
@@ -101,6 +102,34 @@ auto visit(auto callable, std::variant<Options...> const &vari, auto &...params)
     return RT();
 }
 
+template<typename ...Options>
+auto visit2(auto callable, std::variant<Options...> &vari1, std::variant<Options...> const &vari2, auto &...params)
+{
+  //using cases=std::make_index_sequence<sizeof...(Options)>;
+  auto index=vari1.index(); //size_t
+  if constexpr (sizeof...(Options)>0)
+    if (index==0) return callable((NthTypeOf<0, Options...> &)vari1, (NthTypeOf<0, Options...> const &)vari2, params...); //__detail::__variant::__get<_Np>(__v);
+  if constexpr (sizeof...(Options)>1)
+    //if (index==1) return callable(std::get<1>(vari), params...);
+    if (index==1) return callable((NthTypeOf<1, Options...> &)vari1, (NthTypeOf<1, Options...> const &)vari2, params...);
+  if constexpr (sizeof...(Options)>2)
+    if (index==2) return callable((NthTypeOf<2, Options...> &)vari1, (NthTypeOf<2, Options...> const &)vari2, params...);
+  if constexpr (sizeof...(Options)>3)
+    if (index==3) return callable((NthTypeOf<3, Options...> &)vari1, (NthTypeOf<3, Options...> const &)vari2, params...);
+  if constexpr (sizeof...(Options)>4)
+    if (index==4) return callable((NthTypeOf<4, Options...> &)vari1, (NthTypeOf<4, Options...> const &)vari2, params...);
+  if constexpr (sizeof...(Options)>5)
+    if (index==5) return callable((NthTypeOf<5, Options...> &)vari1, (NthTypeOf<5, Options...> const &)vari2, params...);
+  if constexpr (sizeof...(Options)>6)
+    if (index==6) return callable((NthTypeOf<6, Options...> &)vari1, (NthTypeOf<6, Options...> const &)vari2, params...);
+  using RT=decltype(callable((NthTypeOf<0, Options...> &)vari1, (NthTypeOf<0, Options...> const &)vari2, params...));
+  [[unlikely]]
+  if constexpr (std::is_same_v<RT, std::strong_ordering>)
+    return std::strong_ordering::equal; //even more failure from C++ commitee
+  else
+    return RT();
+}
+
 //never seen before... yet another failure from the C++ commitee
 static_assert(sizeof(std::strong_ordering::less)==1, "change the following cast");
 constexpr int strong_ordering_cast(std::strong_ordering val) { return std::bit_cast<int8_t>(val); }
@@ -124,12 +153,12 @@ enum NumberType { typeEmpty
           };
 
 //typedef dd_real dq_real;
-class dq_real: public dd_real
+/*class dq_real: public dd_real
 {
   public:
   dq_real(): dd_real() {} //hi(0), lo_(0) { }
   dq_real(double h, double l): dd_real(h, l) {} //hi(h), lo_(l) { }
-};
+};*/
 
 struct real642
 {
@@ -142,7 +171,7 @@ template <> struct NumberTypeFromBase<double> { static constexpr NumberType ntyp
 #if !NUMBER_DOUBLE_ONLY
 template <> struct NumberTypeFromBase<__float128> { static constexpr NumberType ntype=typeFloat128; };
 template <> struct NumberTypeFromBase<dd_real> { static constexpr NumberType ntype=typeDDouble; };
-template <> struct NumberTypeFromBase<dq_real> { static constexpr NumberType ntype=typeQDouble; };
+template <> struct NumberTypeFromBase<qd_real> { static constexpr NumberType ntype=typeQDouble; };
 template <> struct NumberTypeFromBase<real642> { static constexpr NumberType ntype=typeReal642; };
 #endif
 
@@ -152,7 +181,7 @@ template<typename BASE>
 class number;
 
 #if NUMBER_IS_VARIANT
-using number_any=std::variant<std::monostate, number<double>, number<__float128>, number<dd_real>, number<dq_real>, number<real642>>;
+using number_any=std::variant<std::monostate, number<double>, number<__float128>, number<dd_real>, number<qd_real>, number<real642>>;
 #endif
 
 template<typename T>
@@ -257,7 +286,7 @@ class number
   friend class number<double>;
   friend class number<__float128>;
   friend class number<dd_real>;
-  friend class number<dq_real>;
+  friend class number<qd_real>;
   friend class number<real642>;
   friend class number<number_any>;
   public:

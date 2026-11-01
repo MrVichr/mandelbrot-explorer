@@ -63,7 +63,8 @@ public:
     paintStyleCls=0,
     paintStyleNthFz=1,
     paintStyleNthFz1=2,
-    paintStyleRoots=3,
+    paintStyleRoots_=3,
+    paintStyleMultip=4,
   };
   Q_ENUM(paintStyle);
   paintStyle _selectedPaintStyle;
@@ -172,7 +173,7 @@ protected:
                  MandelEvaluator<double> **,
                  MandelEvaluator<__float128> **,
                  MandelEvaluator<MandelMath::dd_real> **,
-                 MandelEvaluator<MandelMath::dq_real> **,
+                 MandelEvaluator<MandelMath::qd_real> **,
                  MandelEvaluator<MandelMath::real642> **> threads;
     PrecisionRecord(MandelMath::NumberType ntype, PrecisionRecord *source, LaguerreModel *doneReceiver);
     ~PrecisionRecord();

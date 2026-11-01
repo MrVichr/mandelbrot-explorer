@@ -28,7 +28,8 @@ SOURCES += \
         atomic_update_rect.cpp \
         double_double.cpp \
         main.cpp \
-        multiprec.cpp
+        multiprec.cpp \
+        quad_double.cpp
 
 RESOURCES += qml.qrc
 
@@ -53,4 +54,5 @@ HEADERS += \
   ShareableImageWrapper.hpp \
   atomic_update_rect.hpp \
   double_double.hpp \
-  multiprec.hpp
+  multiprec.hpp \
+  quad_double.hpp

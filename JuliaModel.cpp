@@ -10,12 +10,16 @@
 
 #define UPDATE_CACHED_MOD 0 //works until precision doesn't allow
 
+JuliaModel *Should_you_ever_need_JuliaModel=nullptr;
+
 JuliaModel::JuliaModel(): QObject(),
   _extAngleZoom(0), _selectedEdePatchAlgo(ext_de_patch_algo::EedepaBlend), _selectedExteriorColoring(exterior_coloring::EextcolRainbow),
   pointStore(nullptr), precisionRecord(nullptr)
 {
   unsigned int oldcw; //524319 = 0x8001F = mask all interrupts, 80bit precision
   MandelMath::fpu_fix_start(&oldcw);
+  Should_you_ever_need_JuliaModel=this;
+
   _selectedPaintStyle=paintStyleCls;//Kind;
   _selectedPrecision=EprecisionDouble;
   epoch=1;
@@ -596,8 +600,8 @@ void JuliaModel::setView(MandelMath::complex<MandelMath::number_any> const &c, d
 void JuliaModel::drag(double delta_x, double delta_y)
 {
   //qDebug()<<"drag ("<<delta_x<<","<<delta_y<<")";
-  MandelMath::complex<MandelMath::number_any> old_c(&precisionRecord->orbit.evaluator.tmp);
-  old_c.assign(precisionRecord->position.center);
+  MandelMath::complex<MandelMath::number_any> old_c(precisionRecord->position.center);
+  //old_c.assign(precisionRecord->position.center);
 
   {
     QWriteLocker locker(&threading_mutex);
@@ -617,9 +621,8 @@ void JuliaModel::drag(double delta_x, double delta_y)
 
 void JuliaModel::zoom(double x, double y, int inlog)
 {
-  MandelMath::complex<MandelMath::number_any> old_c(&precisionRecord->orbit.evaluator.tmp);
-
-  old_c.assign(precisionRecord->position.center);
+  MandelMath::complex<MandelMath::number_any> old_c(precisionRecord->position.center);
+  //old_c.assign(precisionRecord->position.center);
   int old_step_log=precisionRecord->position.step_log;
 
   {
@@ -667,7 +670,7 @@ void JuliaModel::setImageSize(int width, int height)
         new_points=MandelMath::number<MandelMath::dd_real>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, newLength*JuliaPoint<MandelMath::number_any>::LEN);
         break;
       case MandelMath::NumberType::typeQDouble:
-        new_points=MandelMath::number<MandelMath::dq_real>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, newLength*JuliaPoint<MandelMath::number_any>::LEN);
+        new_points=MandelMath::number<MandelMath::qd_real>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, newLength*JuliaPoint<MandelMath::number_any>::LEN);
         break;
       case MandelMath::NumberType::typeReal642:
         new_points=MandelMath::number<MandelMath::real642>::convert_block(MandelMath::NumberType::typeEmpty, nullptr, newLength*JuliaPoint<MandelMath::number_any>::LEN);
@@ -695,7 +698,7 @@ void JuliaModel::setImageSize(int width, int height)
         delete[] (MandelMath::dd_real *)precisionRecord->points;
         break;
       case MandelMath::NumberType::typeQDouble:
-        delete[] (MandelMath::dq_real *)precisionRecord->points;
+        delete[] (MandelMath::qd_real *)precisionRecord->points;
         break;
       case MandelMath::NumberType::typeReal642:
         delete[] (MandelMath::real642 *)precisionRecord->points;
@@ -2302,7 +2305,7 @@ void JuliaModel::selectedPrecisionChanged()
       break;
     case EprecisionQDouble:
       newPrecision=Type::typeQDouble;
-      new_points=MandelMath::number<MandelMath::dq_real>::convert_block(precisionRecord?precisionRecord->ntype:Type::typeEmpty, precisionRecord?precisionRecord->points:nullptr, pointCount*JuliaPoint<MandelMath::dq_real>::LEN);
+      new_points=MandelMath::number<MandelMath::qd_real>::convert_block(precisionRecord?precisionRecord->ntype:Type::typeEmpty, precisionRecord?precisionRecord->points:nullptr, pointCount*JuliaPoint<MandelMath::qd_real>::LEN);
       break;
     case EprecisionReal642:
       newPrecision=Type::typeReal642;
@@ -2543,7 +2546,7 @@ JuliaModel::PrecisionRecord::PrecisionRecord(MandelMath::NumberType ntype, Preci
       threads=new MandelEvaluator<MandelMath::dd_real> *[threadCount];
       break;
     case MandelMath::NumberType::typeQDouble:
-      threads=new MandelEvaluator<MandelMath::dq_real> *[threadCount];
+      threads=new MandelEvaluator<MandelMath::qd_real> *[threadCount];
       break;
     case MandelMath::NumberType::typeReal642:
       threads=new MandelEvaluator<MandelMath::real642> *[threadCount];
@@ -2619,7 +2622,7 @@ JuliaModel::PrecisionRecord::~PrecisionRecord()
       delete[] (MandelMath::dd_real *)points;
       break;
   case MandelMath::NumberType::typeQDouble:
-      delete[] (MandelMath::dq_real *)points;
+      delete[] (MandelMath::qd_real *)points;
       break;
   case MandelMath::NumberType::typeReal642:
       delete[] (MandelMath::real642 *)points;
